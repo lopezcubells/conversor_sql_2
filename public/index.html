@@ -434,6 +434,9 @@
     <div class="stat"><div class="stat-num" id="cnt-articulos">—</div><div class="stat-lbl">Artículos</div></div>
     <div class="stat"><div class="stat-num" id="cnt-stock">—</div><div class="stat-lbl">Registros de Stock</div></div>
     <div class="stat"><div class="stat-num" id="cnt-pendiente">—</div><div class="stat-lbl">Órdenes Pendientes</div></div>
+    <div class="stat"><div class="stat-num" id="cnt-stock-arranque">—</div><div class="stat-lbl">Stock de Arranque</div></div>
+    <div class="stat"><div class="stat-num" id="cnt-recepciones">—</div><div class="stat-lbl">Recepciones</div></div>
+    <div class="stat"><div class="stat-num" id="cnt-pgm">—</div><div class="stat-lbl">Registros PGM x BOM</div></div>
   </div>
 
   <div class="card">
@@ -515,6 +518,78 @@
       <button class="btn btn-primary" id="btn-pdt" disabled>⬆ Importar</button>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">Archivo Excel — Stock de Arranque</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      El nombre del archivo varía semana a semana (ej: <strong style="color:var(--text)">BD Stock x Sucursales 2026 SEM 27</strong>). Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> sin importar el nombre exacto del archivo.
+    </p>
+
+    <div class="drop-zone" id="dz-sar">
+      <input type="file" accept=".xlsx,.xls" id="file-sar" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-sar"></div>
+    </div>
+
+    <div class="progress" id="prog-sar"><div class="progress-bar" id="pb-sar"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-sar" value="replace" checked> Reemplazar tabla</label>
+        <label><input type="radio" name="mode-sar" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-sar" disabled>⬆ Importar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Archivo Excel — Recepciones</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      El nombre del archivo varía según la época del año (ej: <strong style="color:var(--text)">BD Recepciones 2026</strong>). Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> sin importar el nombre exacto del archivo. Se calcula automáticamente la <strong style="color:var(--text)">Semana ISO</strong> a partir de la Fecha de recepción.
+    </p>
+
+    <div class="drop-zone" id="dz-rec">
+      <input type="file" accept=".xlsx,.xls" id="file-rec" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-rec"></div>
+    </div>
+
+    <div class="progress" id="prog-rec"><div class="progress-bar" id="pb-rec"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-rec" value="replace" checked> Reemplazar tabla</label>
+        <label><input type="radio" name="mode-rec" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-rec" disabled>⬆ Importar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Archivo Excel — PGM x BOM</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Importa 4 tablas en un solo paso: <strong style="color:var(--text)">PMP_x_BOM</strong>, <strong style="color:var(--text)">PMP_y_COMEX</strong>, <strong style="color:var(--text)">PGM</strong> y <strong style="color:var(--text)">PGM_x_BOM</strong>. Se calcula automáticamente la <strong style="color:var(--text)">Semana ISO</strong> a partir de la columna Día en cada una.
+    </p>
+
+    <div class="drop-zone" id="dz-pgm">
+      <input type="file" accept=".xlsx,.xls" id="file-pgm" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-pgm"></div>
+    </div>
+
+    <div class="progress" id="prog-pgm"><div class="progress-bar" id="pb-pgm"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-pgm" value="replace" checked> Reemplazar tablas</label>
+        <label><input type="radio" name="mode-pgm" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-pgm" disabled>⬆ Importar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ TABLAS SQL ═══ -->
@@ -524,6 +599,12 @@
       <option value="articulos">Artículos</option>
       <option value="stock">Stock</option>
       <option value="pendiente">Pendiente Completo</option>
+      <option value="stock-arranque">Stock de Arranque</option>
+      <option value="recepciones">Recepciones</option>
+      <option value="pmp-x-bom">PMP x BOM</option>
+      <option value="pmp-y-comex">PMP y COMEX</option>
+      <option value="pgm">PGM</option>
+      <option value="pgm-x-bom">PGM x BOM</option>
     </select>
     <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
     <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
@@ -701,6 +782,9 @@
   setupDrop("dz-art", "file-art", "fn-art", "btn-art");
   setupDrop("dz-stk", "file-stk", "fn-stk", "btn-stk");
   setupDrop("dz-pdt", "file-pdt", "fn-pdt", "btn-pdt");
+  setupDrop("dz-sar", "file-sar", "fn-sar", "btn-sar");
+  setupDrop("dz-rec", "file-rec", "fn-rec", "btn-rec");
+  setupDrop("dz-pgm", "file-pgm", "fn-pgm", "btn-pgm");
 
   // ── Import ──
   async function doImport(endpoint, fileId, modeRadio, progId, pbId, btnId) {
@@ -726,7 +810,12 @@
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || "Error desconocido");
-      toast(`✅ ${data.rows.toLocaleString()} filas importadas (modo: ${mode})`, "ok");
+      let msg = `✅ ${data.rows.toLocaleString()} filas importadas (modo: ${mode})`;
+      if (data.detalle) {
+        const partes = Object.entries(data.detalle).map(([k, v]) => `${k}: ${v.toLocaleString()}`).join(" · ");
+        msg += ` — ${partes}`;
+      }
+      toast(msg, "ok");
       loadStats();
     } catch (e) {
       toast("❌ " + e.message, "err");
@@ -742,6 +831,12 @@
     doImport("stock", "file-stk", "mode-stk", "prog-stk", "pb-stk", "btn-stk"));
   document.getElementById("btn-pdt").addEventListener("click", () =>
     doImport("pendiente", "file-pdt", "mode-pdt", "prog-pdt", "pb-pdt", "btn-pdt"));
+  document.getElementById("btn-sar").addEventListener("click", () =>
+    doImport("stock-arranque", "file-sar", "mode-sar", "prog-sar", "pb-sar", "btn-sar"));
+  document.getElementById("btn-rec").addEventListener("click", () =>
+    doImport("recepciones", "file-rec", "mode-rec", "prog-rec", "pb-rec", "btn-rec"));
+  document.getElementById("btn-pgm").addEventListener("click", () =>
+    doImport("pgm-x-bom", "file-pgm", "mode-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
 
   // ── Stats ──
   async function loadStats() {
@@ -750,6 +845,9 @@
       document.getElementById("cnt-articulos").textContent = data.articulos.toLocaleString();
       document.getElementById("cnt-stock").textContent = data.stock.toLocaleString();
       document.getElementById("cnt-pendiente").textContent = data.pendiente.toLocaleString();
+      document.getElementById("cnt-stock-arranque").textContent = data.stockArranque.toLocaleString();
+      document.getElementById("cnt-recepciones").textContent = data.recepciones.toLocaleString();
+      document.getElementById("cnt-pgm").textContent = data.pgmTotal.toLocaleString();
 
       const ll = document.getElementById("log-list");
       if (!data.logs.length) {
@@ -830,13 +928,114 @@
       { key: "demora_hoy",            label: "Demora Hoy" },
       { key: "proveedor",             label: "Proveedor" },
     ],
+    "stock-arranque": [
+      { key: "id",             label: "ID" },
+      { key: "nro_corto",      label: "Nº Corto" },
+      { key: "segundo_nro",    label: "2º Nº Artículo" },
+      { key: "descripcion",    label: "Descripción" },
+      { key: "unidad_negocio", label: "Unidad Negocio" },
+      { key: "existencias",    label: "Existencias" },
+      { key: "ubicacion",      label: "Ubicación" },
+      { key: "nro_lote_serie", label: "Lote/Serie" },
+      { key: "archivo_origen", label: "Archivo Origen" },
+    ],
+    recepciones: [
+      { key: "id",                    label: "ID" },
+      { key: "tp_ord",                label: "Tp Ord" },
+      { key: "numero_orden",          label: "Nº Orden" },
+      { key: "nro_corto",             label: "Nº Corto" },
+      { key: "segundo_nro",           label: "2º Nº Artículo" },
+      { key: "cantidad_orden",        label: "Cant. Orden" },
+      { key: "cantidad_recibida",     label: "Cant. Recibida" },
+      { key: "cantidad_pendiente",    label: "Cant. Pendiente" },
+      { key: "fecha_orden",           label: "Fecha Orden" },
+      { key: "fecha_solic",           label: "Fecha Solic" },
+      { key: "fecha_recepcion",       label: "Fecha Recepción" },
+      { key: "semana_iso",            label: "Semana ISO" },
+      { key: "unidad_negocio",        label: "Unidad Negocio" },
+      { key: "costo_unitario",        label: "Costo Unitario" },
+      { key: "iniciador_transaccion", label: "Iniciador" },
+      { key: "archivo_origen",        label: "Archivo Origen" },
+    ],
+    "pmp-x-bom": [
+      { key: "id",                label: "ID" },
+      { key: "linea",             label: "Línea" },
+      { key: "codigo_corto_comp", label: "Cód. Corto (comp)" },
+      { key: "descripcion_comp",  label: "Descripción (comp)" },
+      { key: "rubro_comp",        label: "Rubro (comp)" },
+      { key: "cod_corto",         label: "Cod Corto" },
+      { key: "v_fr",              label: "V/Fr" },
+      { key: "planta",            label: "Planta" },
+      { key: "producto",          label: "Producto" },
+      { key: "destino",           label: "Destino" },
+      { key: "dia",               label: "Día" },
+      { key: "semana_iso",        label: "Semana ISO" },
+      { key: "bultos",            label: "Bultos" },
+      { key: "cantidad_insumo",   label: "Cant. Insumo" },
+    ],
+    "pmp-y-comex": [
+      { key: "id",        label: "ID" },
+      { key: "dia",       label: "Día" },
+      { key: "semana_iso",label: "Semana ISO" },
+      { key: "cod_corto", label: "Cod Corto" },
+      { key: "producto",  label: "Producto" },
+      { key: "destino",   label: "Destino" },
+      { key: "planta",    label: "Planta" },
+      { key: "bultos",    label: "Bultos" },
+      { key: "v_fr",      label: "V/Fr" },
+      { key: "litros",    label: "Litros" },
+      { key: "linea",     label: "Línea" },
+    ],
+    pgm: [
+      { key: "id",        label: "ID" },
+      { key: "linea",     label: "Línea" },
+      { key: "dia",       label: "Día" },
+      { key: "semana_iso",label: "Semana ISO" },
+      { key: "cod_corto", label: "Cod Corto" },
+      { key: "producto",  label: "Producto" },
+      { key: "destino",   label: "Destino" },
+      { key: "bultos",    label: "Bultos" },
+      { key: "v_fr",      label: "V/Fr" },
+      { key: "litros",    label: "Litros" },
+      { key: "planta",    label: "Planta" },
+    ],
+    "pgm-x-bom": [
+      { key: "id",                label: "ID" },
+      { key: "linea",             label: "Línea" },
+      { key: "codigo_corto_comp", label: "Cód. Corto (comp)" },
+      { key: "descripcion_comp",  label: "Descripción (comp)" },
+      { key: "rubro_comp",        label: "Rubro (comp)" },
+      { key: "cod_corto",         label: "Cod Corto" },
+      { key: "v_fr",              label: "V/Fr" },
+      { key: "planta",            label: "Planta" },
+      { key: "producto",          label: "Producto" },
+      { key: "destino",           label: "Destino" },
+      { key: "dia",               label: "Día" },
+      { key: "semana_iso",        label: "Semana ISO" },
+      { key: "bultos",            label: "Bultos" },
+      { key: "cantidad_insumo",   label: "Cant. Insumo" },
+    ],
   };
-  const TABLA_ENDPOINT = { articulos: "articulos", stock: "stock", pendiente: "pendiente" };
-  const TABLA_EXPORT   = { articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo" };
+  const TABLA_ENDPOINT = {
+    articulos: "articulos", stock: "stock", pendiente: "pendiente",
+    "stock-arranque": "stock-arranque", recepciones: "recepciones",
+    "pmp-x-bom": "pmp-x-bom", "pmp-y-comex": "pmp-y-comex", pgm: "pgm", "pgm-x-bom": "pgm-x-bom",
+  };
+  const TABLA_EXPORT = {
+    articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo",
+    "stock-arranque": "stock_arranque", recepciones: "recepciones",
+    "pmp-x-bom": "pmp_x_bom", "pmp-y-comex": "pmp_y_comex", pgm: "pgm", "pgm-x-bom": "pgm_x_bom",
+  };
   const TABLA_EMPTY_MSG = {
     articulos: "Importá artículos primero",
     stock: "Importá stock primero",
     pendiente: "Importá Pendiente Completo primero",
+    "stock-arranque": "Importá Stock de Arranque primero",
+    recepciones: "Importá Recepciones primero",
+    "pmp-x-bom": "Importá PGM x BOM primero",
+    "pmp-y-comex": "Importá PGM x BOM primero",
+    pgm: "Importá PGM x BOM primero",
+    "pgm-x-bom": "Importá PGM x BOM primero",
   };
 
   async function loadTablaSql(offset = 0) {
