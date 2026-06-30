@@ -204,6 +204,11 @@
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
+    th.sortable { cursor: pointer; user-select: none; transition: color .15s; }
+    th.sortable:hover { color: var(--accent); }
+    th.sortable .sort-arrow { margin-left: 4px; opacity: .5; }
+    th.sortable.sort-active { color: var(--accent); }
+    th.sortable.sort-active .sort-arrow { opacity: 1; }
     td {
       padding: 9px 12px;
       border-bottom: 1px solid var(--border);
@@ -789,9 +794,6 @@
     <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
   </div>
 
-  <div class="section-heading">
-    <h2>Avance x Artículo</h2>
-  </div>
   <div class="card">
     <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
       Calcula arranque, recepciones, consumo y avance por artículo a partir de las bases importadas. Requiere que los parámetros de arriba estén establecidos.
@@ -802,7 +804,29 @@
     </div>
   </div>
 
+  <div class="section-heading">
+    <h2>Avance x Rubro</h2>
+  </div>
   <div class="search-row">
+    <select class="search-input" id="avance-rubro-rubro-filter" style="flex:0 0 280px">
+      <option value="">Todos los rubros</option>
+    </select>
+    <button class="btn btn-outline" onclick="exportTable('avance_x_rubro')">⬇ CSV</button>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="avance-rubro-table-wrap">
+      <div class="empty"><div class="big">⚙</div>Todavía no se calculó el avance</div>
+    </div>
+  </div>
+  <div class="pagination" id="avance-rubro-pagination"></div>
+
+  <div class="section-heading">
+    <h2>Avance x Artículo</h2>
+  </div>
+  <div class="search-row">
+    <select class="search-input" id="avance-art-rubro-filter" style="flex:0 0 280px">
+      <option value="">Todos los rubros</option>
+    </select>
     <input class="search-input" id="avance-q" placeholder="Buscar por descripción…" />
     <button class="btn btn-outline" onclick="loadAvanceTable(0)">🔍 Buscar</button>
     <button class="btn btn-outline" onclick="exportTable('avance_x_articulo')">⬇ CSV</button>
@@ -1708,7 +1732,9 @@
     } else {
       applyAvanceUnlockedUI();
     }
+    ensureAvanceRubrosLoaded();
     loadAvanceTable(0);
+    loadAvanceRubroTable(0);
   }
 
   document.getElementById("avance-btn-establecer").addEventListener("click", () => {
@@ -1732,7 +1758,7 @@
     AVANCE_FIELD_IDS.forEach(id => { document.getElementById(id).value = ""; });
   });
 
-  // ── Avance x Artículo: cálculo y tabla con barra de progreso ──
+  // ── Avance x Artículo / Avance x Rubro: cálculo, filtros, orden y barra de progreso ──
 
   function avanceBarColor(pct) {
     if (pct >= 1) return "#34c97e";
@@ -1748,6 +1774,33 @@
       <div class="avance-bar-track"><div class="avance-bar-fill" style="width:${clamped * 100}%;background:${color}"></div></div>
       <span class="avance-bar-label" style="color:${color}">${pctLabel}</span>
     </div>`;
+  }
+
+  // Estado de ordenamiento independiente para cada tabla
+  const avanceArtSort = { col: "nro_corto", dir: "desc" };
+  const avanceRubroSort = { col: "arranque", dir: "desc" };
+
+  function thSort(label, col, state, loadFn) {
+    const active = state.col === col;
+    const arrow = active ? (state.dir === "desc" ? "▼" : "▲") : "▾";
+    return `<th class="sortable${active ? " sort-active" : ""}" data-col="${col}" onclick="${loadFn}('${col}')">${label} <span class="sort-arrow">${arrow}</span></th>`;
+  }
+
+  let avanceRubrosLoaded = false;
+
+  async function ensureAvanceRubrosLoaded() {
+    if (avanceRubrosLoaded) return;
+    try {
+      const { rubros } = await fetch(`${API}/api/avance/rubros`).then(r => r.json());
+      [document.getElementById("avance-art-rubro-filter"), document.getElementById("avance-rubro-rubro-filter")].forEach(sel => {
+        rubros.forEach(r => {
+          const opt = document.createElement("option");
+          opt.value = r; opt.textContent = r;
+          sel.appendChild(opt);
+        });
+      });
+      avanceRubrosLoaded = true;
+    } catch (e) { console.error(e); }
   }
 
   document.getElementById("avance-btn-calcular").addEventListener("click", async () => {
@@ -1775,7 +1828,12 @@
       if (!res.ok) throw new Error(data.error || "Error desconocido");
       info.textContent = `✓ Calculado: ${data.rows.toLocaleString()} artículos`;
       toast("✅ Avance calculado correctamente", "ok");
+      avanceRubrosLoaded = false;
+      document.getElementById("avance-art-rubro-filter").innerHTML = `<option value="">Todos los rubros</option>`;
+      document.getElementById("avance-rubro-rubro-filter").innerHTML = `<option value="">Todos los rubros</option>`;
+      await ensureAvanceRubrosLoaded();
       loadAvanceTable(0);
+      loadAvanceRubroTable(0);
     } catch (e) {
       info.textContent = "";
       toast("❌ " + e.message, "err");
@@ -1784,26 +1842,48 @@
     }
   });
 
+  // ── Tabla Avance x Artículo ──
+  function sortAvanceTable(col) {
+    if (avanceArtSort.col === col) {
+      avanceArtSort.dir = avanceArtSort.dir === "desc" ? "asc" : "desc";
+    } else {
+      avanceArtSort.col = col;
+      avanceArtSort.dir = "desc";
+    }
+    loadAvanceTable(0);
+  }
+
   async function loadAvanceTable(offset = 0) {
     const q = document.getElementById("avance-q").value;
-    const url = `${API}/api/avance?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
+    const rubro = document.getElementById("avance-art-rubro-filter").value;
+    const url = `${API}/api/avance?limit=50&offset=${offset}&sort=${avanceArtSort.col}&dir=${avanceArtSort.dir}`
+      + (q ? "&q=" + encodeURIComponent(q) : "")
+      + (rubro ? "&rubro=" + encodeURIComponent(rubro) : "");
     const data = await fetch(url).then(r => r.json());
 
     const wrap = document.getElementById("avance-table-wrap");
     if (!data.rows.length) {
-      wrap.innerHTML = `<div class="empty"><div class="big">⚙</div>${q ? "Sin resultados" : "Todavía no se calculó el avance"}</div>`;
+      wrap.innerHTML = `<div class="empty"><div class="big">⚙</div>${q || rubro ? "Sin resultados" : "Todavía no se calculó el avance"}</div>`;
       document.getElementById("avance-pagination").innerHTML = "";
       return;
     }
 
     wrap.innerHTML = `<table>
       <thead><tr>
-        <th>Código Corto</th><th>Descripción</th><th>Arranque</th><th>Recepciones</th>
-        <th>Consumo</th><th>Necesidad Inicial</th><th>Necesidad Actual</th><th>Avance</th>
+        ${thSort("Código Corto", "nro_corto", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Descripción", "descripcion", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Rubro", "rubro", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Arranque", "arranque", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Recepciones", "recepciones", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Consumo", "consumo", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Necesidad Inicial", "necesidad_inicial", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Necesidad Actual", "necesidad_actual", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Avance", "avance_pct", avanceArtSort, "sortAvanceTable")}
       </tr></thead>
       <tbody>${data.rows.map(r => `<tr>
         <td>${r.nro_corto ?? ""}</td>
         <td>${r.descripcion ?? ""}</td>
+        <td>${r.rubro ?? ""}</td>
         <td>${fmtNum(r.arranque ?? 0)}</td>
         <td>${fmtNum(r.recepciones ?? 0)}</td>
         <td>${fmtNum(r.consumo ?? 0)}</td>
@@ -1815,6 +1895,56 @@
     renderPagination("avance-pagination", data.total, offset, 50, "loadAvanceTable");
   }
   document.getElementById("avance-q").addEventListener("keydown", e => e.key === "Enter" && loadAvanceTable(0));
+  document.getElementById("avance-art-rubro-filter").addEventListener("change", () => loadAvanceTable(0));
+
+  // ── Tabla Avance x Rubro ──
+  function sortAvanceRubroTable(col) {
+    if (avanceRubroSort.col === col) {
+      avanceRubroSort.dir = avanceRubroSort.dir === "desc" ? "asc" : "desc";
+    } else {
+      avanceRubroSort.col = col;
+      avanceRubroSort.dir = "desc";
+    }
+    loadAvanceRubroTable(0);
+  }
+
+  async function loadAvanceRubroTable(offset = 0) {
+    const rubro = document.getElementById("avance-rubro-rubro-filter").value;
+    const url = `${API}/api/avance-rubro?limit=50&offset=${offset}&sort=${avanceRubroSort.col}&dir=${avanceRubroSort.dir}`
+      + (rubro ? "&rubro=" + encodeURIComponent(rubro) : "");
+    const data = await fetch(url).then(r => r.json());
+
+    const wrap = document.getElementById("avance-rubro-table-wrap");
+    if (!data.rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">⚙</div>${rubro ? "Sin resultados" : "Todavía no se calculó el avance"}</div>`;
+      document.getElementById("avance-rubro-pagination").innerHTML = "";
+      return;
+    }
+
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        ${thSort("Rubro", "rubro", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Arranque", "arranque", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Recepciones", "recepciones", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Consumo", "consumo", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Necesidad Inicial", "necesidad_inicial", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Necesidad Actual", "necesidad_actual", avanceRubroSort, "sortAvanceRubroTable")}
+        ${thSort("Avance", "avance_pct", avanceRubroSort, "sortAvanceRubroTable")}
+      </tr></thead>
+      <tbody>${data.rows.map(r => `<tr>
+        <td>${r.rubro ?? ""}</td>
+        <td>${fmtNum(r.arranque ?? 0)}</td>
+        <td>${fmtNum(r.recepciones ?? 0)}</td>
+        <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
+        <td>${r.necesidad_actual != null ? fmtNum(r.necesidad_actual) : ""}</td>
+        <td>${renderAvanceBar(r.avance_pct ?? 0)}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    renderPagination("avance-rubro-pagination", data.total, offset, 50, "loadAvanceRubroTable");
+  }
+  document.getElementById("avance-rubro-rubro-filter").addEventListener("change", () => loadAvanceRubroTable(0));
+
 
   // ── DB ready banner ──
   const banner = document.createElement("div");
