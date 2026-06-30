@@ -965,6 +965,19 @@ app.get("/api/recepciones/rubros", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get("/api/recepciones/total-anio-actual", requireDb, (req, res) => {
+  try {
+    const anioActual = String(new Date().getFullYear());
+    const row = readDb(db => query(db, `
+      SELECT SUM(cantidad_recibida) as total
+      FROM recepciones
+      WHERE substr(fecha_recepcion, 1, 4) = ?
+        AND cantidad_recibida IS NOT NULL
+    `, [anioActual]))[0];
+    res.json({ anio: anioActual, total: row?.total ?? 0 });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/recepciones/por-mes", requireDb, (req, res) => {
   try {
     const rubro = req.query.rubro;
@@ -1571,6 +1584,23 @@ app.get("/api/avance-rubro", requireDb, (req, res) => {
     });
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Borra todos los datos de todas las tablas, dejando la app como recién desplegada.
+// No borra el esquema (las tablas siguen existiendo, vacías).
+app.post("/api/reset-all", requireDb, (req, res) => {
+  try {
+    const ALL_DATA_TABLES = [
+      "articulos", "stock_sucursales", "pendiente_completo", "stock_detallado",
+      "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
+      "costo_insumos", "pendientes_tetra", "avance_x_articulo", "avance_x_rubro",
+      "import_log",
+    ];
+    withDb(db => {
+      ALL_DATA_TABLES.forEach(t => db.run(`DELETE FROM ${t}`));
+    });
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/export/:tabla", requireDb, (req, res) => {
