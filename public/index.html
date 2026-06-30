@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Importador Excel → SQL</title>
+  <title>Reporte de indicadores - Insumos</title>
   <style>
     /* ── Tokens ── */
     :root {
@@ -577,8 +577,8 @@
 <header>
   <div class="logo">📊</div>
   <div>
-    <h1>Importador Excel → SQL</h1>
-    <p>Cargá tus archivos y gestioná la base de datos</p>
+    <h1>Reporte de indicadores - Insumos</h1>
+    <p>Abastecimiento de insumos</p>
   </div>
 </header>
 
@@ -862,11 +862,11 @@
 <!-- ═══ AVANCE ═══ -->
 <div class="pane" id="tab-avance">
   <div class="card">
-    <div class="collapsible-header" id="avance-params-toggle">
+    <div class="collapsible-header collapsed" id="avance-params-toggle">
       <div class="card-title" style="margin-bottom:0">Parámetros de arranque</div>
       <span class="chevron">▼</span>
     </div>
-    <div class="collapsible-body" id="avance-params-body">
+    <div class="collapsible-body collapsed" id="avance-params-body">
       <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
         Definí estos parámetros una sola vez. Una vez establecidos con el botón, quedan fijos y se usan para calcular el avance en esta pestaña.
       </p>
@@ -891,16 +891,16 @@
         <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
       </div>
       <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
-    </div>
-  </div>
 
-  <div class="card">
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Calcula arranque, recepciones, consumo y avance por artículo a partir de las bases importadas. Requiere que los parámetros de arriba estén establecidos.
-    </p>
-    <div class="btn-row" style="margin-top:0">
-      <button class="btn btn-success" id="avance-btn-calcular">⚙ Calcular avance</button>
-      <span id="avance-calculo-info" style="color:var(--muted);font-size:13px"></span>
+      <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px">
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          Calcula arranque, recepciones, consumo y avance por artículo a partir de las bases importadas. Requiere que los parámetros de arriba estén establecidos.
+        </p>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-success" id="avance-btn-calcular">⚙ Calcular avance</button>
+          <span id="avance-calculo-info" style="color:var(--muted);font-size:13px"></span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -927,11 +927,11 @@
   <div class="pagination" id="avance-rubro-pagination"></div>
 
   <div class="card" style="margin-top:24px">
-    <div class="collapsible-header" id="avance-art-toggle">
+    <div class="collapsible-header collapsed" id="avance-art-toggle">
       <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:0">Avance x Artículo</h2>
       <span class="chevron">▼</span>
     </div>
-    <div class="collapsible-body" id="avance-art-body">
+    <div class="collapsible-body collapsed" id="avance-art-body">
       <div class="search-row" style="margin-top:14px">
         <select class="search-input" id="avance-art-rubro-filter" style="flex:0 0 280px">
           <option value="">Todos los rubros</option>
