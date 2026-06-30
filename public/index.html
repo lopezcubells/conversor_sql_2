@@ -407,6 +407,34 @@
     .pend-badge.tp-OC { background: rgba(52,201,126,.15); color: #5fe0a0; }
     .pend-badge.tp-OX { background: rgba(247,135,79,.15); color: #ffa876; }
     .pend-badge.tp-Q1 { background: rgba(167,139,250,.15); color: #c4b1fc; }
+
+    /* ── Avance: barra de progreso dentro de la tabla ── */
+    .avance-bar-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 140px;
+    }
+    .avance-bar-track {
+      flex: 1;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--border);
+      overflow: hidden;
+      min-width: 70px;
+    }
+    .avance-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .2s;
+    }
+    .avance-bar-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 48px;
+      text-align: right;
+    }
   </style>
 </head>
 <body>
@@ -735,9 +763,9 @@
   <div class="card">
     <div class="card-title">Parámetros de arranque</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Definí la fecha y hora de arranque una sola vez. Una vez establecidos, estos valores quedan fijos y se usan como parámetros en esta pestaña.
+      Definí estos parámetros una sola vez. Una vez establecidos con el botón, quedan fijos y se usan para calcular el avance en esta pestaña.
     </p>
-    <div class="search-row" style="margin-bottom:0;align-items:flex-end">
+    <div class="search-row" style="margin-bottom:0;align-items:flex-end;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha de arranque</label>
         <input type="date" class="search-input" id="avance-fecha" style="flex:0 0 200px" />
@@ -746,11 +774,44 @@
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora de arranque</label>
         <input type="time" class="search-input" id="avance-hora" step="1" style="flex:0 0 160px" />
       </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicial PMP</label>
+        <input type="date" class="search-input" id="avance-fecha-ini-pmp" style="flex:0 0 200px" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final PMP</label>
+        <input type="date" class="search-input" id="avance-fecha-fin-pmp" style="flex:0 0 200px" />
+      </div>
       <button class="btn btn-primary" id="avance-btn-establecer">Establecer arranque</button>
       <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
     </div>
     <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
   </div>
+
+  <div class="section-heading">
+    <h2>Avance x Artículo</h2>
+  </div>
+  <div class="card">
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Calcula arranque, recepciones, consumo y avance por artículo a partir de las bases importadas. Requiere que los parámetros de arriba estén establecidos.
+    </p>
+    <div class="btn-row" style="margin-top:0">
+      <button class="btn btn-success" id="avance-btn-calcular">⚙ Calcular avance</button>
+      <span id="avance-calculo-info" style="color:var(--muted);font-size:13px"></span>
+    </div>
+  </div>
+
+  <div class="search-row">
+    <input class="search-input" id="avance-q" placeholder="Buscar por descripción…" />
+    <button class="btn btn-outline" onclick="loadAvanceTable(0)">🔍 Buscar</button>
+    <button class="btn btn-outline" onclick="exportTable('avance_x_articulo')">⬇ CSV</button>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="avance-table-wrap">
+      <div class="empty"><div class="big">⚙</div>Todavía no se calculó el avance</div>
+    </div>
+  </div>
+  <div class="pagination" id="avance-pagination"></div>
 </div>
 
 <div id="toast"></div>
@@ -1596,42 +1657,33 @@
     } catch { return null; }
   }
 
-  function setAvanceState(fecha, hora) {
-    localStorage.setItem(AVANCE_STORAGE_KEY, JSON.stringify({ fecha, hora }));
+  function setAvanceState(state) {
+    localStorage.setItem(AVANCE_STORAGE_KEY, JSON.stringify(state));
   }
 
   function clearAvanceState() {
     localStorage.removeItem(AVANCE_STORAGE_KEY);
   }
 
-  function applyAvanceLockedUI(state) {
-    const fechaInput = document.getElementById("avance-fecha");
-    const horaInput = document.getElementById("avance-hora");
-    const btnEstablecer = document.getElementById("avance-btn-establecer");
-    const btnReset = document.getElementById("avance-btn-reset");
-    const estado = document.getElementById("avance-estado");
+  const AVANCE_FIELD_IDS = ["avance-fecha", "avance-hora", "avance-fecha-ini-pmp", "avance-fecha-fin-pmp"];
 
-    fechaInput.value = state.fecha;
-    horaInput.value = state.hora;
-    fechaInput.disabled = true;
-    horaInput.disabled = true;
-    btnEstablecer.disabled = true;
-    btnReset.style.display = "inline-flex";
-    estado.innerHTML = `✓ Arranque establecido: <strong style="color:var(--text)">${state.fecha} ${state.hora}</strong>`;
+  function applyAvanceLockedUI(state) {
+    document.getElementById("avance-fecha").value = state.fecha;
+    document.getElementById("avance-hora").value = state.hora;
+    document.getElementById("avance-fecha-ini-pmp").value = state.fechaIniPmp;
+    document.getElementById("avance-fecha-fin-pmp").value = state.fechaFinPmp;
+    AVANCE_FIELD_IDS.forEach(id => { document.getElementById(id).disabled = true; });
+    document.getElementById("avance-btn-establecer").disabled = true;
+    document.getElementById("avance-btn-reset").style.display = "inline-flex";
+    document.getElementById("avance-estado").innerHTML =
+      `✓ Arranque establecido: <strong style="color:var(--text)">${state.fecha} ${state.hora}</strong> · PMP: <strong style="color:var(--text)">${state.fechaIniPmp} → ${state.fechaFinPmp}</strong>`;
   }
 
   function applyAvanceUnlockedUI() {
-    const fechaInput = document.getElementById("avance-fecha");
-    const horaInput = document.getElementById("avance-hora");
-    const btnEstablecer = document.getElementById("avance-btn-establecer");
-    const btnReset = document.getElementById("avance-btn-reset");
-    const estado = document.getElementById("avance-estado");
-
-    fechaInput.disabled = false;
-    horaInput.disabled = false;
-    btnEstablecer.disabled = false;
-    btnReset.style.display = "none";
-    estado.textContent = "";
+    AVANCE_FIELD_IDS.forEach(id => { document.getElementById(id).disabled = false; });
+    document.getElementById("avance-btn-establecer").disabled = false;
+    document.getElementById("avance-btn-reset").style.display = "none";
+    document.getElementById("avance-estado").textContent = "";
   }
 
   function initAvance() {
@@ -1641,26 +1693,113 @@
     } else {
       applyAvanceUnlockedUI();
     }
+    loadAvanceTable(0);
   }
 
   document.getElementById("avance-btn-establecer").addEventListener("click", () => {
     const fecha = document.getElementById("avance-fecha").value;
     const hora = document.getElementById("avance-hora").value;
-    if (!fecha || !hora) {
-      toast("Completá fecha y hora de arranque antes de establecer.", "err");
+    const fechaIniPmp = document.getElementById("avance-fecha-ini-pmp").value;
+    const fechaFinPmp = document.getElementById("avance-fecha-fin-pmp").value;
+    if (!fecha || !hora || !fechaIniPmp || !fechaFinPmp) {
+      toast("Completá los 4 parámetros (fecha, hora, fecha inicial PMP y fecha final PMP) antes de establecer.", "err");
       return;
     }
-    setAvanceState(fecha, hora);
-    applyAvanceLockedUI({ fecha, hora });
+    const state = { fecha, hora, fechaIniPmp, fechaFinPmp };
+    setAvanceState(state);
+    applyAvanceLockedUI(state);
     toast("✅ Arranque establecido", "ok");
   });
 
   document.getElementById("avance-btn-reset").addEventListener("click", () => {
     clearAvanceState();
     applyAvanceUnlockedUI();
-    document.getElementById("avance-fecha").value = "";
-    document.getElementById("avance-hora").value = "";
+    AVANCE_FIELD_IDS.forEach(id => { document.getElementById(id).value = ""; });
   });
+
+  // ── Avance x Artículo: cálculo y tabla con barra de progreso ──
+
+  function avanceBarColor(pct) {
+    if (pct >= 1) return "#34c97e";
+    if (pct >= 0.5) return "#f7c948";
+    return "#f76060";
+  }
+
+  function renderAvanceBar(pct) {
+    const clamped = Math.max(0, Math.min(pct, 1));
+    const color = avanceBarColor(pct);
+    const pctLabel = (pct * 100).toFixed(1) + "%";
+    return `<div class="avance-bar-cell">
+      <div class="avance-bar-track"><div class="avance-bar-fill" style="width:${clamped * 100}%;background:${color}"></div></div>
+      <span class="avance-bar-label" style="color:${color}">${pctLabel}</span>
+    </div>`;
+  }
+
+  document.getElementById("avance-btn-calcular").addEventListener("click", async () => {
+    const state = getAvanceState();
+    if (!state) {
+      toast("Establecé los parámetros de arranque antes de calcular el avance.", "err");
+      return;
+    }
+    const btn = document.getElementById("avance-btn-calcular");
+    const info = document.getElementById("avance-calculo-info");
+    btn.disabled = true;
+    info.textContent = "Calculando…";
+    try {
+      const res = await fetch(`${API}/api/avance/calcular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fechaArranque: state.fecha,
+          horaArranque: state.hora,
+          fechaInicialPmp: state.fechaIniPmp,
+          fechaFinalPmp: state.fechaFinPmp,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      info.textContent = `✓ Calculado: ${data.rows.toLocaleString()} artículos`;
+      toast("✅ Avance calculado correctamente", "ok");
+      loadAvanceTable(0);
+    } catch (e) {
+      info.textContent = "";
+      toast("❌ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function loadAvanceTable(offset = 0) {
+    const q = document.getElementById("avance-q").value;
+    const url = `${API}/api/avance?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
+    const data = await fetch(url).then(r => r.json());
+
+    const wrap = document.getElementById("avance-table-wrap");
+    if (!data.rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">⚙</div>${q ? "Sin resultados" : "Todavía no se calculó el avance"}</div>`;
+      document.getElementById("avance-pagination").innerHTML = "";
+      return;
+    }
+
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        <th>Código Corto</th><th>Descripción</th><th>Arranque</th><th>Recepciones</th>
+        <th>Consumo</th><th>Necesidad Inicial</th><th>Necesidad Actual</th><th>Avance</th>
+      </tr></thead>
+      <tbody>${data.rows.map(r => `<tr>
+        <td>${r.nro_corto ?? ""}</td>
+        <td>${r.descripcion ?? ""}</td>
+        <td>${fmtNum(r.arranque ?? 0)}</td>
+        <td>${fmtNum(r.recepciones ?? 0)}</td>
+        <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
+        <td>${r.necesidad_actual != null ? fmtNum(r.necesidad_actual) : ""}</td>
+        <td>${renderAvanceBar(r.avance_pct ?? 0)}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    renderPagination("avance-pagination", data.total, offset, 50, "loadAvanceTable");
+  }
+  document.getElementById("avance-q").addEventListener("keydown", e => e.key === "Enter" && loadAvanceTable(0));
 
   // ── DB ready banner ──
   const banner = document.createElement("div");
