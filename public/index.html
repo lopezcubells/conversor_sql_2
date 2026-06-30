@@ -116,7 +116,7 @@
     .drop-zone {
       border: 2px dashed var(--border);
       border-radius: var(--radius);
-      padding: 36px;
+      padding: 18px 14px;
       text-align: center;
       cursor: pointer;
       transition: border-color .2s, background .2s;
@@ -124,9 +124,44 @@
     }
     .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: rgba(79,142,247,.05); }
     .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-    .drop-zone .icon  { font-size: 32px; margin-bottom: 8px; }
-    .drop-zone p { color: var(--muted); font-size: 13px; }
-    .drop-zone .filename { margin-top: 8px; color: var(--accent); font-size: 13px; font-family: var(--mono); }
+    .drop-zone .icon  { font-size: 22px; margin-bottom: 4px; }
+    .drop-zone p { color: var(--muted); font-size: 12px; }
+    .drop-zone .filename { margin-top: 6px; color: var(--accent); font-size: 12px; font-family: var(--mono); word-break: break-all; }
+
+    /* ── Import grid: tarjetas compactas, varias por fila ── */
+    .import-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .import-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      transition: border-color .25s, background .25s;
+    }
+    .import-card .card-title {
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .import-card.done {
+      border-color: var(--accent2);
+      background: rgba(52,201,126,.07);
+    }
+    .import-card.done .drop-zone {
+      border-color: rgba(52,201,126,.4);
+    }
+    .import-card .done-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent2);
+      margin-top: 8px;
+    }
+    .import-card.done .done-badge { display: flex; }
 
     /* ── Buttons ── */
     .btn {
@@ -191,6 +226,15 @@
       outline: none;
     }
     .search-input:focus { border-color: var(--accent); }
+
+    /* ── Avance: inputs de parámetros, compactos y uniformes ── */
+    .avance-param-input {
+      width: 150px;
+      flex: 0 0 150px;
+      padding: 6px 10px;
+      font-size: 15px;
+      color-scheme: dark;
+    }
 
     /* ── Toast ── */
     #toast {
@@ -476,148 +520,98 @@
 
 <!-- ═══ IMPORT ARTÍCULOS ═══ -->
 <div class="pane" id="tab-importar">
-  <div class="card">
-    <div class="card-title">Archivo Excel — Artículos por Rubro</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Se lee la hoja <strong style="color:var(--text)">BD ART x RUBRO</strong> del archivo.
-    </p>
+  <div class="import-grid">
 
-    <div class="drop-zone" id="dz-art">
-      <input type="file" accept=".xlsx,.xls" id="file-art" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-art"></div>
-    </div>
-
-    <div class="progress" id="prog-art"><div class="progress-bar" id="pb-art"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-art" value="replace" checked> Reemplazar tabla</label>
-        <label><input type="radio" name="mode-art" value="append"> Agregar registros</label>
+    <div class="card import-card" id="card-art" title="Se lee la hoja BD ART x RUBRO del archivo.">
+      <div class="card-title">Artículos por Rubro</div>
+      <div class="drop-zone" id="dz-art">
+        <input type="file" accept=".xlsx,.xls" id="file-art" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-art"></div>
       </div>
-      <button class="btn btn-primary" id="btn-art" disabled>⬆ Importar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Archivo Excel — Stock por Sucursales</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> del archivo.
-    </p>
-
-    <div class="drop-zone" id="dz-stk">
-      <input type="file" accept=".xlsx,.xls" id="file-stk" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-stk"></div>
-    </div>
-
-    <div class="progress" id="prog-stk"><div class="progress-bar" id="pb-stk"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-stk" value="replace" checked> Reemplazar tabla</label>
-        <label><input type="radio" name="mode-stk" value="append"> Agregar registros</label>
+      <div class="progress" id="prog-art"><div class="progress-bar" id="pb-art"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-art" disabled>⬆ Importar</button>
       </div>
-      <button class="btn btn-primary" id="btn-stk" disabled>⬆ Importar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Archivo Excel — Pendiente Completo</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Se lee la tabla <strong style="color:var(--text)">Tabla_Pendiente_COMPLETO</strong> del archivo.
-    </p>
-
-    <div class="drop-zone" id="dz-pdt">
-      <input type="file" accept=".xlsx,.xls" id="file-pdt" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-pdt"></div>
+      <div class="done-badge">✓ Importado</div>
     </div>
 
-    <div class="progress" id="prog-pdt"><div class="progress-bar" id="pb-pdt"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-pdt" value="replace" checked> Reemplazar tabla</label>
-        <label><input type="radio" name="mode-pdt" value="append"> Agregar registros</label>
+    <div class="card import-card" id="card-stk" title="Se lee la hoja Sheet1 del archivo.">
+      <div class="card-title">Stock por Sucursales</div>
+      <div class="drop-zone" id="dz-stk">
+        <input type="file" accept=".xlsx,.xls" id="file-stk" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-stk"></div>
       </div>
-      <button class="btn btn-primary" id="btn-pdt" disabled>⬆ Importar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Archivo Excel — Stock de Arranque</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      El nombre del archivo varía semana a semana (ej: <strong style="color:var(--text)">BD Stock x Sucursales 2026 SEM 27</strong>). Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> sin importar el nombre exacto del archivo.
-    </p>
-
-    <div class="drop-zone" id="dz-sar">
-      <input type="file" accept=".xlsx,.xls" id="file-sar" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-sar"></div>
-    </div>
-
-    <div class="progress" id="prog-sar"><div class="progress-bar" id="pb-sar"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-sar" value="replace" checked> Reemplazar tabla</label>
-        <label><input type="radio" name="mode-sar" value="append"> Agregar registros</label>
+      <div class="progress" id="prog-stk"><div class="progress-bar" id="pb-stk"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-stk" disabled>⬆ Importar</button>
       </div>
-      <button class="btn btn-primary" id="btn-sar" disabled>⬆ Importar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Archivo Excel — Recepciones</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      El nombre del archivo varía según la época del año (ej: <strong style="color:var(--text)">BD Recepciones 2026</strong>). Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> sin importar el nombre exacto del archivo. Se calcula automáticamente la <strong style="color:var(--text)">Semana ISO</strong> a partir de la Fecha de recepción.
-    </p>
-
-    <div class="drop-zone" id="dz-rec">
-      <input type="file" accept=".xlsx,.xls" id="file-rec" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-rec"></div>
+      <div class="done-badge">✓ Importado</div>
     </div>
 
-    <div class="progress" id="prog-rec"><div class="progress-bar" id="pb-rec"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-rec" value="replace" checked> Reemplazar tabla</label>
-        <label><input type="radio" name="mode-rec" value="append"> Agregar registros</label>
+    <div class="card import-card" id="card-pdt" title="Se lee la tabla Tabla_Pendiente_COMPLETO del archivo.">
+      <div class="card-title">Pendiente Completo</div>
+      <div class="drop-zone" id="dz-pdt">
+        <input type="file" accept=".xlsx,.xls" id="file-pdt" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-pdt"></div>
       </div>
-      <button class="btn btn-primary" id="btn-rec" disabled>⬆ Importar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Archivo Excel — PGM x BOM</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Importa 4 tablas en un solo paso: <strong style="color:var(--text)">PMP_x_BOM</strong>, <strong style="color:var(--text)">PMP_y_COMEX</strong>, <strong style="color:var(--text)">PGM</strong> y <strong style="color:var(--text)">PGM_x_BOM</strong>. Se calcula automáticamente la <strong style="color:var(--text)">Semana ISO</strong> a partir de la columna Día en cada una.
-    </p>
-
-    <div class="drop-zone" id="dz-pgm">
-      <input type="file" accept=".xlsx,.xls" id="file-pgm" />
-      <div class="icon">📂</div>
-      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
-      <div class="filename" id="fn-pgm"></div>
-    </div>
-
-    <div class="progress" id="prog-pgm"><div class="progress-bar" id="pb-pgm"></div></div>
-
-    <div class="btn-row">
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode-pgm" value="replace" checked> Reemplazar tablas</label>
-        <label><input type="radio" name="mode-pgm" value="append"> Agregar registros</label>
+      <div class="progress" id="prog-pdt"><div class="progress-bar" id="pb-pdt"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-pdt" disabled>⬆ Importar</button>
       </div>
-      <button class="btn btn-primary" id="btn-pgm" disabled>⬆ Importar</button>
+      <div class="done-badge">✓ Importado</div>
     </div>
+
+    <div class="card import-card" id="card-sar" title="El nombre del archivo varía semana a semana (ej: BD Stock x Sucursales 2026 SEM 27). Se lee la hoja Sheet1 sin importar el nombre exacto.">
+      <div class="card-title">Stock de Arranque</div>
+      <div class="drop-zone" id="dz-sar">
+        <input type="file" accept=".xlsx,.xls" id="file-sar" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-sar"></div>
+      </div>
+      <div class="progress" id="prog-sar"><div class="progress-bar" id="pb-sar"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-sar" disabled>⬆ Importar</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
+    <div class="card import-card" id="card-rec" title="El nombre del archivo varía según la época del año (ej: BD Recepciones 2026). Se lee la hoja Sheet1 sin importar el nombre exacto. Se calcula automáticamente la Semana ISO y la Hora de recepción.">
+      <div class="card-title">Recepciones</div>
+      <div class="drop-zone" id="dz-rec">
+        <input type="file" accept=".xlsx,.xls" id="file-rec" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-rec"></div>
+      </div>
+      <div class="progress" id="prog-rec"><div class="progress-bar" id="pb-rec"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-rec" disabled>⬆ Importar</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
+    <div class="card import-card" id="card-pgm" title="Importa 4 tablas en un solo paso: PMP_x_BOM, PMP_y_COMEX, PGM y PGM_x_BOM. Se calcula automáticamente la Semana ISO a partir de la columna Día en cada una.">
+      <div class="card-title">PGM x BOM</div>
+      <div class="drop-zone" id="dz-pgm">
+        <input type="file" accept=".xlsx,.xls" id="file-pgm" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-pgm"></div>
+      </div>
+      <div class="progress" id="prog-pgm"><div class="progress-bar" id="pb-pgm"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-pgm" disabled>⬆ Importar</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
   </div>
 </div>
 
@@ -768,19 +762,19 @@
     <div class="search-row" style="margin-bottom:0;align-items:flex-end;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha de arranque</label>
-        <input type="date" class="search-input" id="avance-fecha" style="flex:0 0 200px" />
+        <input type="date" class="search-input avance-param-input" id="avance-fecha" />
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora de arranque</label>
-        <input type="time" class="search-input" id="avance-hora" step="1" style="flex:0 0 160px" />
+        <input type="time" class="search-input avance-param-input" id="avance-hora" step="1" />
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicial PMP</label>
-        <input type="date" class="search-input" id="avance-fecha-ini-pmp" style="flex:0 0 200px" />
+        <input type="date" class="search-input avance-param-input" id="avance-fecha-ini-pmp" />
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final PMP</label>
-        <input type="date" class="search-input" id="avance-fecha-fin-pmp" style="flex:0 0 200px" />
+        <input type="date" class="search-input avance-param-input" id="avance-fecha-fin-pmp" />
       </div>
       <button class="btn btn-primary" id="avance-btn-establecer">Establecer arranque</button>
       <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
@@ -873,14 +867,14 @@
   setupDrop("dz-pgm", "file-pgm", "fn-pgm", "btn-pgm");
 
   // ── Import ──
-  async function doImport(endpoint, fileId, modeRadio, progId, pbId, btnId) {
+  async function doImport(endpoint, fileId, cardId, progId, pbId, btnId) {
     const file = document.getElementById(fileId).files[0];
     if (!file) return toast("Seleccioná un archivo primero.", "err");
 
-    const mode = document.querySelector(`input[name="${modeRadio}"]:checked`).value;
     const prog = document.getElementById(progId);
     const pb   = document.getElementById(pbId);
     const btn  = document.getElementById(btnId);
+    const card = document.getElementById(cardId);
 
     prog.style.display = "block";
     pb.style.width = "30%";
@@ -891,17 +885,18 @@
 
     try {
       pb.style.width = "70%";
-      const res = await fetch(`${API}/api/import/${endpoint}?mode=${mode}`, { method: "POST", body: fd });
+      const res = await fetch(`${API}/api/import/${endpoint}?mode=replace`, { method: "POST", body: fd });
       pb.style.width = "100%";
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || "Error desconocido");
-      let msg = `✅ ${data.rows.toLocaleString()} filas importadas (modo: ${mode})`;
+      let msg = `✅ ${data.rows.toLocaleString()} filas importadas`;
       if (data.detalle) {
         const partes = Object.entries(data.detalle).map(([k, v]) => `${k}: ${v.toLocaleString()}`).join(" · ");
         msg += ` — ${partes}`;
       }
       toast(msg, "ok");
+      if (card) card.classList.add("done");
       loadStats();
     } catch (e) {
       toast("❌ " + e.message, "err");
@@ -912,17 +907,17 @@
   }
 
   document.getElementById("btn-art").addEventListener("click", () =>
-    doImport("articulos", "file-art", "mode-art", "prog-art", "pb-art", "btn-art"));
+    doImport("articulos", "file-art", "card-art", "prog-art", "pb-art", "btn-art"));
   document.getElementById("btn-stk").addEventListener("click", () =>
-    doImport("stock", "file-stk", "mode-stk", "prog-stk", "pb-stk", "btn-stk"));
+    doImport("stock", "file-stk", "card-stk", "prog-stk", "pb-stk", "btn-stk"));
   document.getElementById("btn-pdt").addEventListener("click", () =>
-    doImport("pendiente", "file-pdt", "mode-pdt", "prog-pdt", "pb-pdt", "btn-pdt"));
+    doImport("pendiente", "file-pdt", "card-pdt", "prog-pdt", "pb-pdt", "btn-pdt"));
   document.getElementById("btn-sar").addEventListener("click", () =>
-    doImport("stock-arranque", "file-sar", "mode-sar", "prog-sar", "pb-sar", "btn-sar"));
+    doImport("stock-arranque", "file-sar", "card-sar", "prog-sar", "pb-sar", "btn-sar"));
   document.getElementById("btn-rec").addEventListener("click", () =>
-    doImport("recepciones", "file-rec", "mode-rec", "prog-rec", "pb-rec", "btn-rec"));
+    doImport("recepciones", "file-rec", "card-rec", "prog-rec", "pb-rec", "btn-rec"));
   document.getElementById("btn-pgm").addEventListener("click", () =>
-    doImport("pgm-x-bom", "file-pgm", "mode-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
+    doImport("pgm-x-bom", "file-pgm", "card-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
 
   // ── Stats ──
   async function loadStats() {
@@ -934,6 +929,19 @@
       document.getElementById("cnt-stock-arranque").textContent = data.stockArranque.toLocaleString();
       document.getElementById("cnt-recepciones").textContent = data.recepciones.toLocaleString();
       document.getElementById("cnt-pgm").textContent = data.pgmTotal.toLocaleString();
+
+      const cardCounts = {
+        "card-art": data.articulos,
+        "card-stk": data.stock,
+        "card-pdt": data.pendiente,
+        "card-sar": data.stockArranque,
+        "card-rec": data.recepciones,
+        "card-pgm": data.pgmTotal,
+      };
+      Object.entries(cardCounts).forEach(([cardId, count]) => {
+        const card = document.getElementById(cardId);
+        if (card) card.classList.toggle("done", count > 0);
+      });
 
       const ll = document.getElementById("log-list");
       if (!data.logs.length) {
