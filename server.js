@@ -43,6 +43,7 @@ async function initSql() {
   console.log("sql.js listo");
   initSchema();
   withDb(db => rebuildStockDetallado(db));
+  withDb(db => rebuildRecepcionesRubro(db));
   console.log("stock_detallado reconstruido");
 }
 
@@ -180,6 +181,7 @@ function initSchema() {
       ult_est INTEGER,
       hora_dia INTEGER,
       hora_recepcion TEXT,
+      rubro TEXT,
       archivo_origen TEXT,
       importado_en TEXT DEFAULT (datetime('now'))
     );
@@ -265,6 +267,29 @@ function rebuildStockDetallado(db) {
     FROM stock_sucursales s
     LEFT JOIN articulos a ON a.nro_corto = s.nro_corto
   `);
+}
+
+// Actualiza la columna rubro de Recepciones desde Articulos, usando Nº corto como llave.
+// Se ejecuta tras importar Recepciones o Artículos, y al arrancar el servidor.
+// Agrupamos por nro_corto (muchos menos valores distintos que filas) para minimizar
+// la cantidad de UPDATEs ejecutados, en vez de uno por fila o una subquery correlacionada.
+function rebuildRecepcionesRubro(db) {
+  const articulosRows = query(db, `
+    SELECT nro_corto, MAX(rubro) as rubro
+    FROM articulos
+    WHERE nro_corto IS NOT NULL
+    GROUP BY nro_corto
+  `);
+  const rubroMap = new Map(articulosRows.map(r => [r.nro_corto, r.rubro]));
+
+  const codigosEnRecepciones = query(db, `SELECT DISTINCT nro_corto FROM recepciones WHERE nro_corto IS NOT NULL`);
+
+  const stmt = db.prepare("UPDATE recepciones SET rubro = ? WHERE nro_corto = ?");
+  for (const { nro_corto } of codigosEnRecepciones) {
+    const rubro = rubroMap.get(nro_corto) ?? null;
+    stmt.run([rubro, nro_corto]);
+  }
+  stmt.free();
 }
 
 // Middleware: verificar que la DB esté lista para rutas de API
@@ -559,6 +584,7 @@ app.post("/api/import/articulos", requireDb, upload.single("file"), (req, res) =
       db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
         ["articulos", req.file.originalname, rows.length, "ok"]);
       rebuildStockDetallado(db);
+      rebuildRecepcionesRubro(db);
     });
     res.json({ success: true, rows: rows.length, mode });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -647,6 +673,7 @@ app.post("/api/import/recepciones", requireDb, upload.single("file"), (req, res)
       stmt.free();
       db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
         ["recepciones", req.file.originalname, rows.length, "ok"]);
+      rebuildRecepcionesRubro(db);
     });
     res.json({ success: true, rows: rows.length, mode });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -840,6 +867,38 @@ Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
+});
+
+// ── Recepciones: rubros disponibles y resumen mensual de cantidad recibida ──
+
+app.get("/api/recepciones/rubros", requireDb, (req, res) => {
+  try {
+    const rubros = readDb(db => query(db,
+      `SELECT DISTINCT rubro FROM recepciones WHERE rubro IS NOT NULL AND rubro != '' ORDER BY rubro`
+    )).map(r => r.rubro);
+    res.json({ rubros });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/recepciones/por-mes", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro;
+    if (!rubro) return res.status(400).json({ error: "Debés indicar un rubro." });
+
+    const rows = readDb(db => query(db, `
+      SELECT
+        substr(fecha_recepcion, 1, 7) as mes,
+        SUM(cantidad_recibida) as cantidad_recibida
+      FROM recepciones
+      WHERE rubro = ?
+        AND fecha_recepcion IS NOT NULL
+        AND cantidad_recibida IS NOT NULL
+      GROUP BY mes
+      ORDER BY mes ASC
+    `, [rubro]));
+
+    res.json({ rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/stock-detallado/rubros", requireDb, (req, res) => {
