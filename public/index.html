@@ -426,6 +426,7 @@
   <div class="tab" data-tab="stock-detallado">Stock detallado</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="pendientes">Pendientes</div>
+  <div class="tab" data-tab="avance">Avance</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -729,6 +730,29 @@
 
 </div>
 
+<!-- ═══ AVANCE ═══ -->
+<div class="pane" id="tab-avance">
+  <div class="card">
+    <div class="card-title">Parámetros de arranque</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Definí la fecha y hora de arranque una sola vez. Una vez establecidos, estos valores quedan fijos y se usan como parámetros en esta pestaña.
+    </p>
+    <div class="search-row" style="margin-bottom:0;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha de arranque</label>
+        <input type="date" class="search-input" id="avance-fecha" style="flex:0 0 200px" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora de arranque</label>
+        <input type="time" class="search-input" id="avance-hora" step="1" style="flex:0 0 160px" />
+      </div>
+      <button class="btn btn-primary" id="avance-btn-establecer">Establecer arranque</button>
+      <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
+    </div>
+    <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -746,6 +770,7 @@
       if (tab.dataset.tab === "stock-detallado") initStockDetallado();
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "pendientes") initPendientes();
+      if (tab.dataset.tab === "avance") initAvance();
     });
   });
 
@@ -952,6 +977,8 @@
       { key: "fecha_solic",           label: "Fecha Solic" },
       { key: "fecha_recepcion",       label: "Fecha Recepción" },
       { key: "semana_iso",            label: "Semana ISO" },
+      { key: "hora_dia",              label: "Hora Día" },
+      { key: "hora_recepcion",        label: "Hora Recepción" },
       { key: "unidad_negocio",        label: "Unidad Negocio" },
       { key: "costo_unitario",        label: "Costo Unitario" },
       { key: "iniciador_transaccion", label: "Iniciador" },
@@ -1558,6 +1585,83 @@
     } catch (e) { console.error(e); }
   }
 
+  // ── Avance: parámetros de arranque ──
+
+  const AVANCE_STORAGE_KEY = "avance-arranque";
+
+  function getAvanceState() {
+    try {
+      const raw = localStorage.getItem(AVANCE_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+
+  function setAvanceState(fecha, hora) {
+    localStorage.setItem(AVANCE_STORAGE_KEY, JSON.stringify({ fecha, hora }));
+  }
+
+  function clearAvanceState() {
+    localStorage.removeItem(AVANCE_STORAGE_KEY);
+  }
+
+  function applyAvanceLockedUI(state) {
+    const fechaInput = document.getElementById("avance-fecha");
+    const horaInput = document.getElementById("avance-hora");
+    const btnEstablecer = document.getElementById("avance-btn-establecer");
+    const btnReset = document.getElementById("avance-btn-reset");
+    const estado = document.getElementById("avance-estado");
+
+    fechaInput.value = state.fecha;
+    horaInput.value = state.hora;
+    fechaInput.disabled = true;
+    horaInput.disabled = true;
+    btnEstablecer.disabled = true;
+    btnReset.style.display = "inline-flex";
+    estado.innerHTML = `✓ Arranque establecido: <strong style="color:var(--text)">${state.fecha} ${state.hora}</strong>`;
+  }
+
+  function applyAvanceUnlockedUI() {
+    const fechaInput = document.getElementById("avance-fecha");
+    const horaInput = document.getElementById("avance-hora");
+    const btnEstablecer = document.getElementById("avance-btn-establecer");
+    const btnReset = document.getElementById("avance-btn-reset");
+    const estado = document.getElementById("avance-estado");
+
+    fechaInput.disabled = false;
+    horaInput.disabled = false;
+    btnEstablecer.disabled = false;
+    btnReset.style.display = "none";
+    estado.textContent = "";
+  }
+
+  function initAvance() {
+    const state = getAvanceState();
+    if (state) {
+      applyAvanceLockedUI(state);
+    } else {
+      applyAvanceUnlockedUI();
+    }
+  }
+
+  document.getElementById("avance-btn-establecer").addEventListener("click", () => {
+    const fecha = document.getElementById("avance-fecha").value;
+    const hora = document.getElementById("avance-hora").value;
+    if (!fecha || !hora) {
+      toast("Completá fecha y hora de arranque antes de establecer.", "err");
+      return;
+    }
+    setAvanceState(fecha, hora);
+    applyAvanceLockedUI({ fecha, hora });
+    toast("✅ Arranque establecido", "ok");
+  });
+
+  document.getElementById("avance-btn-reset").addEventListener("click", () => {
+    clearAvanceState();
+    applyAvanceUnlockedUI();
+    document.getElementById("avance-fecha").value = "";
+    document.getElementById("avance-hora").value = "";
+  });
+
   // ── DB ready banner ──
   const banner = document.createElement("div");
   banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#1a1d27;border-bottom:2px solid #f7874f;padding:10px 24px;font-size:13px;color:#f7874f;z-index:1000;display:none;text-align:center;";
@@ -1575,4 +1679,3 @@
 </script>
 </body>
 </html>
-
