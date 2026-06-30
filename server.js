@@ -1267,6 +1267,12 @@ app.get("/api/avance", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Avance x Rubro solo debe mostrar este subconjunto fijo de rubros relevantes
+const AVANCE_RUBRO_WHITELIST = [
+  "ETIQUETA FR", "ETIQUETA CT", "Tapón", "Cápsulas", "TETRA Envases",
+  "BOTELLA Vidrio", "Tapa", "Bandeja", "Cajas", "BIB Envase", "Pallets",
+];
+
 app.get("/api/avance-rubro", requireDb, (req, res) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit) || 100, 1000);
@@ -1275,8 +1281,11 @@ app.get("/api/avance-rubro", requireDb, (req, res) => {
     const { col, dir } = parseSortParams(req, AVANCE_RUBRO_SORT_COLS, "arranque");
 
     const data = readDb(db => {
-      const where = rubro ? "WHERE rubro = ?" : "";
-      const params = rubro ? [rubro] : [];
+      const placeholders = AVANCE_RUBRO_WHITELIST.map(() => "?").join(",");
+      const whereClauses = [`rubro IN (${placeholders})`];
+      const params = [...AVANCE_RUBRO_WHITELIST];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
 
       const rows = query(db,
         `SELECT * FROM avance_x_rubro ${where} ORDER BY ${col} ${dir} LIMIT ? OFFSET ?`,
