@@ -1112,16 +1112,17 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
       `, [fechaArranque, horaArranque]);
       const recepcionesMap = new Map(recepcionesRows.map(r => [r.nro_corto, r.total]));
 
-      // Consumo: suma de cantidad_insumo por artículo en PMP x BOM, filtrando por rango de fechas PMP
+      // Consumo: suma de cantidad_insumo por artículo en PMP x BOM, filtrando por rango de fechas PMP.
+      // La llave de unión es "Cód. Corto (comp)" (codigo_corto_comp), no "Cod corto".
       const consumoRows = query(db, `
-        SELECT cod_corto, SUM(cantidad_insumo) as total
+        SELECT codigo_corto_comp, SUM(cantidad_insumo) as total
         FROM pmp_x_bom
-        WHERE cod_corto IS NOT NULL
+        WHERE codigo_corto_comp IS NOT NULL
           AND cantidad_insumo IS NOT NULL
           AND dia >= ? AND dia <= ?
-        GROUP BY cod_corto
+        GROUP BY codigo_corto_comp
       `, [fechaInicialPmp, fechaFinalPmp]);
-      const consumoMap = new Map(consumoRows.map(r => [r.cod_corto, r.total]));
+      const consumoMap = new Map(consumoRows.map(r => [r.codigo_corto_comp, r.total]));
 
       db.run("DELETE FROM avance_x_articulo");
       const stmt = db.prepare(`INSERT INTO avance_x_articulo (
