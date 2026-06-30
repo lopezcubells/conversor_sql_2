@@ -543,6 +543,133 @@ app.get("/api/rubros-detallado/top-articulos", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Pendientes: dashboard de gestión de pendientes ──
+
+app.get("/api/pendientes/rubros", requireDb, (req, res) => {
+  try {
+    const rubros = readDb(db => query(db,
+      `SELECT DISTINCT rubro FROM pendiente_completo
+       WHERE rubro IS NOT NULL AND rubro != ''
+       ORDER BY rubro`
+    )).map(r => r.rubro);
+    res.json({ rubros });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Cuota por proveedor: cantidad pendiente agregada por proveedor (top 10 + Otros)
+app.get("/api/pendientes/cuota-proveedor", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const data = readDb(db => {
+      const where = rubro ? "WHERE rubro = ?" : "";
+      const params = rubro ? [rubro] : [];
+      return query(db, `
+        SELECT proveedor, SUM(cantidad_pendiente) as cantidad
+        FROM pendiente_completo
+        ${where}
+        GROUP BY proveedor
+        ORDER BY cantidad DESC
+      `, params);
+    });
+    res.json({ rows: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Pendientes vencidos: ordenes E1/OC/OX cuya Fecha Solic es anterior a hoy
+app.get("/api/pendientes/vencidos", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const limit = Math.min(parseInt(req.query.limit) || 200, 2000);
+    const data = readDb(db => {
+      const whereClauses = ["tp_ord IN ('E1','OC','OX')", "fecha_solic < date('now')"];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      const rows = query(db, `
+        SELECT nro_corto, descripcion, proveedor, cantidad_pendiente, fecha_solic, tp_ord
+        FROM pendiente_completo
+        ${where}
+        ORDER BY fecha_solic ASC
+        LIMIT ?
+      `, [...params, limit]);
+
+      const totales = query(db, `
+        SELECT COUNT(*) as cantidad, SUM(cantidad_pendiente) as volumen
+        FROM pendiente_completo ${where}
+      `, params)[0];
+
+      return { rows, totales };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Pendientes en cadena de aprobación: OC/OX/E1 cuyo estado != 280-400
+app.get("/api/pendientes/cadena-aprobacion", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const limit = Math.min(parseInt(req.query.limit) || 200, 2000);
+    const data = readDb(db => {
+      const whereClauses = [
+        "tp_ord IN ('E1','OC','OX')",
+        "NOT (ult_est = 280 AND est_sig = 400)"
+      ];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      const rows = query(db, `
+        SELECT nro_corto, descripcion, cantidad_pendiente, fecha_orden, ult_est, est_sig,
+               CAST(julianday('now') - julianday(fecha_orden) AS INTEGER) as demora_cadena
+        FROM pendiente_completo
+        ${where}
+        ORDER BY demora_cadena DESC
+        LIMIT ?
+      `, [...params, limit]);
+
+      const totales = query(db, `
+        SELECT COUNT(*) as cantidad, SUM(cantidad_pendiente) as volumen
+        FROM pendiente_completo ${where}
+      `, params)[0];
+
+      return { rows, totales };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Pendientes en cotización: ordenes Q1
+app.get("/api/pendientes/cotizacion", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const limit = Math.min(parseInt(req.query.limit) || 200, 2000);
+    const data = readDb(db => {
+      const whereClauses = ["tp_ord = 'Q1'"];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      const rows = query(db, `
+        SELECT nro_corto, descripcion, cantidad_pendiente, fecha_orden,
+               CAST(julianday('now') - julianday(fecha_orden) AS INTEGER) as demora_cotizacion
+        FROM pendiente_completo
+        ${where}
+        ORDER BY demora_cotizacion DESC
+        LIMIT ?
+      `, [...params, limit]);
+
+      const totales = query(db, `
+        SELECT COUNT(*) as cantidad, SUM(cantidad_pendiente) as volumen
+        FROM pendiente_completo ${where}
+      `, params)[0];
+
+      return { rows, totales };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/export/:tabla", requireDb, (req, res) => {
   try {
     const validTables = ["articulos", "stock_sucursales", "stock_detallado", "pendiente_completo"];
