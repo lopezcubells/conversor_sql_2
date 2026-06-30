@@ -205,6 +205,18 @@ function initSchema() {
       rubro_fr_ves TEXT, factor REAL, cantidad_insumo REAL, sku_rubro TEXT, sku_insumo TEXT,
       importado_en TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS avance_x_articulo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nro_corto INTEGER,
+      descripcion TEXT,
+      arranque REAL,
+      recepciones REAL,
+      consumo REAL,
+      necesidad_inicial REAL,
+      necesidad_actual REAL,
+      avance_pct REAL,
+      calculado_en TEXT DEFAULT (datetime('now'))
+    );
   `));
   console.log("Esquema creado");
 }
@@ -1057,11 +1069,125 @@ app.get("/api/pendientes/cotizacion", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Avance x Artículo: cálculo bajo demanda ──
+
+app.post("/api/avance/calcular", requireDb, (req, res) => {
+  try {
+    const { fechaArranque, horaArranque, fechaInicialPmp, fechaFinalPmp } = req.body || {};
+    if (!fechaArranque || !horaArranque) {
+      return res.status(400).json({ error: "Debés cargar y establecer la Fecha y Hora de arranque antes de calcular el avance." });
+    }
+    if (!fechaInicialPmp || !fechaFinalPmp) {
+      return res.status(400).json({ error: "Debés cargar y establecer la Fecha Inicial PMP y Fecha Final PMP antes de calcular el avance." });
+    }
+
+    const resultado = withDb(db => {
+      // Universo de artículos: Nº corto sin duplicados desde Articulos
+      const articulosBase = query(db, `
+        SELECT nro_corto, MAX(descripcion) as descripcion
+        FROM articulos
+        WHERE nro_corto IS NOT NULL
+        GROUP BY nro_corto
+      `);
+
+      // Arranque: suma de existencias por artículo en Stock de Arranque
+      const arranqueRows = query(db, `
+        SELECT nro_corto, SUM(existencias) as total
+        FROM stock_arranque
+        WHERE nro_corto IS NOT NULL
+        GROUP BY nro_corto
+      `);
+      const arranqueMap = new Map(arranqueRows.map(r => [r.nro_corto, r.total]));
+
+      // Recepciones: suma de cantidad_recibida por artículo, filtrando por fecha/hora de arranque.
+      // Fecha de recepción >= fecha de arranque (inclusive) Y hora de recepción > hora de arranque (estricto).
+      const recepcionesRows = query(db, `
+        SELECT nro_corto, SUM(cantidad_recibida) as total
+        FROM recepciones
+        WHERE nro_corto IS NOT NULL
+          AND cantidad_recibida IS NOT NULL
+          AND fecha_recepcion >= ?
+          AND hora_recepcion > ?
+        GROUP BY nro_corto
+      `, [fechaArranque, horaArranque]);
+      const recepcionesMap = new Map(recepcionesRows.map(r => [r.nro_corto, r.total]));
+
+      // Consumo: suma de cantidad_insumo por artículo en PMP x BOM, filtrando por rango de fechas PMP
+      const consumoRows = query(db, `
+        SELECT cod_corto, SUM(cantidad_insumo) as total
+        FROM pmp_x_bom
+        WHERE cod_corto IS NOT NULL
+          AND cantidad_insumo IS NOT NULL
+          AND dia >= ? AND dia <= ?
+        GROUP BY cod_corto
+      `, [fechaInicialPmp, fechaFinalPmp]);
+      const consumoMap = new Map(consumoRows.map(r => [r.cod_corto, r.total]));
+
+      db.run("DELETE FROM avance_x_articulo");
+      const stmt = db.prepare(`INSERT INTO avance_x_articulo (
+        nro_corto, descripcion, arranque, recepciones, consumo,
+        necesidad_inicial, necesidad_actual, avance_pct
+      ) VALUES (?,?,?,?,?,?,?,?)`);
+
+      let filas = 0;
+      for (const art of articulosBase) {
+        const nroCorto = art.nro_corto;
+        const arranque = arranqueMap.get(nroCorto) ?? 0;
+        const recepciones = recepcionesMap.get(nroCorto) ?? 0;
+        const consumo = consumoMap.get(nroCorto) ?? 0;
+
+        const necesidadInicialRaw = arranque - consumo;
+        const necesidadInicial = necesidadInicialRaw < 0 ? necesidadInicialRaw : null;
+
+        const necesidadActualRaw = arranque + recepciones - consumo;
+        const necesidadActual = necesidadActualRaw < 0 ? necesidadActualRaw : null;
+
+        // Avance = Recepciones / (Necesidad inicial). Si necesidad inicial es null o 0 -> 1 (100%)
+        // Necesidad inicial siempre es negativa (o null) por definición, así que tomamos
+        // valor absoluto para expresar el avance como "% de necesidad cubierta" en positivo.
+        let avancePct;
+        if (necesidadInicial == null || necesidadInicial === 0) {
+          avancePct = 1;
+        } else {
+          avancePct = Math.abs(recepciones / necesidadInicial);
+        }
+
+        stmt.run([nroCorto, art.descripcion, arranque, recepciones, consumo, necesidadInicial, necesidadActual, avancePct]);
+        filas++;
+      }
+      stmt.free();
+
+      return filas;
+    });
+
+    res.json({ success: true, rows: resultado });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/avance", requireDb, (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 50, 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    const q      = req.query.q ? `%${req.query.q}%` : null;
+    const data   = readDb(db => {
+      const rows  = q
+        ? query(db, "SELECT * FROM avance_x_articulo WHERE descripcion LIKE ? ORDER BY nro_corto LIMIT ? OFFSET ?", [q, limit, offset])
+        : query(db, "SELECT * FROM avance_x_articulo ORDER BY nro_corto LIMIT ? OFFSET ?", [limit, offset]);
+      const total = q
+        ? query(db, "SELECT COUNT(*) as c FROM avance_x_articulo WHERE descripcion LIKE ?", [q])[0]?.c ?? 0
+        : query(db, "SELECT COUNT(*) as c FROM avance_x_articulo")[0]?.c ?? 0;
+      return { rows, total, limit, offset };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/export/:tabla", requireDb, (req, res) => {
   try {
     const validTables = [
       "articulos", "stock_sucursales", "stock_detallado", "pendiente_completo",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
+      "avance_x_articulo",
     ];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
