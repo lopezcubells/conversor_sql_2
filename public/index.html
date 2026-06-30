@@ -369,17 +369,10 @@
 
   <div class="card">
     <div class="card-title">Existencias por artículo</div>
-    <div id="chart-wrap" style="position:relative;height:380px">
+    <div id="chart-wrap" style="position:relative;height:900px">
       <canvas id="chart-detallado"></canvas>
     </div>
   </div>
-
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="tbl-det-wrap">
-      <div class="empty"><div class="big">🗄</div>Importá artículos y stock primero</div>
-    </div>
-  </div>
-  <div class="pagination" id="pag-det"></div>
 </div>
 
 <div id="toast"></div>
@@ -560,50 +553,29 @@
   document.getElementById("q-stk").addEventListener("keydown", e => e.key === "Enter" && loadStock(0));
 
   // ── Stock Detallado ──
-  const DET_COLS = [
-    { key: "nro_corto",      label: "Nº Corto" },
-    { key: "unidad_negocio", label: "Unidad Negocio" },
-    { key: "existencias",    label: "Existencias" },
-    { key: "descripcion",    label: "Descripción" },
-    { key: "rubro",          label: "Rubro" },
-  ];
-
   let detChart = null;
-  let detRubrosLoaded = false;
-
   async function initStockDetallado() {
-    if (!detRubrosLoaded) {
+    const sel = document.getElementById("rubro-filter");
+    if (sel.options.length <= 1) {
       try {
         const { rubros } = await fetch(`${API}/api/stock-detallado/rubros`).then(r => r.json());
-        const sel = document.getElementById("rubro-filter");
         rubros.forEach(r => {
           const opt = document.createElement("option");
           opt.value = r; opt.textContent = r;
           sel.appendChild(opt);
         });
-        detRubrosLoaded = true;
       } catch (e) { console.error(e); }
     }
-    loadStockDetallado(0);
     loadDetChart();
   }
 
   document.getElementById("rubro-filter").addEventListener("change", () => {
-    loadStockDetallado(0);
     loadDetChart();
   });
 
-  async function loadStockDetallado(offset = 0) {
-    const rubro = document.getElementById("rubro-filter").value;
-    const url = `${API}/api/stock-detallado?limit=50&offset=${offset}${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
-    const data = await fetch(url).then(r => r.json());
-    renderTable("tbl-det-wrap", DET_COLS, data.rows);
-    renderPagination("pag-det", data.total, offset, 50, "loadStockDetallado");
-  }
-
   async function loadDetChart() {
     const rubro = document.getElementById("rubro-filter").value;
-    const url = `${API}/api/stock-detallado/chart?limit=25${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
+    const url = `${API}/api/stock-detallado/chart?limit=50${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
     const { rows } = await fetch(url).then(r => r.json());
 
     const ctx = document.getElementById("chart-detallado").getContext("2d");
