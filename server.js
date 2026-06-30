@@ -329,6 +329,106 @@ app.get("/api/stock-detallado/chart", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Rubros Detallado: dashboard de inventario por rubro ──
+
+// KPIs ejecutivos generales
+app.get("/api/rubros-detallado/kpis", requireDb, (req, res) => {
+  try {
+    const data = readDb(db => {
+      const base = query(db, `
+        SELECT
+          COUNT(DISTINCT nro_corto)               as articulos_con_stock,
+          COUNT(DISTINCT rubro)                    as total_rubros,
+          SUM(existencias)                         as unidades_totales
+        FROM stock_detallado
+        WHERE existencias > 0 AND rubro IS NOT NULL AND rubro != ''
+      `)[0];
+
+      const lider = query(db, `
+        SELECT rubro, SUM(existencias) as total
+        FROM stock_detallado
+        WHERE existencias > 0 AND rubro IS NOT NULL AND rubro != ''
+        GROUP BY rubro
+        ORDER BY total DESC
+        LIMIT 1
+      `)[0];
+
+      const sinRubro = query(db, `
+        SELECT COUNT(DISTINCT nro_corto) as c
+        FROM stock_detallado
+        WHERE existencias > 0 AND (rubro IS NULL OR rubro = '')
+      `)[0];
+
+      return {
+        articulosConStock: base?.articulos_con_stock ?? 0,
+        totalRubros: base?.total_rubros ?? 0,
+        unidadesTotales: base?.unidades_totales ?? 0,
+        rubroLider: lider?.rubro ?? null,
+        rubroLiderUnidades: lider?.total ?? 0,
+        articulosSinRubro: sinRubro?.c ?? 0,
+      };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Resumen por rubro: unidades totales, cantidad de artículos, participación %
+app.get("/api/rubros-detallado/resumen", requireDb, (req, res) => {
+  try {
+    const data = readDb(db => {
+      const rows = query(db, `
+        SELECT
+          rubro,
+          SUM(existencias)            as unidades,
+          COUNT(DISTINCT nro_corto)   as articulos
+        FROM stock_detallado
+        WHERE existencias > 0 AND rubro IS NOT NULL AND rubro != ''
+        GROUP BY rubro
+        ORDER BY unidades DESC
+      `);
+      const total = rows.reduce((acc, r) => acc + r.unidades, 0);
+      return rows.map(r => ({ ...r, participacion: total > 0 ? (r.unidades / total) * 100 : 0 }));
+    });
+    res.json({ rows: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Top artículos por unidades, opcionalmente filtrado por rubro — para el Pareto
+app.get("/api/rubros-detallado/top-articulos", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const limit = Math.min(parseInt(req.query.limit) || 15, 100);
+
+    const data = readDb(db => {
+      const whereClauses = ["existencias > 0", "rubro IS NOT NULL", "rubro != ''"];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      const rows = query(db, `
+        SELECT nro_corto, descripcion, rubro, SUM(existencias) as unidades
+        FROM stock_detallado ${where}
+        GROUP BY nro_corto, descripcion, rubro
+        ORDER BY unidades DESC
+        LIMIT ?
+      `, [...params, limit]);
+
+      const totalGeneral = query(db, `
+        SELECT SUM(existencias) as t FROM stock_detallado ${where}
+      `, params)[0]?.t ?? 0;
+
+      let acumulado = 0;
+      const withCumulative = rows.map(r => {
+        acumulado += r.unidades;
+        return { ...r, acumuladoPct: totalGeneral > 0 ? (acumulado / totalGeneral) * 100 : 0 };
+      });
+
+      return withCumulative;
+    });
+    res.json({ rows: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/export/:tabla", requireDb, (req, res) => {
   try {
     const validTables = ["articulos", "stock_sucursales", "stock_detallado"];
