@@ -287,6 +287,46 @@
       margin-top: 0;
     }
 
+    /* ── Indicador de avance: tarjeta destacada verde/naranja ── */
+    .indicador-card {
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 4px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: background .25s, border-color .25s;
+    }
+    .indicador-card.indicador-ok {
+      background: rgba(52,201,126,.10);
+      border-color: rgba(52,201,126,.4);
+    }
+    .indicador-card.indicador-warn {
+      background: rgba(247,135,79,.10);
+      border-color: rgba(247,135,79,.4);
+    }
+    .indicador-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .indicador-value {
+      font-size: 36px;
+      font-weight: 700;
+      font-family: var(--mono);
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .indicador-card.indicador-ok .indicador-value { color: var(--accent2); }
+    .indicador-card.indicador-warn .indicador-value { color: var(--warn); }
+    .indicador-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
     /* ── Toast ── */
     #toast {
       position: fixed; bottom: 24px; right: 24px;
@@ -663,6 +703,21 @@
       <div class="done-badge">✓ Importado</div>
     </div>
 
+    <div class="card import-card" id="card-cti" title="Se lee la hoja Sheet1 del archivo BD Costos Insumos.">
+      <div class="card-title">Costo de Insumos</div>
+      <div class="drop-zone" id="dz-cti">
+        <input type="file" accept=".xlsx,.xls" id="file-cti" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-cti"></div>
+      </div>
+      <div class="progress" id="prog-cti"><div class="progress-bar" id="pb-cti"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-cti" disabled>⬆ Importar</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
   </div>
 </div>
 
@@ -679,6 +734,7 @@
       <option value="pmp-y-comex">PMP y COMEX</option>
       <option value="pgm">PGM</option>
       <option value="pgm-x-bom">PGM x BOM</option>
+      <option value="costo-insumos">Costo de Insumos</option>
     </select>
     <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
     <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
@@ -848,6 +904,12 @@
     </div>
   </div>
 
+  <div class="indicador-card" id="indicador-avance-card">
+    <div class="indicador-label">Indicador de avance</div>
+    <div class="indicador-value" id="indicador-avance-value">—</div>
+    <div class="indicador-sub">Costo Recepciones / Costo Necesidad Inicial · 11 rubros clave</div>
+  </div>
+
   <div class="section-heading">
     <h2>Avance x Rubro</h2>
   </div>
@@ -864,23 +926,28 @@
   </div>
   <div class="pagination" id="avance-rubro-pagination"></div>
 
-  <div class="section-heading">
-    <h2>Avance x Artículo</h2>
-  </div>
-  <div class="search-row">
-    <select class="search-input" id="avance-art-rubro-filter" style="flex:0 0 280px">
-      <option value="">Todos los rubros</option>
-    </select>
-    <input class="search-input" id="avance-q" placeholder="Buscar por descripción…" />
-    <button class="btn btn-outline" onclick="loadAvanceTable(0)">🔍 Buscar</button>
-    <button class="btn btn-outline" onclick="exportTable('avance_x_articulo')">⬇ CSV</button>
-  </div>
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="avance-table-wrap">
-      <div class="empty"><div class="big">⚙</div>Todavía no se calculó el avance</div>
+  <div class="card" style="margin-top:24px">
+    <div class="collapsible-header" id="avance-art-toggle">
+      <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:0">Avance x Artículo</h2>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body" id="avance-art-body">
+      <div class="search-row" style="margin-top:14px">
+        <select class="search-input" id="avance-art-rubro-filter" style="flex:0 0 280px">
+          <option value="">Todos los rubros</option>
+        </select>
+        <input class="search-input" id="avance-q" placeholder="Buscar por descripción…" />
+        <button class="btn btn-outline" onclick="loadAvanceTable(0)">🔍 Buscar</button>
+        <button class="btn btn-outline" onclick="exportTable('avance_x_articulo')">⬇ CSV</button>
+      </div>
+      <div class="card" style="padding:0">
+        <div class="table-wrap" id="avance-table-wrap">
+          <div class="empty"><div class="big">⚙</div>Todavía no se calculó el avance</div>
+        </div>
+      </div>
+      <div class="pagination" id="avance-pagination"></div>
     </div>
   </div>
-  <div class="pagination" id="avance-pagination"></div>
 </div>
 
 <div id="toast"></div>
@@ -940,6 +1007,7 @@
   setupDrop("dz-sar", "file-sar", "fn-sar", "btn-sar");
   setupDrop("dz-rec", "file-rec", "fn-rec", "btn-rec");
   setupDrop("dz-pgm", "file-pgm", "fn-pgm", "btn-pgm");
+  setupDrop("dz-cti", "file-cti", "fn-cti", "btn-cti");
 
   // ── Import ──
   async function doImport(endpoint, fileId, cardId, progId, pbId, btnId) {
@@ -993,6 +1061,8 @@
     doImport("recepciones", "file-rec", "card-rec", "prog-rec", "pb-rec", "btn-rec"));
   document.getElementById("btn-pgm").addEventListener("click", () =>
     doImport("pgm-x-bom", "file-pgm", "card-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
+  document.getElementById("btn-cti").addEventListener("click", () =>
+    doImport("costo-insumos", "file-cti", "card-cti", "prog-cti", "pb-cti", "btn-cti"));
 
   // ── Stats ──
   async function loadStats() {
@@ -1012,6 +1082,7 @@
         "card-sar": data.stockArranque,
         "card-rec": data.recepciones,
         "card-pgm": data.pgmTotal,
+        "card-cti": data.costoInsumos,
       };
       Object.entries(cardCounts).forEach(([cardId, count]) => {
         const card = document.getElementById(cardId);
@@ -1186,16 +1257,25 @@
       { key: "bultos",            label: "Bultos" },
       { key: "cantidad_insumo",   label: "Cant. Insumo" },
     ],
+    "costo-insumos": [
+      { key: "id",             label: "ID" },
+      { key: "nro_corto",      label: "Nº Corto" },
+      { key: "segundo_nro",    label: "2º Nº Artículo" },
+      { key: "unidad_negocio", label: "Unidad Negocio" },
+      { key: "costo_uni",      label: "Costo Uni" },
+    ],
   };
   const TABLA_ENDPOINT = {
     articulos: "articulos", stock: "stock", pendiente: "pendiente",
     "stock-arranque": "stock-arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp-x-bom", "pmp-y-comex": "pmp-y-comex", pgm: "pgm", "pgm-x-bom": "pgm-x-bom",
+    "costo-insumos": "costo-insumos",
   };
   const TABLA_EXPORT = {
     articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo",
     "stock-arranque": "stock_arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp_x_bom", "pmp-y-comex": "pmp_y_comex", pgm: "pgm", "pgm-x-bom": "pgm_x_bom",
+    "costo-insumos": "costo_insumos",
   };
   const TABLA_EMPTY_MSG = {
     articulos: "Importá artículos primero",
@@ -1207,6 +1287,7 @@
     "pmp-y-comex": "Importá PGM x BOM primero",
     pgm: "Importá PGM x BOM primero",
     "pgm-x-bom": "Importá PGM x BOM primero",
+    "costo-insumos": "Importá Costo de Insumos primero",
   };
 
   async function loadTablaSql(offset = 0) {
@@ -1775,6 +1856,30 @@
     document.getElementById("avance-params-body").classList.toggle("collapsed");
   });
 
+  document.getElementById("avance-art-toggle").addEventListener("click", () => {
+    document.getElementById("avance-art-toggle").classList.toggle("collapsed");
+    document.getElementById("avance-art-body").classList.toggle("collapsed");
+  });
+
+  function renderIndicadorAvance(valor) {
+    const card = document.getElementById("indicador-avance-card");
+    const valueEl = document.getElementById("indicador-avance-value");
+    card.classList.remove("indicador-ok", "indicador-warn");
+    if (valor == null) {
+      valueEl.textContent = "—";
+      return;
+    }
+    card.classList.add(valor <= 1 ? "indicador-ok" : "indicador-warn");
+    valueEl.textContent = (valor * 100).toFixed(1) + "%";
+  }
+
+  async function loadIndicadorAvance() {
+    try {
+      const { indicadorAvance } = await fetch(`${API}/api/avance/indicador`).then(r => r.json());
+      renderIndicadorAvance(indicadorAvance);
+    } catch (e) { console.error(e); }
+  }
+
   function initAvance() {
     const state = getAvanceState();
     if (state) {
@@ -1785,6 +1890,7 @@
     ensureAvanceRubrosLoaded();
     loadAvanceTable(0);
     loadAvanceRubroTable(0);
+    loadIndicadorAvance();
   }
 
   document.getElementById("avance-btn-establecer").addEventListener("click", () => {
@@ -1897,6 +2003,7 @@
       await ensureAvanceRubrosLoaded();
       loadAvanceTable(0);
       loadAvanceRubroTable(0);
+      renderIndicadorAvance(data.indicadorAvance);
     } catch (e) {
       info.textContent = "";
       toast("❌ " + e.message, "err");
@@ -1942,6 +2049,9 @@
         ${thSort("Necesidad Inicial", "necesidad_inicial", avanceArtSort, "sortAvanceTable")}
         ${thSort("Necesidad Actual", "necesidad_actual", avanceArtSort, "sortAvanceTable")}
         ${thSort("Avance", "avance_pct", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Costo u", "costo_u", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Costo Recepciones", "costo_recepciones", avanceArtSort, "sortAvanceTable")}
+        ${thSort("Costo Necesidad Inicial", "costo_necesidad_inicial", avanceArtSort, "sortAvanceTable")}
       </tr></thead>
       <tbody>${data.rows.map(r => `<tr>
         <td>${r.nro_corto ?? ""}</td>
@@ -1953,6 +2063,9 @@
         <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
         <td>${r.necesidad_actual != null ? fmtNum(r.necesidad_actual) : ""}</td>
         <td>${renderAvanceBar(r.avance_pct ?? 0)}</td>
+        <td>${r.costo_u != null ? fmtNum(r.costo_u) : ""}</td>
+        <td>${r.costo_recepciones != null ? fmtNum(r.costo_recepciones) : ""}</td>
+        <td>${r.costo_necesidad_inicial != null ? fmtNum(r.costo_necesidad_inicial) : ""}</td>
       </tr>`).join("")}</tbody>
     </table>`;
     renderPagination("avance-pagination", data.total, offset, 50, "loadAvanceTable");
