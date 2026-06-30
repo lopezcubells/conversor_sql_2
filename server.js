@@ -42,6 +42,8 @@ async function initSql() {
   dbReady = true;
   console.log("sql.js listo");
   initSchema();
+  withDb(db => rebuildStockDetallado(db));
+  console.log("stock_detallado reconstruido");
 }
 
 function loadDb() {
@@ -102,8 +104,33 @@ function initSchema() {
       tabla TEXT, filename TEXT, filas INTEGER,
       fecha TEXT DEFAULT (datetime('now')), status TEXT
     );
+    CREATE TABLE IF NOT EXISTS stock_detallado (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nro_corto INTEGER,
+      unidad_negocio TEXT,
+      existencias REAL,
+      descripcion TEXT,
+      rubro TEXT
+    );
   `));
   console.log("Esquema creado");
+}
+
+// Reconstruye stock_detallado combinando stock_sucursales (LEFT) con articulos,
+// usando nro_corto como llave. Se ejecuta tras cada importación.
+function rebuildStockDetallado(db) {
+  db.run("DELETE FROM stock_detallado");
+  db.run(`
+    INSERT INTO stock_detallado (nro_corto, unidad_negocio, existencias, descripcion, rubro)
+    SELECT
+      s.nro_corto,
+      s.unidad_negocio,
+      s.existencias,
+      a.descripcion,
+      a.rubro
+    FROM stock_sucursales s
+    LEFT JOIN articulos a ON a.nro_corto = s.nro_corto
+  `);
 }
 
 // Middleware: verificar que la DB esté lista para rutas de API
@@ -163,6 +190,7 @@ app.post("/api/import/articulos", requireDb, upload.single("file"), (req, res) =
       stmt.free();
       db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
         ["articulos", req.file.originalname, rows.length, "ok"]);
+      rebuildStockDetallado(db);
     });
     res.json({ success: true, rows: rows.length, mode });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -181,6 +209,7 @@ app.post("/api/import/stock", requireDb, upload.single("file"), (req, res) => {
       stmt.free();
       db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
         ["stock_sucursales", req.file.originalname, rows.length, "ok"]);
+      rebuildStockDetallado(db);
     });
     res.json({ success: true, rows: rows.length, mode });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -233,9 +262,77 @@ app.get("/api/stock", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Stock Detallado: rubros disponibles, datos filtrados, export ──
+
+app.get("/api/stock-detallado/rubros", requireDb, (req, res) => {
+  try {
+    const rubros = readDb(db => query(db,
+      `SELECT DISTINCT rubro FROM stock_detallado
+       WHERE rubro IS NOT NULL AND rubro != '' AND existencias > 0
+       ORDER BY rubro`
+    )).map(r => r.rubro);
+    res.json({ rubros });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/stock-detallado", requireDb, (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    const rubro  = req.query.rubro || null;
+
+    const data = readDb(db => {
+      const whereClauses = ["existencias > 0"];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      const rows = query(db,
+        `SELECT nro_corto, unidad_negocio, existencias, descripcion, rubro
+         FROM stock_detallado ${where}
+         ORDER BY existencias DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+      const total = query(db,
+        `SELECT COUNT(*) as c FROM stock_detallado ${where}`, params
+      )[0]?.c ?? 0;
+
+      return { rows, total, limit, offset };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Datos agregados para el gráfico (por artículo, ya filtrados por rubro si aplica)
+app.get("/api/stock-detallado/chart", requireDb, (req, res) => {
+  try {
+    const rubro = req.query.rubro || null;
+    const limit = Math.min(parseInt(req.query.limit) || 30, 200);
+
+    const data = readDb(db => {
+      const whereClauses = ["existencias > 0"];
+      const params = [];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = "WHERE " + whereClauses.join(" AND ");
+
+      return query(db,
+        `SELECT nro_corto, descripcion, rubro, SUM(existencias) as existencias
+         FROM stock_detallado ${where}
+         GROUP BY nro_corto, descripcion, rubro
+         ORDER BY existencias DESC
+         LIMIT ?`,
+        [...params, limit]
+      );
+    });
+    res.json({ rows: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/export/:tabla", requireDb, (req, res) => {
   try {
-    const tabla = req.params.tabla === "articulos" ? "articulos" : "stock_sucursales";
+    const validTables = ["articulos", "stock_sucursales", "stock_detallado"];
+    const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
     if (!rows.length) return res.status(404).json({ error: "Sin datos" });
     const headers = Object.keys(rows[0]).join(",");
