@@ -10,13 +10,13 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "database.db");
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 // Healthcheck endpoint — responde inmediatamente, sin depender de la DB
 app.get("/health", (req, res) => res.status(200).send("ok"));
 
 app.use(express.static(path.join(__dirname, "public")));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 150 * 1024 * 1024 } });
 
 // ── Arrancar el servidor PRIMERO para pasar el healthcheck ──
 const server = app.listen(PORT, "0.0.0.0", () => console.log(`Servidor escuchando en 0.0.0.0:${PORT}`));
@@ -260,6 +260,38 @@ function initSchema() {
       numero_documento INTEGER,
       mes_facturacion_tetra TEXT,
       fecha_facturacion TEXT,
+      importado_en TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS stock_consolidado (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nro_corto INTEGER,
+      segundo_nro TEXT,
+      descripcion TEXT,
+      unidad_negocio TEXT,
+      existencias REAL,
+      ubicacion TEXT,
+      nro_lote_serie TEXT,
+      anio INTEGER,
+      semana_iso INTEGER,
+      archivo_origen TEXT,
+      importado_en TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS consumo_consolidado (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nro_corto INTEGER,
+      unidad_negocio TEXT,
+      tp_doc TEXT,
+      numero_documento INTEGER,
+      nro_art_ppal INTEGER,
+      tp_ord TEXT,
+      numero_orden INTEGER,
+      fecha_orden TEXT,
+      hora_dia INTEGER,
+      hora_orden TEXT,
+      cantidad_trns REAL,
+      id_usuario TEXT,
+      explicacion_transaccion TEXT,
+      archivo_origen TEXT,
       importado_en TEXT DEFAULT (datetime('now'))
     );
   `));
@@ -530,6 +562,61 @@ function parsePendientesTetra(buffer) {
         r["Número documento"] ?? null,
         mesFacturacion != null ? String(mesFacturacion) : null,
         mesFacturacionToDate(mesFacturacion),
+      ];
+    });
+}
+
+// Extrae año y semana ISO del nombre de archivo de Stock Semanal, ej:
+// "BD Stock x Sucursales 2026 SEM 20.xlsx" -> { anio: 2026, semana: 20 }
+function parseAnioSemanaDeNombreArchivo(filename) {
+  const m = filename.match(/(\d{4})\s*SEM\s*(\d{1,2})/i);
+  if (!m) return { anio: null, semana: null };
+  return { anio: parseInt(m[1], 10), semana: parseInt(m[2], 10) };
+}
+
+// Parsea un archivo de Stock Semanal (misma estructura que Stock x Sucursales / Stock
+// de Arranque). La columna "Número lote/ serie" puede no existir en algunos archivos,
+// por eso se accede de forma opcional sin asumir que la columna está presente.
+function parseStockSemanalArchivo(buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const sheetName =
+    wb.SheetNames.find(n => n === "Sheet1") ||
+    wb.SheetNames.find(n => n.toLowerCase().includes("stock")) ||
+    wb.SheetNames[0];
+  if (!sheetName) throw new Error(`Hoja no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null }).map(r => ([
+    r["Nº corto artículo [F4101]"] ?? r["Nº corto artículo"] ?? null,
+    String(r["2º nº artículo [F4101]"] ?? r["2º nº artículo"] ?? "").trim(),
+    String(r["Descripción [F4101]"] ?? r["Descripción"] ?? "").trim(),
+    String(r["Unidad negocio [F41021]"] ?? r["Unidad negocio"] ?? "").trim(),
+    r["Existencias físicas [F41021]"] ?? r["Existencias físicas"] ?? 0,
+    String(r["Ubicación [F41021]"] ?? r["Ubicación"] ?? "").trim(),
+    String(r["Número lote/ serie [F41021]"] ?? r["Número lote/ serie"] ?? "").trim(),
+  ]));
+}
+
+function parseConsumoImIfArchivo(buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const sheetName = wb.SheetNames.find(n => n === "Hoja1") || wb.SheetNames[0];
+  if (!sheetName) throw new Error(`Hoja no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
+    .filter(r => r["Nº corto artículo"] != null)
+    .map(r => {
+      const horaDia = r["Hora día"] ?? null;
+      return [
+        r["Nº corto artículo"] ?? null,
+        String(r["Unidad negocio"] ?? "").trim(),
+        String(r["Tp doc"] ?? "").trim(),
+        r["Número documento"] ?? null,
+        r["Nº art ppal"] ?? null,
+        String(r["Tp ord"] ?? "").trim(),
+        r["Número orden"] ?? null,
+        toDateString(r["Fecha orden"]),
+        horaDia,
+        horaDiaToTimeString(horaDia),
+        r["Cantidad trns"] ?? null,
+        String(r["ID usuario"] ?? "").trim(),
+        String(r["Explicación transacción"] ?? "").trim(),
       ];
     });
 }
@@ -842,6 +929,106 @@ app.post("/api/import/pendientes-tetra", requireDb, upload.single("file"), (req,
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+// ── Consolidación: Stock Semanal (carpeta con múltiples archivos "BD Stock x Sucursales YYYY SEM N.xlsx") ──
+app.post("/api/import/stock-consolidado", requireDb, upload.array("files", 500), (req, res) => {
+  try {
+    if (!req.files || !req.files.length) return res.status(400).json({ error: "No se recibieron archivos." });
+
+    const xlsxFiles = req.files.filter(f => /\.xlsx?$/i.test(f.originalname));
+    if (!xlsxFiles.length) return res.status(400).json({ error: "La carpeta no contiene archivos .xlsx." });
+
+    const mode = req.query.mode || "replace";
+    let totalFilas = 0;
+    let archivosOmitidos = [];
+    let archivosProcesados = 0;
+
+    withDb(db => {
+      if (mode === "replace") db.run("DELETE FROM stock_consolidado");
+      const stmt = db.prepare(`INSERT INTO stock_consolidado (
+        nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
+        ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+
+      for (const file of xlsxFiles) {
+        const { anio, semana } = parseAnioSemanaDeNombreArchivo(file.originalname);
+        if (anio == null || semana == null) {
+          archivosOmitidos.push(file.originalname);
+          continue;
+        }
+        let rows;
+        try {
+          rows = parseStockSemanalArchivo(file.buffer);
+        } catch (e) {
+          archivosOmitidos.push(file.originalname);
+          continue;
+        }
+        rows.forEach(r => stmt.run([...r, anio, semana, file.originalname]));
+        totalFilas += rows.length;
+        archivosProcesados++;
+      }
+      stmt.free();
+
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["stock_consolidado", `${archivosProcesados} archivos`, totalFilas, "ok"]);
+    });
+
+    res.json({
+      success: true,
+      rows: totalFilas,
+      archivosProcesados,
+      archivosOmitidos,
+      mode,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// ── Consolidación: Consumos IM/IF (carpeta con múltiples archivos "BD Consumos IM IF ...") ──
+// Consolidación de Consumos IM/IF: el parseo de los archivos Excel se hace en el
+// NAVEGADOR (con SheetJS vía CDN), no en el servidor. Los archivos de esta carpeta
+// pueden superar el millón de filas, y tanto leer el .xlsx como insertarlo a través
+// de sql.js (WASM, sin las optimizaciones de SQLite nativo) es demasiado lento de
+// forma síncrona en un solo request — fácilmente supera cualquier timeout razonable
+// de Railway. En cambio, el navegador parsea cada archivo y manda las filas ya
+// estructuradas en lotes (batches) de tamaño moderado, evitando journaling/export
+// completo de la base en cada lote.
+app.post("/api/import/consumo-consolidado/batch", requireDb, (req, res) => {
+  try {
+    const { rows, archivoOrigen, esPrimerLote } = req.body || {};
+    if (!Array.isArray(rows)) return res.status(400).json({ error: "Formato de lote inválido." });
+
+    withDb(db => {
+      if (esPrimerLote) db.run("DELETE FROM consumo_consolidado WHERE archivo_origen = ?", [archivoOrigen]);
+      const stmt = db.prepare(`INSERT INTO consumo_consolidado (
+        nro_corto, unidad_negocio, tp_doc, numero_documento, nro_art_ppal,
+        tp_ord, numero_orden, fecha_orden, hora_dia, hora_orden,
+        cantidad_trns, id_usuario, explicacion_transaccion, archivo_origen
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+      rows.forEach(r => stmt.run([...r, archivoOrigen]));
+      stmt.free();
+    });
+
+    res.json({ success: true, inserted: rows.length });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/import/consumo-consolidado/finalizar", requireDb, (req, res) => {
+  try {
+    const { archivos, totalFilas, mode } = req.body || {};
+    withDb(db => {
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["consumo_consolidado", `${(archivos || []).length} archivos`, totalFilas || 0, "ok"]);
+    });
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/api/consumo-consolidado", requireDb, (req, res) => {
+  try {
+    withDb(db => db.run("DELETE FROM consumo_consolidado"));
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/stats", requireDb, (req, res) => {
   try {
     const data = readDb(db => ({
@@ -858,6 +1045,8 @@ app.get("/api/stats", requireDb, (req, res) => {
       ),
       costoInsumos:   query(db, "SELECT COUNT(*) as c FROM costo_insumos")[0]?.c ?? 0,
       pendientesTetra: query(db, "SELECT COUNT(*) as c FROM pendientes_tetra")[0]?.c ?? 0,
+      stockConsolidado: query(db, "SELECT COUNT(*) as c FROM stock_consolidado")[0]?.c ?? 0,
+      consumoConsolidado: query(db, "SELECT COUNT(*) as c FROM consumo_consolidado")[0]?.c ?? 0,
       logs:      query(db, "SELECT * FROM import_log ORDER BY fecha DESC LIMIT 10"),
     }));
     res.json(data);
@@ -930,6 +1119,8 @@ const GENERIC_TABLES = {
   "pgm-x-bom":      { table: "pgm_x_bom",      searchCols: ["producto", "descripcion_comp"] },
   "costo-insumos":  { table: "costo_insumos",  searchCols: ["segundo_nro"] },
   "pendientes-tetra": { table: "pendientes_tetra", searchCols: ["observaciones", "mes_facturacion_tetra"] },
+  "stock-consolidado": { table: "stock_consolidado", searchCols: ["descripcion", "segundo_nro"] },
+  "consumo-consolidado": { table: "consumo_consolidado", searchCols: ["explicacion_transaccion", "id_usuario"] },
 };
 
 Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
@@ -1599,6 +1790,7 @@ app.post("/api/reset-all", requireDb, (req, res) => {
       "articulos", "stock_sucursales", "pendiente_completo", "stock_detallado",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
       "costo_insumos", "pendientes_tetra", "avance_x_articulo", "avance_x_rubro",
+      "stock_consolidado", "consumo_consolidado",
       "import_log",
     ];
     withDb(db => {
@@ -1614,6 +1806,7 @@ app.get("/api/export/:tabla", requireDb, (req, res) => {
       "articulos", "stock_sucursales", "stock_detallado", "pendiente_completo",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
       "avance_x_articulo", "avance_x_rubro", "costo_insumos", "pendientes_tetra",
+      "stock_consolidado", "consumo_consolidado",
     ];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
