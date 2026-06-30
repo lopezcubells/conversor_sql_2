@@ -365,6 +365,48 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+
+    /* ── Pendientes: tarjetas de resumen por bloque ── */
+    .pend-summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .pend-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--pend-color, var(--accent));
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .pend-card .pend-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: var(--pend-color, var(--accent));
+      line-height: 1.1;
+    }
+    .pend-card .pend-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    .pend-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-family: var(--mono);
+    }
+    .pend-badge.tp-E1 { background: rgba(79,142,247,.15); color: #7eb0fb; }
+    .pend-badge.tp-OC { background: rgba(52,201,126,.15); color: #5fe0a0; }
+    .pend-badge.tp-OX { background: rgba(247,135,79,.15); color: #ffa876; }
+    .pend-badge.tp-Q1 { background: rgba(167,139,250,.15); color: #c4b1fc; }
   </style>
 </head>
 <body>
@@ -383,6 +425,7 @@
   <div class="tab" data-tab="tablas-sql">Tablas SQL</div>
   <div class="tab" data-tab="stock-detallado">Stock detallado</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
+  <div class="tab" data-tab="pendientes">Pendientes</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -548,6 +591,63 @@
 
 </div>
 
+<!-- ═══ PENDIENTES ═══ -->
+<div class="pane" id="tab-pendientes">
+
+  <div class="card">
+    <div class="card-title">Filtro</div>
+    <div class="search-row" style="margin-bottom:0">
+      <select class="search-input" id="pend-rubro-filter" style="flex:0 0 320px">
+        <option value="">Todos los rubros</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Cuota por proveedor</h2>
+  </div>
+  <div class="card">
+    <div id="pend-legend-proveedor" style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)"></div>
+    <div style="position:relative;height:380px">
+      <canvas id="pend-chart-proveedor"></canvas>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Pendientes vencidos</h2>
+  </div>
+  <p style="color:var(--muted);font-size:13px;margin:-8px 0 14px">Órdenes E1, OC y OX cuya fecha solicitada ya pasó.</p>
+  <div class="pend-summary-row" id="pend-vencidos-summary"></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="pend-vencidos-table">
+      <div class="empty"><div class="big">🗄</div>Importá Pendiente Completo primero</div>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Pendientes en cadena de aprobación</h2>
+  </div>
+  <p style="color:var(--muted);font-size:13px;margin:-8px 0 14px">Órdenes OC, OX y E1 cuyo estado es distinto a 280-400. Demora en cadena = hoy − fecha de orden.</p>
+  <div class="pend-summary-row" id="pend-cadena-summary"></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="pend-cadena-table">
+      <div class="empty"><div class="big">🗄</div>Importá Pendiente Completo primero</div>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Pendientes en cotización</h2>
+  </div>
+  <p style="color:var(--muted);font-size:13px;margin:-8px 0 14px">Órdenes Q1. Demora en cotización = hoy − fecha de orden.</p>
+  <div class="pend-summary-row" id="pend-cotizacion-summary"></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="pend-cotizacion-table">
+      <div class="empty"><div class="big">🗄</div>Importá Pendiente Completo primero</div>
+    </div>
+  </div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -564,6 +664,7 @@
       if (tab.dataset.tab === "tablas-sql") loadTablaSql(0);
       if (tab.dataset.tab === "stock-detallado") initStockDetallado();
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
+      if (tab.dataset.tab === "pendientes") initPendientes();
     });
   });
 
@@ -1065,6 +1166,196 @@
           }
         }
       });
+    } catch (e) { console.error(e); }
+  }
+
+  // ── Pendientes: dashboard de gestión ──
+
+  const PEND_PALETTE = [
+    "#4f8ef7", "#34c97e", "#f7874f", "#a78bfa", "#22c7c7",
+    "#f7c948", "#ec6f9b", "#7dd87d", "#6b9bd1", "#c97ef7",
+  ];
+  const PEND_OTROS_COLOR = "#5f5e6b";
+
+  let pendChart = null;
+  let pendRubrosLoaded = false;
+
+  async function initPendientes() {
+    const sel = document.getElementById("pend-rubro-filter");
+    if (sel.options.length <= 1) {
+      try {
+        const { rubros } = await fetch(`${API}/api/pendientes/rubros`).then(r => r.json());
+        rubros.forEach(r => {
+          const opt = document.createElement("option");
+          opt.value = r; opt.textContent = r;
+          sel.appendChild(opt);
+        });
+      } catch (e) { console.error(e); }
+    }
+    refreshPendientes();
+  }
+
+  document.getElementById("pend-rubro-filter").addEventListener("change", refreshPendientes);
+
+  function refreshPendientes() {
+    loadPendCuotaProveedor();
+    loadPendVencidos();
+    loadPendCadenaAprobacion();
+    loadPendCotizacion();
+  }
+
+  function pendRubroParam() {
+    const rubro = document.getElementById("pend-rubro-filter").value;
+    return rubro ? "?rubro=" + encodeURIComponent(rubro) : "";
+  }
+
+  async function loadPendCuotaProveedor() {
+    try {
+      const { rows } = await fetch(`${API}/api/pendientes/cuota-proveedor${pendRubroParam()}`).then(r => r.json());
+      const top = rows.slice(0, 10);
+      const otros = rows.slice(10);
+
+      const labels = top.map(r => r.proveedor);
+      const data = top.map(r => r.cantidad);
+      const colors = top.map((_, i) => PEND_PALETTE[i % PEND_PALETTE.length]);
+
+      if (otros.length) {
+        labels.push(`Otros (${otros.length} proveedores)`);
+        data.push(otros.reduce((a, r) => a + r.cantidad, 0));
+        colors.push(PEND_OTROS_COLOR);
+      }
+
+      const total = data.reduce((a, v) => a + v, 0);
+      const legend = document.getElementById("pend-legend-proveedor");
+      legend.innerHTML = labels.map((l, i) => {
+        const pct = total > 0 ? ((data[i] / total) * 100).toFixed(1) : "0.0";
+        return `<span style="display:flex;align-items:center;gap:6px">
+          <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};display:inline-block"></span>
+          ${l} — ${pct}%
+        </span>`;
+      }).join("");
+
+      const ctx = document.getElementById("pend-chart-proveedor").getContext("2d");
+      if (pendChart) pendChart.destroy();
+      pendChart = new Chart(ctx, {
+        type: "pie",
+        data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: "#1a1d27", borderWidth: 2 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${fmtNum(ctx.raw)}`
+              }
+            }
+          }
+        }
+      });
+    } catch (e) { console.error(e); }
+  }
+
+  function pendBadge(tp) {
+    return `<span class="pend-badge tp-${tp}">${tp}</span>`;
+  }
+
+  async function loadPendVencidos() {
+    try {
+      const data = await fetch(`${API}/api/pendientes/vencidos${pendRubroParam()}`).then(r => r.json());
+      document.getElementById("pend-vencidos-summary").innerHTML = `
+        <div class="pend-card" style="--pend-color:#f76060">
+          <div class="pend-value">${fmtNum(data.totales.cantidad || 0)}</div>
+          <div class="pend-label">Órdenes vencidas</div>
+        </div>
+        <div class="pend-card" style="--pend-color:#f7874f">
+          <div class="pend-value">${fmtNum(data.totales.volumen || 0)}</div>
+          <div class="pend-label">Volumen pendiente</div>
+        </div>
+      `;
+      const wrap = document.getElementById("pend-vencidos-table");
+      if (!data.rows.length) {
+        wrap.innerHTML = `<div class="empty"><div class="big">✓</div>No hay pendientes vencidos</div>`;
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>Tipo</th><th>Nº Corto</th><th>Descripción</th><th>Proveedor</th><th>Cant. Pendiente</th><th>Fecha Solic</th>
+        </tr></thead>
+        <tbody>${data.rows.map(r => `<tr>
+          <td>${pendBadge(r.tp_ord)}</td>
+          <td>${r.nro_corto ?? ""}</td>
+          <td>${r.descripcion ?? ""}</td>
+          <td>${r.proveedor ?? ""}</td>
+          <td>${fmtNum(r.cantidad_pendiente ?? 0)}</td>
+          <td>${r.fecha_solic ?? ""}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    } catch (e) { console.error(e); }
+  }
+
+  async function loadPendCadenaAprobacion() {
+    try {
+      const data = await fetch(`${API}/api/pendientes/cadena-aprobacion${pendRubroParam()}`).then(r => r.json());
+      document.getElementById("pend-cadena-summary").innerHTML = `
+        <div class="pend-card" style="--pend-color:#f7c948">
+          <div class="pend-value">${fmtNum(data.totales.cantidad || 0)}</div>
+          <div class="pend-label">Órdenes en cadena</div>
+        </div>
+        <div class="pend-card" style="--pend-color:#f7874f">
+          <div class="pend-value">${fmtNum(data.totales.volumen || 0)}</div>
+          <div class="pend-label">Volumen pendiente</div>
+        </div>
+      `;
+      const wrap = document.getElementById("pend-cadena-table");
+      if (!data.rows.length) {
+        wrap.innerHTML = `<div class="empty"><div class="big">✓</div>No hay pendientes en cadena de aprobación</div>`;
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>Nº Corto</th><th>Descripción</th><th>Cant. Pendiente</th><th>Estado</th><th>Demora en cadena (días)</th>
+        </tr></thead>
+        <tbody>${data.rows.map(r => `<tr>
+          <td>${r.nro_corto ?? ""}</td>
+          <td>${r.descripcion ?? ""}</td>
+          <td>${fmtNum(r.cantidad_pendiente ?? 0)}</td>
+          <td>${r.ult_est}-${r.est_sig}</td>
+          <td>${fmtNum(r.demora_cadena ?? 0)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    } catch (e) { console.error(e); }
+  }
+
+  async function loadPendCotizacion() {
+    try {
+      const data = await fetch(`${API}/api/pendientes/cotizacion${pendRubroParam()}`).then(r => r.json());
+      document.getElementById("pend-cotizacion-summary").innerHTML = `
+        <div class="pend-card" style="--pend-color:#a78bfa">
+          <div class="pend-value">${fmtNum(data.totales.cantidad || 0)}</div>
+          <div class="pend-label">Órdenes en cotización</div>
+        </div>
+        <div class="pend-card" style="--pend-color:#f7874f">
+          <div class="pend-value">${fmtNum(data.totales.volumen || 0)}</div>
+          <div class="pend-label">Volumen pendiente</div>
+        </div>
+      `;
+      const wrap = document.getElementById("pend-cotizacion-table");
+      if (!data.rows.length) {
+        wrap.innerHTML = `<div class="empty"><div class="big">✓</div>No hay pendientes en cotización</div>`;
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>Nº Corto</th><th>Descripción</th><th>Cant. Pendiente</th><th>Demora en cotización (días)</th>
+        </tr></thead>
+        <tbody>${data.rows.map(r => `<tr>
+          <td>${r.nro_corto ?? ""}</td>
+          <td>${r.descripcion ?? ""}</td>
+          <td>${fmtNum(r.cantidad_pendiente ?? 0)}</td>
+          <td>${fmtNum(r.demora_cotizacion ?? 0)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
     } catch (e) { console.error(e); }
   }
 
