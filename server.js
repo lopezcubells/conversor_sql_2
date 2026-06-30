@@ -172,6 +172,8 @@ function initSchema() {
       iniciador_transaccion TEXT,
       est_sig INTEGER,
       ult_est INTEGER,
+      hora_dia INTEGER,
+      hora_recepcion TEXT,
       archivo_origen TEXT,
       importado_en TEXT DEFAULT (datetime('now'))
     );
@@ -278,15 +280,16 @@ function parseRecepciones(buffer) {
   if (!sheetName) throw new Error(`Hoja no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
   return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null }).map(r => {
     const fechaRecepcion = toDateString(r["Fecha recepción"]);
+    const horaDia = r["Hora día"] ?? null;
     return [
       String(r["Tp ord"] ?? "").trim(),
       r["Número orden"] ?? null,
       r["Nº corto artículo"] ?? null,
       String(r["2º nº artículo"] ?? "").trim(),
       String(r["Observaciones "] ?? r["Observaciones"] ?? "").trim(),
-      r["Cantidad orden"] ?? null,
-      r["Cantidad recibida"] ?? null,
-      r["Cantidad pendiente"] ?? null,
+      parseDecimalComma(r["Cantidad orden"]),
+      parseDecimalComma(r["Cantidad recibida"]),
+      parseDecimalComma(r["Cantidad pendiente"]),
       toDateString(r["Fecha orden"]),
       toDateString(r["Fecha solic"]),
       toDateString(r["Fecha actz"]),
@@ -297,10 +300,12 @@ function parseRecepciones(buffer) {
       String(r["Tp ctj"] ?? "").trim(),
       String(r["Tp doc"] ?? "").trim(),
       r["Número documento"] ?? null,
-      r["Costo unitario"] ?? null,
+      parseDecimalComma(r["Costo unitario"]),
       String(r["Iniciador transacción"] ?? "").trim(),
       r["Est sig"] ?? null,
       r["Últ est"] ?? null,
+      horaDia,
+      horaDiaToTimeString(horaDia),
     ];
   });
 }
@@ -415,6 +420,34 @@ function getIsoWeek(dateInput) {
   const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
   firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
   return 1 + Math.round((utc - firstThursday) / (7 * 86400000));
+}
+
+// Parsea un valor numérico que puede venir como number nativo de Excel,
+// o como texto con formato regional es-AR ("1.234,56" = mil doscientos
+// treinta y cuatro coma cincuenta y seis), donde el punto es separador de
+// miles y la coma es el separador decimal. Nunca interpreta la coma como
+// separador de miles.
+function parseDecimalComma(v) {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return v;
+  let s = String(v).trim();
+  if (s === "") return null;
+  // Si tiene coma, se asume formato es-AR: quitar puntos de miles, coma -> punto decimal
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  const n = Number(s);
+  return isNaN(n) ? null : n;
+}
+
+// Convierte el campo "Hora día" (entero tipo HMMSS o HHMMSS, ej: 92158 o 140001)
+// al formato de hora "HH:MM:SS" (ej: "09:21:58", "14:00:01").
+function horaDiaToTimeString(v) {
+  if (v == null || v === "") return null;
+  const n = Math.trunc(Number(v));
+  if (isNaN(n) || n < 0) return null;
+  const s = String(n).padStart(6, "0");
+  return `${s.slice(0, 2)}:${s.slice(2, 4)}:${s.slice(4, 6)}`;
 }
 
 function parsePendienteCompleto(buffer) {
@@ -552,8 +585,9 @@ app.post("/api/import/recepciones", requireDb, upload.single("file"), (req, res)
         cantidad_orden, cantidad_recibida, cantidad_pendiente,
         fecha_orden, fecha_solic, fecha_actz, fecha_recepcion, semana_iso,
         unidad_negocio, nro_drc, tp_ctj, tp_doc, numero_documento,
-        costo_unitario, iniciador_transaccion, est_sig, ult_est, archivo_origen
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        costo_unitario, iniciador_transaccion, est_sig, ult_est,
+        hora_dia, hora_recepcion, archivo_origen
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       rows.forEach(r => stmt.run([...r, req.file.originalname]));
       stmt.free();
       db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
