@@ -286,6 +286,14 @@
       opacity: 0;
       margin-top: 0;
     }
+    /* Variante sin límite de alto, para contenido grande como tablas de muchas filas.
+       Usa display:none en vez de max-height animado, que recortaría el contenido. */
+    .collapsible-body-tall {
+      margin-top: 14px;
+    }
+    .collapsible-body-tall.collapsed {
+      display: none;
+    }
 
     /* ── Indicador de avance: tarjeta destacada verde/naranja ── */
     .indicador-card {
@@ -612,6 +620,9 @@
 
 <!-- ═══ IMPORT ARTÍCULOS ═══ -->
 <div class="pane" id="tab-importar">
+  <div class="btn-row" style="margin-bottom:18px">
+    <button class="btn btn-outline" id="btn-quitar-todo" style="border-color:rgba(247,96,96,.4);color:#f76060">🗑 Quitar todo</button>
+  </div>
   <div class="import-grid">
 
     <div class="card import-card" id="card-art" title="Se lee la hoja BD ART x RUBRO del archivo.">
@@ -948,7 +959,7 @@
       <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:0">Avance x Artículo</h2>
       <span class="chevron">▼</span>
     </div>
-    <div class="collapsible-body collapsed" id="avance-art-body">
+    <div class="collapsible-body collapsible-body-tall collapsed" id="avance-art-body">
       <div class="search-row" style="margin-top:14px">
         <select class="search-input" id="avance-art-rubro-filter" style="flex:0 0 280px">
           <option value="">Todos los rubros</option>
@@ -971,8 +982,12 @@
 <div class="pane" id="tab-recepciones-mes">
   <div class="card">
     <div class="card-title">Filtro</div>
-    <div class="search-row" style="margin-bottom:0">
+    <div class="search-row" style="align-items:flex-end">
       <select class="search-input" id="rec-mes-rubro-filter" style="flex:0 0 280px"></select>
+      <div class="indicador-card" style="flex:0 0 240px;margin-bottom:0;padding:12px 18px">
+        <div class="indicador-label">Recibido en <span id="rec-anio-actual-label">—</span></div>
+        <div class="indicador-value" style="font-size:24px" id="rec-anio-actual-value">—</div>
+      </div>
     </div>
   </div>
 
@@ -993,6 +1008,7 @@
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script>
   const API = "";  // same origin
 
@@ -1107,6 +1123,42 @@
     doImport("costo-insumos", "file-cti", "card-cti", "prog-cti", "pb-cti", "btn-cti"));
   document.getElementById("btn-pdtt").addEventListener("click", () =>
     doImport("pendientes-tetra", "file-pdtt", "card-pdtt", "prog-pdtt", "pb-pdtt", "btn-pdtt"));
+
+  // ── Quitar todo: borra todas las bases de datos y resetea los recuadros de importación ──
+  const IMPORT_MODULES = ["art", "stk", "pdt", "sar", "rec", "pgm", "cti", "pdtt"];
+
+  document.getElementById("btn-quitar-todo").addEventListener("click", async () => {
+    const confirmado = confirm(
+      "¿Seguro que querés quitar todos los datos importados?\n\nEsta acción borra todas las bases de datos cargadas y no se puede deshacer."
+    );
+    if (!confirmado) return;
+
+    const btn = document.getElementById("btn-quitar-todo");
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/reset-all`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      IMPORT_MODULES.forEach(mod => {
+        const fileInput = document.getElementById(`file-${mod}`);
+        const fn = document.getElementById(`fn-${mod}`);
+        const card = document.getElementById(`card-${mod}`);
+        const importBtn = document.getElementById(`btn-${mod}`);
+        if (fileInput) fileInput.value = "";
+        if (fn) fn.textContent = "";
+        if (card) card.classList.remove("done");
+        if (importBtn) importBtn.disabled = true;
+      });
+
+      toast("🗑 Se quitaron todos los datos importados", "ok");
+      loadStats();
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ── Stats ──
   async function loadStats() {
@@ -2214,9 +2266,18 @@
       } catch (e) { console.error(e); }
     }
     loadRecepcionesMes();
+    loadRecepcionesAnioActual();
   }
 
   document.getElementById("rec-mes-rubro-filter").addEventListener("change", loadRecepcionesMes);
+
+  async function loadRecepcionesAnioActual() {
+    try {
+      const { anio, total } = await fetch(`${API}/api/recepciones/total-anio-actual`).then(r => r.json());
+      document.getElementById("rec-anio-actual-label").textContent = anio;
+      document.getElementById("rec-anio-actual-value").textContent = fmtNum(total);
+    } catch (e) { console.error(e); }
+  }
 
   async function loadRecepcionesMes() {
     const rubro = document.getElementById("rec-mes-rubro-filter").value;
@@ -2237,7 +2298,9 @@
           datasets: [{
             label: "Cantidad recibida",
             data,
-            backgroundColor: "rgba(79,142,247,.7)",
+            backgroundColor: "rgba(167,139,250,.75)",
+            borderColor: "#a78bfa",
+            borderWidth: 1,
             borderRadius: 4,
             borderSkipped: false,
           }]
@@ -2245,15 +2308,25 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { top: 28 } },
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (ctx) => ` ${fmtNum(ctx.raw)}` } }
+            tooltip: { callbacks: { label: (ctx) => ` ${fmtNum(ctx.raw)}` } },
+            datalabels: {
+              anchor: "end",
+              align: "end",
+              offset: 4,
+              color: "#e2e4ef",
+              font: { weight: "bold", size: 12 },
+              formatter: (value) => fmtNum(value),
+            }
           },
           scales: {
             x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
             y: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
           }
-        }
+        },
+        plugins: [ChartDataLabels]
       });
 
       const wrap = document.getElementById("rec-mes-table-wrap");
