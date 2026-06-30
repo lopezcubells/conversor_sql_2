@@ -11,6 +11,9 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, "database.db");
 
 app.use(cors());
 app.use(express.json());
+// Healthcheck endpoint — responde inmediatamente, sin depender de la DB
+app.get("/health", (req, res) => res.status(200).send("ok"));
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
