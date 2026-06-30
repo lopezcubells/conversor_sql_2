@@ -112,6 +112,34 @@ function initSchema() {
       descripcion TEXT,
       rubro TEXT
     );
+    CREATE TABLE IF NOT EXISTS pendiente_completo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      numero_orden INTEGER,
+      tp_ord TEXT,
+      nro_orden_original INTEGER,
+      tipo_orden_original TEXT,
+      unidad_negocio TEXT,
+      nro_corto INTEGER,
+      segundo_nro TEXT,
+      descripcion TEXT,
+      rubro TEXT,
+      cantidad_orden REAL,
+      cantidad_pendiente REAL,
+      ult_est INTEGER,
+      est_sig INTEGER,
+      iniciador_transaccion TEXT,
+      fecha_orden TEXT,
+      fecha_solic TEXT,
+      nro_drc INTEGER,
+      costo_unitario REAL,
+      orden_id TEXT,
+      significado TEXT,
+      es_pendiente TEXT,
+      primeros_caracteres TEXT,
+      demora_hoy INTEGER,
+      proveedor TEXT,
+      importado_en TEXT DEFAULT (datetime('now'))
+    );
   `));
   console.log("Esquema creado");
 }
@@ -173,6 +201,49 @@ function parseStock(buffer) {
   ]));
 }
 
+// Convierte fechas de Excel (Date object tras cellDates:true, o string) a "YYYY-MM-DD" / null
+function toDateString(v) {
+  if (v == null || v === "") return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v);
+}
+
+function parsePendienteCompleto(buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const sheetName =
+    wb.SheetNames.find(n => n === "Pendiente COMPLETO") ||
+    wb.SheetNames.find(n => n.toLowerCase().includes("pendiente"));
+  if (!sheetName) throw new Error(`Hoja no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
+    .filter(r => r["Número orden"] != null) // descarta filas vacías de cola
+    .map(r => ([
+      r["Número orden"] ?? null,
+      String(r["Tp ord"] ?? "").trim(),
+      r["Nº orden original"] ?? null,
+      String(r["Tipo orden original"] ?? "").trim(),
+      String(r["Unidad negocio"] ?? "").trim(),
+      r["Nº corto artículo"] ?? null,
+      String(r["2º nº artículo"] ?? "").trim(),
+      String(r["Descripción"] ?? "").trim(),
+      r["Rubro"] ?? null,
+      r["Cantidad orden"] ?? null,
+      r["Cantidad pendiente"] ?? null,
+      r["Últ est"] ?? null,
+      r["Est sig"] ?? null,
+      String(r["Iniciador transacción"] ?? "").trim(),
+      toDateString(r["Fecha orden"]),
+      toDateString(r["Fecha solic"]),
+      r["Nº drc"] ?? null,
+      r["Costo unitario"] ?? null,
+      String(r["ID"] ?? "").trim(),
+      String(r["Significado"] ?? "").trim(),
+      String(r["¿Es pendiente?"] ?? "").trim(),
+      String(r["Primeros caracteres"] ?? "").trim(),
+      r["Demora Hoy"] ?? null,
+      String(r["Proveedor"] ?? "").trim(),
+    ]));
+}
+
 // ── Health / status ──
 app.get("/api/status", (req, res) => res.json({ ready: dbReady }));
 
@@ -215,11 +286,36 @@ app.post("/api/import/stock", requireDb, upload.single("file"), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+app.post("/api/import/pendiente", requireDb, upload.single("file"), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
+    const rows = parsePendienteCompleto(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ error: "El archivo no contiene datos." });
+    const mode = req.query.mode || "replace";
+    withDb(db => {
+      if (mode === "replace") db.run("DELETE FROM pendiente_completo");
+      const stmt = db.prepare(`INSERT INTO pendiente_completo (
+        numero_orden, tp_ord, nro_orden_original, tipo_orden_original, unidad_negocio,
+        nro_corto, segundo_nro, descripcion, rubro, cantidad_orden, cantidad_pendiente,
+        ult_est, est_sig, iniciador_transaccion, fecha_orden, fecha_solic, nro_drc,
+        costo_unitario, orden_id, significado, es_pendiente, primeros_caracteres,
+        demora_hoy, proveedor
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+      rows.forEach(r => stmt.run(r));
+      stmt.free();
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["pendiente_completo", req.file.originalname, rows.length, "ok"]);
+    });
+    res.json({ success: true, rows: rows.length, mode });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/stats", requireDb, (req, res) => {
   try {
     const data = readDb(db => ({
       articulos: query(db, "SELECT COUNT(*) as c FROM articulos")[0]?.c ?? 0,
       stock:     query(db, "SELECT COUNT(*) as c FROM stock_sucursales")[0]?.c ?? 0,
+      pendiente: query(db, "SELECT COUNT(*) as c FROM pendiente_completo")[0]?.c ?? 0,
       logs:      query(db, "SELECT * FROM import_log ORDER BY fecha DESC LIMIT 10"),
     }));
     res.json(data);
@@ -256,6 +352,24 @@ app.get("/api/stock", requireDb, (req, res) => {
       const total = q
         ? query(db, "SELECT COUNT(*) as c FROM stock_sucursales WHERE descripcion LIKE ? OR segundo_nro LIKE ?", [q,q])[0]?.c ?? 0
         : query(db, "SELECT COUNT(*) as c FROM stock_sucursales")[0]?.c ?? 0;
+      return { rows, total, limit, offset };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/pendiente", requireDb, (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 50, 500);
+    const offset = parseInt(req.query.offset) || 0;
+    const q      = req.query.q ? `%${req.query.q}%` : null;
+    const data   = readDb(db => {
+      const rows  = q
+        ? query(db, "SELECT * FROM pendiente_completo WHERE descripcion LIKE ? OR segundo_nro LIKE ? OR proveedor LIKE ? LIMIT ? OFFSET ?", [q,q,q,limit,offset])
+        : query(db, "SELECT * FROM pendiente_completo LIMIT ? OFFSET ?", [limit,offset]);
+      const total = q
+        ? query(db, "SELECT COUNT(*) as c FROM pendiente_completo WHERE descripcion LIKE ? OR segundo_nro LIKE ? OR proveedor LIKE ?", [q,q,q])[0]?.c ?? 0
+        : query(db, "SELECT COUNT(*) as c FROM pendiente_completo")[0]?.c ?? 0;
       return { rows, total, limit, offset };
     });
     res.json(data);
@@ -431,7 +545,7 @@ app.get("/api/rubros-detallado/top-articulos", requireDb, (req, res) => {
 
 app.get("/api/export/:tabla", requireDb, (req, res) => {
   try {
-    const validTables = ["articulos", "stock_sucursales", "stock_detallado"];
+    const validTables = ["articulos", "stock_sucursales", "stock_detallado", "pendiente_completo"];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
     if (!rows.length) return res.status(404).json({ error: "Sin datos" });
