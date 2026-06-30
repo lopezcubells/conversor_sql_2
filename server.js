@@ -248,6 +248,20 @@ function initSchema() {
       costo_uni REAL,
       importado_en TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS pendientes_tetra (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tp_ord TEXT,
+      numero_orden INTEGER,
+      nro_corto INTEGER,
+      observaciones TEXT,
+      cantidad_recibida REAL,
+      fecha_recepcion TEXT,
+      tp_doc TEXT,
+      numero_documento INTEGER,
+      mes_facturacion_tetra TEXT,
+      fecha_facturacion TEXT,
+      importado_en TEXT DEFAULT (datetime('now'))
+    );
   `));
   console.log("Esquema creado");
 }
@@ -470,6 +484,54 @@ function parseCostoInsumos(buffer) {
       String(r["Unidad negocio"] ?? "").trim(),
       r["Costo uni"] ?? null,
     ]));
+}
+
+// Convierte "MES FACTURACION TETRA" (ej: "2026 - 2", "2025 - 1 (reingresado)",
+// "revertido por precio 2024 - 8") al primer día del mes en formato "YYYY-MM-DD".
+// Usa una expresión regular para extraer año y mes sin importar texto adicional
+// alrededor, ya que la columna trae variantes con sufijos/prefijos de estado.
+function mesFacturacionToDate(v) {
+  if (v == null) return null;
+  const s = String(v);
+  const m = s.match(/(\d{4})\s*-\s*(\d{1,2})/);
+  if (!m) return null;
+  const anio = m[1];
+  const mes = m[2].padStart(2, "0");
+  return `${anio}-${mes}-01`;
+}
+
+function parsePendientesTetra(buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const sheetName = wb.SheetNames.find(n => n === "OV x Mes Facturacion Tetra");
+  if (!sheetName) throw new Error(`Hoja "OV x Mes Facturacion Tetra" no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
+
+  // SheetJS a veces preserva espacios en blanco alrededor de los encabezados de columna
+  // (ej: " Cantidad recibida " en vez de "Cantidad recibida"). Normalizamos las claves
+  // de cada fila (trim) antes de buscar por nombre, para no depender de coincidencia exacta.
+  function normalizeRow(r) {
+    const out = {};
+    for (const k in r) out[k.trim()] = r[k];
+    return out;
+  }
+
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
+    .map(normalizeRow)
+    .filter(r => r["Número orden"] != null)
+    .map(r => {
+      const mesFacturacion = r["MES FACTURACION TETRA"] ?? null;
+      return [
+        String(r["Tp ord"] ?? "").trim(),
+        r["Número orden"] ?? null,
+        r["Nº corto artículo"] ?? null,
+        String(r["Observaciones"] ?? "").trim(),
+        r["Cantidad recibida"] ?? null,
+        toDateString(r["Fecha recepción"]),
+        String(r["Tp doc"] ?? "").trim(),
+        r["Número documento"] ?? null,
+        mesFacturacion != null ? String(mesFacturacion) : null,
+        mesFacturacionToDate(mesFacturacion),
+      ];
+    });
 }
 
 // Convierte fechas de Excel (Date object tras cellDates:true, o string) a "YYYY-MM-DD" / null
@@ -759,6 +821,27 @@ app.post("/api/import/costo-insumos", requireDb, upload.single("file"), (req, re
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+app.post("/api/import/pendientes-tetra", requireDb, upload.single("file"), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
+    const rows = parsePendientesTetra(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ error: "El archivo no contiene datos." });
+    const mode = req.query.mode || "replace";
+    withDb(db => {
+      if (mode === "replace") db.run("DELETE FROM pendientes_tetra");
+      const stmt = db.prepare(`INSERT INTO pendientes_tetra (
+        tp_ord, numero_orden, nro_corto, observaciones, cantidad_recibida,
+        fecha_recepcion, tp_doc, numero_documento, mes_facturacion_tetra, fecha_facturacion
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+      rows.forEach(r => stmt.run(r));
+      stmt.free();
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["pendientes_tetra", req.file.originalname, rows.length, "ok"]);
+    });
+    res.json({ success: true, rows: rows.length, mode });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/stats", requireDb, (req, res) => {
   try {
     const data = readDb(db => ({
@@ -774,6 +857,7 @@ app.get("/api/stats", requireDb, (req, res) => {
         (query(db, "SELECT COUNT(*) as c FROM pgm_x_bom")[0]?.c ?? 0)
       ),
       costoInsumos:   query(db, "SELECT COUNT(*) as c FROM costo_insumos")[0]?.c ?? 0,
+      pendientesTetra: query(db, "SELECT COUNT(*) as c FROM pendientes_tetra")[0]?.c ?? 0,
       logs:      query(db, "SELECT * FROM import_log ORDER BY fecha DESC LIMIT 10"),
     }));
     res.json(data);
@@ -845,6 +929,7 @@ const GENERIC_TABLES = {
   "pgm":            { table: "pgm",            searchCols: ["producto"] },
   "pgm-x-bom":      { table: "pgm_x_bom",      searchCols: ["producto", "descripcion_comp"] },
   "costo-insumos":  { table: "costo_insumos",  searchCols: ["segundo_nro"] },
+  "pendientes-tetra": { table: "pendientes_tetra", searchCols: ["observaciones", "mes_facturacion_tetra"] },
 };
 
 Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
@@ -885,19 +970,39 @@ app.get("/api/recepciones/por-mes", requireDb, (req, res) => {
     const rubro = req.query.rubro;
     if (!rubro) return res.status(400).json({ error: "Debés indicar un rubro." });
 
-    const rows = readDb(db => query(db, `
-      SELECT
-        substr(fecha_recepcion, 1, 7) as mes,
-        SUM(cantidad_recibida) as cantidad_recibida
-      FROM recepciones
-      WHERE rubro = ?
-        AND fecha_recepcion IS NOT NULL
-        AND cantidad_recibida IS NOT NULL
-      GROUP BY mes
-      ORDER BY mes ASC
-    `, [rubro]));
+    const data = readDb(db => {
+      const rows = query(db, `
+        SELECT
+          substr(fecha_recepcion, 1, 7) as mes,
+          SUM(cantidad_recibida) as cantidad_recibida
+        FROM recepciones
+        WHERE rubro = ?
+          AND fecha_recepcion IS NOT NULL
+          AND cantidad_recibida IS NOT NULL
+        GROUP BY mes
+        ORDER BY mes ASC
+      `, [rubro]);
 
-    res.json({ rows });
+      // Solo para TETRA Envases: cruzar con Pendientes Tetra por mes (MES de recepciones
+      // vs Fecha Facturación truncada a año-mes de pendientes_tetra).
+      if (rubro === "TETRA Envases") {
+        const facturadoRows = query(db, `
+          SELECT
+            substr(fecha_facturacion, 1, 7) as mes,
+            SUM(cantidad_recibida) as cantidad_facturada
+          FROM pendientes_tetra
+          WHERE fecha_facturacion IS NOT NULL
+            AND cantidad_recibida IS NOT NULL
+          GROUP BY mes
+        `);
+        const facturadoMap = new Map(facturadoRows.map(r => [r.mes, r.cantidad_facturada]));
+        rows.forEach(r => { r.cantidad_facturada_tetrapak = facturadoMap.get(r.mes) ?? 0; });
+      }
+
+      return rows;
+    });
+
+    res.json({ rows: data });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1473,7 +1578,7 @@ app.get("/api/export/:tabla", requireDb, (req, res) => {
     const validTables = [
       "articulos", "stock_sucursales", "stock_detallado", "pendiente_completo",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
-      "avance_x_articulo", "avance_x_rubro", "costo_insumos",
+      "avance_x_articulo", "avance_x_rubro", "costo_insumos", "pendientes_tetra",
     ];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
