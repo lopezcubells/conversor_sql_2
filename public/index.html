@@ -628,6 +628,10 @@
   <div class="btn-row" style="margin-bottom:18px">
     <button class="btn btn-outline" id="btn-quitar-todo" style="border-color:rgba(247,96,96,.4);color:#f76060">🗑 Quitar todo</button>
   </div>
+
+  <div class="section-heading" style="margin-top:0">
+    <h2>Importación de archivos</h2>
+  </div>
   <div class="import-grid">
 
     <div class="card import-card" id="card-art" title="Se lee la hoja BD ART x RUBRO del archivo.">
@@ -751,6 +755,51 @@
     </div>
 
   </div>
+
+  <div class="section-heading">
+    <h2>Consolidación de archivos</h2>
+  </div>
+  <div class="import-grid">
+
+    <div class="card import-card" id="card-stkc" title="Seleccioná la carpeta 'Registro de stock semanal'. Se procesan todos los archivos BD Stock x Sucursales YYYY SEM N.xlsx que contenga, extrayendo año y semana ISO del nombre de cada uno.">
+      <div class="card-title">Stock Semanal (consolidado)</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px">
+        Seleccioná la carpeta completa "Registro de stock semanal". Se procesan todos los archivos que contiene.
+      </p>
+      <div class="drop-zone" id="dz-stkc">
+        <input type="file" id="folder-stkc" webkitdirectory directory multiple />
+        <div class="icon">📁</div>
+        <p>Hacé clic para elegir la carpeta</p>
+        <div class="filename" id="fn-stkc"></div>
+      </div>
+      <div class="progress" id="prog-stkc"><div class="progress-bar" id="pb-stkc"></div></div>
+      <div id="info-stkc" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-stkc" disabled style="background:#e5484d;color:#fff">Importar consolidado</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
+    <div class="card import-card" id="card-cnsc" title="Seleccioná la carpeta '5 - INSUMOS'. Se procesan todos los archivos BD Consumos IM IF ... que contenga. El parseo se hace en el navegador por el alto volumen de filas.">
+      <div class="card-title">Consumos IM/IF (consolidado)</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px">
+        Seleccioná la carpeta completa "5 - INSUMOS". Se procesan todos los archivos que contiene. Puede tardar varios minutos por el volumen de datos.
+      </p>
+      <div class="drop-zone" id="dz-cnsc">
+        <input type="file" id="folder-cnsc" webkitdirectory directory multiple />
+        <div class="icon">📁</div>
+        <p>Hacé clic para elegir la carpeta</p>
+        <div class="filename" id="fn-cnsc"></div>
+      </div>
+      <div class="progress" id="prog-cnsc"><div class="progress-bar" id="pb-cnsc"></div></div>
+      <div id="info-cnsc" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-cnsc" disabled style="background:#e5484d;color:#fff">Importar consolidado</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
+  </div>
 </div>
 
 <!-- ═══ TABLAS SQL ═══ -->
@@ -768,6 +817,8 @@
       <option value="pgm-x-bom">PGM x BOM</option>
       <option value="costo-insumos">Costo de Insumos</option>
       <option value="pendientes-tetra">Pendientes Tetra</option>
+      <option value="stock-consolidado">Stock Consolidado</option>
+      <option value="consumo-consolidado">Consumo Consolidado</option>
     </select>
     <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
     <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
@@ -1014,6 +1065,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const API = "";  // same origin
 
@@ -1156,11 +1208,224 @@
         if (importBtn) importBtn.disabled = true;
       });
 
+      ["stkc", "cnsc"].forEach(mod => {
+        const folderInput = document.getElementById(`folder-${mod}`);
+        const fn = document.getElementById(`fn-${mod}`);
+        const card = document.getElementById(`card-${mod}`);
+        const importBtn = document.getElementById(`btn-${mod}`);
+        const info = document.getElementById(`info-${mod}`);
+        if (folderInput) folderInput.value = "";
+        if (fn) fn.textContent = "";
+        if (card) card.classList.remove("done");
+        if (importBtn) importBtn.disabled = true;
+        if (info) info.textContent = "";
+      });
+
       toast("🗑 Se quitaron todos los datos importados", "ok");
       loadStats();
     } catch (e) {
       toast("❌ " + e.message, "err");
     } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── Consolidación: Stock Semanal (carpeta -> múltiples archivos -> backend) ──
+
+  const folderStkcInput = document.getElementById("folder-stkc");
+  folderStkcInput.addEventListener("change", () => {
+    const files = Array.from(folderStkcInput.files).filter(f => /\.xlsx?$/i.test(f.name));
+    const fn = document.getElementById("fn-stkc");
+    const btn = document.getElementById("btn-stkc");
+    if (files.length) {
+      fn.textContent = `${files.length} archivo(s) .xlsx encontrados`;
+      btn.disabled = false;
+    } else {
+      fn.textContent = "La carpeta no contiene archivos .xlsx";
+      btn.disabled = true;
+    }
+  });
+
+  document.getElementById("btn-stkc").addEventListener("click", async () => {
+    const files = Array.from(folderStkcInput.files).filter(f => /\.xlsx?$/i.test(f.name));
+    if (!files.length) return;
+
+    const btn = document.getElementById("btn-stkc");
+    const prog = document.getElementById("prog-stkc");
+    const pb = document.getElementById("pb-stkc");
+    const info = document.getElementById("info-stkc");
+    const card = document.getElementById("card-stkc");
+
+    btn.disabled = true;
+    prog.style.display = "block";
+    pb.style.width = "20%";
+    info.textContent = `Subiendo ${files.length} archivo(s)…`;
+
+    const fd = new FormData();
+    files.forEach(f => fd.append("files", f, f.name));
+
+    try {
+      pb.style.width = "70%";
+      const res = await fetch(`${API}/api/import/stock-consolidado?mode=replace`, { method: "POST", body: fd });
+      pb.style.width = "100%";
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      let msg = `✅ ${data.rows.toLocaleString()} filas de ${data.archivosProcesados} archivo(s)`;
+      if (data.archivosOmitidos?.length) {
+        msg += ` — ${data.archivosOmitidos.length} omitido(s) (nombre sin año/semana o formato inválido)`;
+      }
+      toast(msg, "ok");
+      info.textContent = `Último resultado: ${data.rows.toLocaleString()} filas, ${data.archivosProcesados} archivo(s) procesados${data.archivosOmitidos?.length ? `, ${data.archivosOmitidos.length} omitido(s)` : ""}.`;
+      card.classList.add("done");
+      loadStats();
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    } finally {
+      setTimeout(() => { prog.style.display = "none"; pb.style.width = "0"; }, 600);
+      btn.disabled = false;
+    }
+  });
+
+  // ── Consolidación: Consumos IM/IF (carpeta -> parseo en navegador -> lotes JSON) ──
+
+  const folderCnscInput = document.getElementById("folder-cnsc");
+  folderCnscInput.addEventListener("change", () => {
+    const files = Array.from(folderCnscInput.files).filter(f => /\.xlsx?$/i.test(f.name));
+    const fn = document.getElementById("fn-cnsc");
+    const btn = document.getElementById("btn-cnsc");
+    if (files.length) {
+      fn.textContent = `${files.length} archivo(s) .xlsx encontrados`;
+      btn.disabled = false;
+    } else {
+      fn.textContent = "La carpeta no contiene archivos .xlsx";
+      btn.disabled = true;
+    }
+  });
+
+  // Convierte "Hora día" (HMMSS/HHMMSS) a "HH:MM:SS", igual que el backend.
+  function jsHoraDiaToTimeString(v) {
+    if (v == null || v === "") return null;
+    const n = Math.trunc(Number(v));
+    if (isNaN(n) || n < 0) return null;
+    const s = String(n).padStart(6, "0");
+    return `${s.slice(0, 2)}:${s.slice(2, 4)}:${s.slice(4, 6)}`;
+  }
+
+  // Convierte fechas de Excel (Date tras cellDates:true, número serial, o string) a "YYYY-MM-DD".
+  function jsToDateString(v) {
+    if (v == null || v === "") return null;
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (typeof v === "number") {
+      const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+      return new Date(EXCEL_EPOCH + v * 86400000).toISOString().slice(0, 10);
+    }
+    return String(v);
+  }
+
+  function parseConsumoImIfFileInBrowser(arrayBuffer) {
+    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const sheetName = wb.SheetNames.find(n => n === "Hoja1") || wb.SheetNames[0];
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null });
+    return json
+      .filter(r => r["Nº corto artículo"] != null)
+      .map(r => {
+        const horaDia = r["Hora día"] ?? null;
+        return [
+          r["Nº corto artículo"] ?? null,
+          String(r["Unidad negocio"] ?? "").trim(),
+          String(r["Tp doc"] ?? "").trim(),
+          r["Número documento"] ?? null,
+          r["Nº art ppal"] ?? null,
+          String(r["Tp ord"] ?? "").trim(),
+          r["Número orden"] ?? null,
+          jsToDateString(r["Fecha orden"]),
+          horaDia,
+          jsHoraDiaToTimeString(horaDia),
+          r["Cantidad trns"] ?? null,
+          String(r["ID usuario"] ?? "").trim(),
+          String(r["Explicación transacción"] ?? "").trim(),
+        ];
+      });
+  }
+
+  const CONSUMO_BATCH_SIZE = 20000;
+
+  document.getElementById("btn-cnsc").addEventListener("click", async () => {
+    const files = Array.from(folderCnscInput.files).filter(f => /\.xlsx?$/i.test(f.name));
+    if (!files.length) return;
+
+    const btn = document.getElementById("btn-cnsc");
+    const prog = document.getElementById("prog-cnsc");
+    const pb = document.getElementById("pb-cnsc");
+    const info = document.getElementById("info-cnsc");
+    const card = document.getElementById("card-cnsc");
+
+    btn.disabled = true;
+    prog.style.display = "block";
+    pb.style.width = "2%";
+
+    let totalFilas = 0;
+    const archivosOmitidos = [];
+    const archivosOk = [];
+
+    try {
+      for (let fi = 0; fi < files.length; fi++) {
+        const file = files[fi];
+        info.textContent = `Leyendo archivo ${fi + 1}/${files.length}: ${file.name}…`;
+
+        let rows;
+        try {
+          const buf = await file.arrayBuffer();
+          rows = parseConsumoImIfFileInBrowser(buf);
+        } catch (e) {
+          archivosOmitidos.push(file.name);
+          continue;
+        }
+
+        if (!rows.length) { archivosOmitidos.push(file.name); continue; }
+
+        const totalBatches = Math.ceil(rows.length / CONSUMO_BATCH_SIZE);
+        for (let b = 0; b < totalBatches; b++) {
+          const batch = rows.slice(b * CONSUMO_BATCH_SIZE, (b + 1) * CONSUMO_BATCH_SIZE);
+          info.textContent = `${file.name}: enviando lote ${b + 1}/${totalBatches} (${totalFilas.toLocaleString()} filas acumuladas)…`;
+
+          const res = await fetch(`${API}/api/import/consumo-consolidado/batch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rows: batch,
+              archivoOrigen: file.name,
+              esPrimerLote: b === 0,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Error subiendo lote de ${file.name}`);
+          totalFilas += data.inserted;
+
+          const progresoGlobal = ((fi + (b + 1) / totalBatches) / files.length) * 100;
+          pb.style.width = `${Math.max(2, progresoGlobal)}%`;
+        }
+        archivosOk.push(file.name);
+      }
+
+      await fetch(`${API}/api/import/consumo-consolidado/finalizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivos: archivosOk, totalFilas, mode: "replace" }),
+      });
+
+      pb.style.width = "100%";
+      let msg = `✅ ${totalFilas.toLocaleString()} filas de ${archivosOk.length} archivo(s)`;
+      if (archivosOmitidos.length) msg += ` — ${archivosOmitidos.length} omitido(s)`;
+      toast(msg, "ok");
+      info.textContent = `Último resultado: ${totalFilas.toLocaleString()} filas, ${archivosOk.length} archivo(s) procesados${archivosOmitidos.length ? `, ${archivosOmitidos.length} omitido(s)` : ""}.`;
+      card.classList.add("done");
+      loadStats();
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    } finally {
+      setTimeout(() => { prog.style.display = "none"; pb.style.width = "0"; }, 800);
       btn.disabled = false;
     }
   });
@@ -1185,6 +1450,8 @@
         "card-pgm": data.pgmTotal,
         "card-cti": data.costoInsumos,
         "card-pdtt": data.pendientesTetra,
+        "card-stkc": data.stockConsolidado,
+        "card-cnsc": data.consumoConsolidado,
       };
       Object.entries(cardCounts).forEach(([cardId, count]) => {
         const card = document.getElementById(cardId);
@@ -1380,18 +1647,48 @@
       { key: "mes_facturacion_tetra",  label: "Mes Facturación Tetra" },
       { key: "fecha_facturacion",      label: "Fecha Facturación" },
     ],
+    "stock-consolidado": [
+      { key: "id",             label: "ID" },
+      { key: "nro_corto",      label: "Nº Corto" },
+      { key: "segundo_nro",    label: "2º Nº Artículo" },
+      { key: "descripcion",    label: "Descripción" },
+      { key: "unidad_negocio", label: "Unidad Negocio" },
+      { key: "existencias",    label: "Existencias" },
+      { key: "ubicacion",      label: "Ubicación" },
+      { key: "nro_lote_serie", label: "Lote/Serie" },
+      { key: "anio",           label: "Año" },
+      { key: "semana_iso",     label: "Semana ISO" },
+      { key: "archivo_origen", label: "Archivo Origen" },
+    ],
+    "consumo-consolidado": [
+      { key: "id",                      label: "ID" },
+      { key: "nro_corto",               label: "Nº Corto" },
+      { key: "unidad_negocio",          label: "Unidad Negocio" },
+      { key: "tp_doc",                  label: "Tp Doc" },
+      { key: "numero_documento",        label: "Nº Documento" },
+      { key: "tp_ord",                  label: "Tp Ord" },
+      { key: "numero_orden",            label: "Nº Orden" },
+      { key: "fecha_orden",             label: "Fecha Orden" },
+      { key: "hora_orden",              label: "Hora Orden" },
+      { key: "cantidad_trns",           label: "Cantidad Trns" },
+      { key: "id_usuario",              label: "ID Usuario" },
+      { key: "explicacion_transaccion", label: "Explicación" },
+      { key: "archivo_origen",          label: "Archivo Origen" },
+    ],
   };
   const TABLA_ENDPOINT = {
     articulos: "articulos", stock: "stock", pendiente: "pendiente",
     "stock-arranque": "stock-arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp-x-bom", "pmp-y-comex": "pmp-y-comex", pgm: "pgm", "pgm-x-bom": "pgm-x-bom",
     "costo-insumos": "costo-insumos", "pendientes-tetra": "pendientes-tetra",
+    "stock-consolidado": "stock-consolidado", "consumo-consolidado": "consumo-consolidado",
   };
   const TABLA_EXPORT = {
     articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo",
     "stock-arranque": "stock_arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp_x_bom", "pmp-y-comex": "pmp_y_comex", pgm: "pgm", "pgm-x-bom": "pgm_x_bom",
     "costo-insumos": "costo_insumos", "pendientes-tetra": "pendientes_tetra",
+    "stock-consolidado": "stock_consolidado", "consumo-consolidado": "consumo_consolidado",
   };
   const TABLA_EMPTY_MSG = {
     articulos: "Importá artículos primero",
@@ -1405,6 +1702,8 @@
     "pgm-x-bom": "Importá PGM x BOM primero",
     "costo-insumos": "Importá Costo de Insumos primero",
     "pendientes-tetra": "Importá Pendientes Tetra primero",
+    "stock-consolidado": "Consolidá Stock Semanal primero",
+    "consumo-consolidado": "Consolidá Consumos IM/IF primero",
   };
 
   async function loadTablaSql(offset = 0) {
