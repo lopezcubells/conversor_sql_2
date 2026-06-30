@@ -390,6 +390,7 @@
   <div class="stats" id="stats-grid">
     <div class="stat"><div class="stat-num" id="cnt-articulos">—</div><div class="stat-lbl">Artículos</div></div>
     <div class="stat"><div class="stat-num" id="cnt-stock">—</div><div class="stat-lbl">Registros de Stock</div></div>
+    <div class="stat"><div class="stat-num" id="cnt-pendiente">—</div><div class="stat-lbl">Órdenes Pendientes</div></div>
   </div>
 
   <div class="card">
@@ -447,6 +448,30 @@
       <button class="btn btn-primary" id="btn-stk" disabled>⬆ Importar</button>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">Archivo Excel — Pendiente Completo</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Se lee la tabla <strong style="color:var(--text)">Tabla_Pendiente_COMPLETO</strong> del archivo.
+    </p>
+
+    <div class="drop-zone" id="dz-pdt">
+      <input type="file" accept=".xlsx,.xls" id="file-pdt" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-pdt"></div>
+    </div>
+
+    <div class="progress" id="prog-pdt"><div class="progress-bar" id="pb-pdt"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-pdt" value="replace" checked> Reemplazar tabla</label>
+        <label><input type="radio" name="mode-pdt" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-pdt" disabled>⬆ Importar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ TABLAS SQL ═══ -->
@@ -455,6 +480,7 @@
     <select class="search-input" id="tabla-selector" style="flex:0 0 220px">
       <option value="articulos">Artículos</option>
       <option value="stock">Stock</option>
+      <option value="pendiente">Pendiente Completo</option>
     </select>
     <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
     <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
@@ -573,6 +599,7 @@
   }
   setupDrop("dz-art", "file-art", "fn-art", "btn-art");
   setupDrop("dz-stk", "file-stk", "fn-stk", "btn-stk");
+  setupDrop("dz-pdt", "file-pdt", "fn-pdt", "btn-pdt");
 
   // ── Import ──
   async function doImport(endpoint, fileId, modeRadio, progId, pbId, btnId) {
@@ -612,6 +639,8 @@
     doImport("articulos", "file-art", "mode-art", "prog-art", "pb-art", "btn-art"));
   document.getElementById("btn-stk").addEventListener("click", () =>
     doImport("stock", "file-stk", "mode-stk", "prog-stk", "pb-stk", "btn-stk"));
+  document.getElementById("btn-pdt").addEventListener("click", () =>
+    doImport("pendiente", "file-pdt", "mode-pdt", "prog-pdt", "pb-pdt", "btn-pdt"));
 
   // ── Stats ──
   async function loadStats() {
@@ -619,6 +648,7 @@
       const data = await fetch(`${API}/api/stats`).then(r => r.json());
       document.getElementById("cnt-articulos").textContent = data.articulos.toLocaleString();
       document.getElementById("cnt-stock").textContent = data.stock.toLocaleString();
+      document.getElementById("cnt-pendiente").textContent = data.pendiente.toLocaleString();
 
       const ll = document.getElementById("log-list");
       if (!data.logs.length) {
@@ -679,12 +709,33 @@
       { key: "ubicacion",      label: "Ubicación" },
       { key: "nro_lote_serie", label: "Lote/Serie" },
     ],
+    pendiente: [
+      { key: "id",                    label: "ID" },
+      { key: "numero_orden",          label: "Nº Orden" },
+      { key: "tp_ord",                label: "Tp Ord" },
+      { key: "nro_corto",             label: "Nº Corto" },
+      { key: "segundo_nro",           label: "2º Nº Artículo" },
+      { key: "descripcion",           label: "Descripción" },
+      { key: "rubro",                 label: "Rubro" },
+      { key: "cantidad_orden",        label: "Cant. Orden" },
+      { key: "cantidad_pendiente",    label: "Cant. Pendiente" },
+      { key: "ult_est",               label: "Últ Est" },
+      { key: "est_sig",               label: "Est Sig" },
+      { key: "fecha_orden",           label: "Fecha Orden" },
+      { key: "fecha_solic",           label: "Fecha Solic" },
+      { key: "costo_unitario",        label: "Costo Unitario" },
+      { key: "significado",          label: "Significado" },
+      { key: "es_pendiente",          label: "¿Es Pendiente?" },
+      { key: "demora_hoy",            label: "Demora Hoy" },
+      { key: "proveedor",             label: "Proveedor" },
+    ],
   };
-  const TABLA_ENDPOINT = { articulos: "articulos", stock: "stock" };
-  const TABLA_EXPORT   = { articulos: "articulos", stock: "stock_sucursales" };
+  const TABLA_ENDPOINT = { articulos: "articulos", stock: "stock", pendiente: "pendiente" };
+  const TABLA_EXPORT   = { articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo" };
   const TABLA_EMPTY_MSG = {
     articulos: "Importá artículos primero",
     stock: "Importá stock primero",
+    pendiente: "Importá Pendiente Completo primero",
   };
 
   async function loadTablaSql(offset = 0) {
