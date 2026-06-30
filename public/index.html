@@ -590,6 +590,7 @@
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="pendientes">Pendientes</div>
   <div class="tab" data-tab="avance">Avance</div>
+  <div class="tab" data-tab="recepciones-mes">Recepciones</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -950,6 +951,29 @@
   </div>
 </div>
 
+<!-- ═══ RECEPCIONES ═══ -->
+<div class="pane" id="tab-recepciones-mes">
+  <div class="card">
+    <div class="card-title">Filtro</div>
+    <div class="search-row" style="margin-bottom:0">
+      <select class="search-input" id="rec-mes-rubro-filter" style="flex:0 0 280px"></select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Cantidad recibida por mes</div>
+    <div style="position:relative;height:380px">
+      <canvas id="rec-mes-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="rec-mes-table-wrap">
+      <div class="empty"><div class="big">📦</div>Cargando…</div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -968,6 +992,7 @@
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "pendientes") initPendientes();
       if (tab.dataset.tab === "avance") initAvance();
+      if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
     });
   });
 
@@ -1185,6 +1210,7 @@
       { key: "numero_orden",          label: "Nº Orden" },
       { key: "nro_corto",             label: "Nº Corto" },
       { key: "segundo_nro",           label: "2º Nº Artículo" },
+      { key: "rubro",                 label: "Rubro" },
       { key: "cantidad_orden",        label: "Cant. Orden" },
       { key: "cantidad_recibida",     label: "Cant. Recibida" },
       { key: "cantidad_pendiente",    label: "Cant. Pendiente" },
@@ -2121,6 +2147,95 @@
   }
   document.getElementById("avance-rubro-rubro-filter").addEventListener("change", () => loadAvanceRubroTable(0));
 
+
+  // ── Recepciones por mes ──
+
+  const REC_MES_DEFAULT_RUBRO = "TETRA Envases";
+  let recMesChart = null;
+  let recMesRubrosLoaded = false;
+
+  const MES_LABELS = {
+    "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr", "05": "May", "06": "Jun",
+    "07": "Jul", "08": "Ago", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic",
+  };
+  function fmtMesLabel(mesYYYYMM) {
+    const [anio, mes] = mesYYYYMM.split("-");
+    return `${MES_LABELS[mes] ?? mes} ${anio}`;
+  }
+
+  async function initRecepcionesMes() {
+    const sel = document.getElementById("rec-mes-rubro-filter");
+    if (!recMesRubrosLoaded) {
+      try {
+        const { rubros } = await fetch(`${API}/api/recepciones/rubros`).then(r => r.json());
+        sel.innerHTML = "";
+        rubros.forEach(r => {
+          const opt = document.createElement("option");
+          opt.value = r; opt.textContent = r;
+          sel.appendChild(opt);
+        });
+        // Filtro de selección única sin opción "Todos los rubros": por defecto TETRA Envases
+        sel.value = rubros.includes(REC_MES_DEFAULT_RUBRO) ? REC_MES_DEFAULT_RUBRO : (rubros[0] ?? "");
+        recMesRubrosLoaded = true;
+      } catch (e) { console.error(e); }
+    }
+    loadRecepcionesMes();
+  }
+
+  document.getElementById("rec-mes-rubro-filter").addEventListener("change", loadRecepcionesMes);
+
+  async function loadRecepcionesMes() {
+    const rubro = document.getElementById("rec-mes-rubro-filter").value;
+    if (!rubro) return;
+
+    try {
+      const { rows } = await fetch(`${API}/api/recepciones/por-mes?rubro=${encodeURIComponent(rubro)}`).then(r => r.json());
+
+      const labels = rows.map(r => fmtMesLabel(r.mes));
+      const data = rows.map(r => r.cantidad_recibida);
+
+      const ctx = document.getElementById("rec-mes-chart").getContext("2d");
+      if (recMesChart) recMesChart.destroy();
+      recMesChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Cantidad recibida",
+            data,
+            backgroundColor: "rgba(79,142,247,.7)",
+            borderRadius: 4,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ` ${fmtNum(ctx.raw)}` } }
+          },
+          scales: {
+            x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
+            y: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
+          }
+        }
+      });
+
+      const wrap = document.getElementById("rec-mes-table-wrap");
+      if (!rows.length) {
+        wrap.innerHTML = `<div class="empty"><div class="big">📦</div>Sin recepciones para este rubro</div>`;
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Mes</th><th>Cantidad Recibida</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${fmtMesLabel(r.mes)}</td>
+          <td>${fmtNum(r.cantidad_recibida)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    } catch (e) { console.error(e); }
+  }
 
   // ── DB ready banner ──
   const banner = document.createElement("div");
