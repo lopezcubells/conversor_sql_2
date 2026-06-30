@@ -287,12 +287,17 @@
       margin-top: 0;
     }
     /* Variante sin límite de alto, para contenido grande como tablas de muchas filas.
-       Usa display:none en vez de max-height animado, que recortaría el contenido. */
+       Anula explícitamente max-height/overflow heredados de .collapsible-body, y usa
+       display:none en vez de max-height animado, que recortaría el contenido. */
     .collapsible-body-tall {
+      max-height: none;
+      overflow: visible;
       margin-top: 14px;
     }
     .collapsible-body-tall.collapsed {
       display: none;
+      max-height: none;
+      opacity: 1;
     }
 
     /* ── Indicador de avance: tarjeta destacada verde/naranja ── */
@@ -2046,7 +2051,7 @@
 
   // Estado de ordenamiento independiente para cada tabla
   const avanceArtSort = { col: "nro_corto", dir: "desc" };
-  const avanceRubroSort = { col: "arranque", dir: "desc" };
+  const avanceRubroSort = { col: "avance_pct", dir: "desc" };
 
   function thSort(label, col, state, loadFn) {
     const active = state.col === col;
@@ -2269,11 +2274,16 @@
     loadRecepcionesAnioActual();
   }
 
-  document.getElementById("rec-mes-rubro-filter").addEventListener("change", loadRecepcionesMes);
+  document.getElementById("rec-mes-rubro-filter").addEventListener("change", () => {
+    loadRecepcionesMes();
+    loadRecepcionesAnioActual();
+  });
 
   async function loadRecepcionesAnioActual() {
+    const rubro = document.getElementById("rec-mes-rubro-filter").value;
     try {
-      const { anio, total } = await fetch(`${API}/api/recepciones/total-anio-actual`).then(r => r.json());
+      const url = `${API}/api/recepciones/total-anio-actual${rubro ? "?rubro=" + encodeURIComponent(rubro) : ""}`;
+      const { anio, total } = await fetch(url).then(r => r.json());
       document.getElementById("rec-anio-actual-label").textContent = anio;
       document.getElementById("rec-anio-actual-value").textContent = fmtNum(total);
     } catch (e) { console.error(e); }
