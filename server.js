@@ -84,6 +84,12 @@ function query(db, sql, params = []) {
   return rows;
 }
 
+// Subconjunto fijo de rubros relevantes para Avance x Rubro y el Indicador de avance general
+const AVANCE_RUBRO_WHITELIST = [
+  "ETIQUETA FR", "ETIQUETA CT", "Tapón", "Cápsulas", "TETRA Envases",
+  "BOTELLA Vidrio", "Tapa", "Bandeja", "Cajas", "BIB Envase", "Pallets",
+];
+
 function initSchema() {
   withDb(db => db.run(`
     CREATE TABLE IF NOT EXISTS articulos (
@@ -216,6 +222,9 @@ function initSchema() {
       necesidad_inicial REAL,
       necesidad_actual REAL,
       avance_pct REAL,
+      costo_u REAL,
+      costo_recepciones REAL,
+      costo_necesidad_inicial REAL,
       calculado_en TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS avance_x_rubro (
@@ -228,6 +237,14 @@ function initSchema() {
       necesidad_actual REAL,
       avance_pct REAL,
       calculado_en TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS costo_insumos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nro_corto INTEGER,
+      segundo_nro TEXT,
+      unidad_negocio TEXT,
+      costo_uni REAL,
+      importado_en TEXT DEFAULT (datetime('now'))
     );
   `));
   console.log("Esquema creado");
@@ -414,6 +431,20 @@ function parsePgm(buffer) {
         String(r["PLANTA"] ?? "").trim(),
       ];
     });
+}
+
+function parseCostoInsumos(buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = wb.SheetNames.find(n => n === "Sheet1") || wb.SheetNames[0];
+  if (!sheetName) throw new Error(`Hoja no encontrada. Disponibles: ${wb.SheetNames.join(", ")}`);
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
+    .filter(r => r["Nº corto artículo"] != null)
+    .map(r => ([
+      r["Nº corto artículo"] ?? null,
+      String(r["2º nº artículo"] ?? "").trim(),
+      String(r["Unidad negocio"] ?? "").trim(),
+      r["Costo uni"] ?? null,
+    ]));
 }
 
 // Convierte fechas de Excel (Date object tras cellDates:true, o string) a "YYYY-MM-DD" / null
@@ -681,6 +712,26 @@ app.post("/api/import/pgm-x-bom", requireDb, upload.single("file"), (req, res) =
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+app.post("/api/import/costo-insumos", requireDb, upload.single("file"), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
+    const rows = parseCostoInsumos(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ error: "El archivo no contiene datos." });
+    const mode = req.query.mode || "replace";
+    withDb(db => {
+      if (mode === "replace") db.run("DELETE FROM costo_insumos");
+      const stmt = db.prepare(
+        "INSERT INTO costo_insumos (nro_corto, segundo_nro, unidad_negocio, costo_uni) VALUES (?,?,?,?)"
+      );
+      rows.forEach(r => stmt.run(r));
+      stmt.free();
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["costo_insumos", req.file.originalname, rows.length, "ok"]);
+    });
+    res.json({ success: true, rows: rows.length, mode });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/stats", requireDb, (req, res) => {
   try {
     const data = readDb(db => ({
@@ -695,6 +746,7 @@ app.get("/api/stats", requireDb, (req, res) => {
         (query(db, "SELECT COUNT(*) as c FROM pgm")[0]?.c ?? 0) +
         (query(db, "SELECT COUNT(*) as c FROM pgm_x_bom")[0]?.c ?? 0)
       ),
+      costoInsumos:   query(db, "SELECT COUNT(*) as c FROM costo_insumos")[0]?.c ?? 0,
       logs:      query(db, "SELECT * FROM import_log ORDER BY fecha DESC LIMIT 10"),
     }));
     res.json(data);
@@ -765,6 +817,7 @@ const GENERIC_TABLES = {
   "pmp-y-comex":    { table: "pmp_y_comex",    searchCols: ["producto"] },
   "pgm":            { table: "pgm",            searchCols: ["producto"] },
   "pgm-x-bom":      { table: "pgm_x_bom",      searchCols: ["producto", "descripcion_comp"] },
+  "costo-insumos":  { table: "costo_insumos",  searchCols: ["segundo_nro"] },
 };
 
 Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
@@ -1136,11 +1189,23 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
       `, [fechaInicialPmp, fechaFinalPmp]);
       const consumoMap = new Map(consumoRows.map(r => [r.codigo_corto_comp, r.total]));
 
+      // Costo unitario por artículo desde Costo de Insumos. Puede haber duplicados de
+      // nro_corto (mismo artículo en distintas unidades de negocio); el costo es el mismo
+      // en todos los casos observados, así que tomamos el máximo (equivalente a cualquiera).
+      const costoRows = query(db, `
+        SELECT nro_corto, MAX(costo_uni) as costo_uni
+        FROM costo_insumos
+        WHERE nro_corto IS NOT NULL
+        GROUP BY nro_corto
+      `);
+      const costoMap = new Map(costoRows.map(r => [r.nro_corto, r.costo_uni]));
+
       db.run("DELETE FROM avance_x_articulo");
       const stmt = db.prepare(`INSERT INTO avance_x_articulo (
         nro_corto, descripcion, rubro, arranque, recepciones, consumo,
-        necesidad_inicial, necesidad_actual, avance_pct
-      ) VALUES (?,?,?,?,?,?,?,?,?)`);
+        necesidad_inicial, necesidad_actual, avance_pct,
+        costo_u, costo_recepciones, costo_necesidad_inicial
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
 
       let filas = 0;
       for (const art of articulosBase) {
@@ -1165,7 +1230,17 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
           avancePct = Math.abs(recepciones / necesidadInicial);
         }
 
-        stmt.run([nroCorto, art.descripcion, art.rubro, arranque, recepciones, consumo, necesidadInicial, necesidadActual, avancePct]);
+        const costoU = costoMap.get(nroCorto) ?? null;
+        const costoRecepciones = costoU != null ? recepciones * costoU : null;
+        const costoNecesidadInicial = (costoU != null && necesidadInicial != null)
+          ? Math.abs(necesidadInicial) * costoU
+          : null;
+
+        stmt.run([
+          nroCorto, art.descripcion, art.rubro, arranque, recepciones, consumo,
+          necesidadInicial, necesidadActual, avancePct,
+          costoU, costoRecepciones, costoNecesidadInicial,
+        ]);
         filas++;
       }
       stmt.free();
@@ -1206,10 +1281,27 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
       }
       stmtRubro.free();
 
-      return filas;
+      // Indicador de avance general: suma de costo_recepciones / suma de costo_necesidad_inicial,
+      // considerando solo los artículos cuyo rubro está en la whitelist de 11 rubros relevantes.
+      const placeholders = AVANCE_RUBRO_WHITELIST.map(() => "?").join(",");
+      const indicadorRow = query(db, `
+        SELECT
+          SUM(costo_recepciones) as total_costo_recepciones,
+          SUM(costo_necesidad_inicial) as total_costo_necesidad_inicial
+        FROM avance_x_articulo
+        WHERE rubro IN (${placeholders})
+      `, AVANCE_RUBRO_WHITELIST)[0];
+
+      const totalCostoRecepciones = indicadorRow?.total_costo_recepciones ?? 0;
+      const totalCostoNecesidadInicial = indicadorRow?.total_costo_necesidad_inicial ?? 0;
+      const indicadorAvance = totalCostoNecesidadInicial > 0
+        ? totalCostoRecepciones / totalCostoNecesidadInicial
+        : null;
+
+      return { filas, indicadorAvance };
     });
 
-    res.json({ success: true, rows: resultado });
+    res.json({ success: true, rows: resultado.filas, indicadorAvance: resultado.indicadorAvance });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
@@ -1217,6 +1309,7 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
 const AVANCE_SORT_COLS = new Set([
   "nro_corto", "descripcion", "rubro", "arranque", "recepciones",
   "consumo", "necesidad_inicial", "necesidad_actual", "avance_pct",
+  "costo_u", "costo_recepciones", "costo_necesidad_inicial",
 ]);
 const AVANCE_RUBRO_SORT_COLS = new Set([
   "rubro", "arranque", "recepciones", "consumo",
@@ -1235,6 +1328,27 @@ app.get("/api/avance/rubros", requireDb, (req, res) => {
       `SELECT DISTINCT rubro FROM avance_x_articulo WHERE rubro IS NOT NULL AND rubro != '' ORDER BY rubro`
     )).map(r => r.rubro);
     res.json({ rubros });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/avance/indicador", requireDb, (req, res) => {
+  try {
+    const placeholders = AVANCE_RUBRO_WHITELIST.map(() => "?").join(",");
+    const row = readDb(db => query(db, `
+      SELECT
+        SUM(costo_recepciones) as total_costo_recepciones,
+        SUM(costo_necesidad_inicial) as total_costo_necesidad_inicial
+      FROM avance_x_articulo
+      WHERE rubro IN (${placeholders})
+    `, AVANCE_RUBRO_WHITELIST))[0];
+
+    const totalCostoRecepciones = row?.total_costo_recepciones ?? 0;
+    const totalCostoNecesidadInicial = row?.total_costo_necesidad_inicial ?? 0;
+    const indicadorAvance = totalCostoNecesidadInicial > 0
+      ? totalCostoRecepciones / totalCostoNecesidadInicial
+      : null;
+
+    res.json({ indicadorAvance });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1266,12 +1380,6 @@ app.get("/api/avance", requireDb, (req, res) => {
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// Avance x Rubro solo debe mostrar este subconjunto fijo de rubros relevantes
-const AVANCE_RUBRO_WHITELIST = [
-  "ETIQUETA FR", "ETIQUETA CT", "Tapón", "Cápsulas", "TETRA Envases",
-  "BOTELLA Vidrio", "Tapa", "Bandeja", "Cajas", "BIB Envase", "Pallets",
-];
 
 app.get("/api/avance-rubro", requireDb, (req, res) => {
   try {
@@ -1306,7 +1414,7 @@ app.get("/api/export/:tabla", requireDb, (req, res) => {
     const validTables = [
       "articulos", "stock_sucursales", "stock_detallado", "pendiente_completo",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
-      "avance_x_articulo", "avance_x_rubro",
+      "avance_x_articulo", "avance_x_rubro", "costo_insumos",
     ];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
