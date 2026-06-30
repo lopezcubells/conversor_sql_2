@@ -251,10 +251,8 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="articulos-import">Importar Artículos</div>
-  <div class="tab" data-tab="stock-import">Importar Stock</div>
-  <div class="tab" data-tab="articulos-view">Ver Artículos</div>
-  <div class="tab" data-tab="stock-view">Ver Stock</div>
+  <div class="tab" data-tab="importar">Importar</div>
+  <div class="tab" data-tab="tablas-sql">Tablas SQL</div>
   <div class="tab" data-tab="stock-detallado">Stock detallado</div>
 </div>
 
@@ -272,7 +270,7 @@
 </div>
 
 <!-- ═══ IMPORT ARTÍCULOS ═══ -->
-<div class="pane" id="tab-articulos-import">
+<div class="pane" id="tab-importar">
   <div class="card">
     <div class="card-title">Archivo Excel — Artículos por Rubro</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
@@ -296,10 +294,7 @@
       <button class="btn btn-primary" id="btn-art" disabled>⬆ Importar</button>
     </div>
   </div>
-</div>
 
-<!-- ═══ IMPORT STOCK ═══ -->
-<div class="pane" id="tab-stock-import">
   <div class="card">
     <div class="card-title">Archivo Excel — Stock por Sucursales</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
@@ -325,38 +320,28 @@
   </div>
 </div>
 
-<!-- ═══ VIEW ARTÍCULOS ═══ -->
-<div class="pane" id="tab-articulos-view">
+<!-- ═══ TABLAS SQL ═══ -->
+<div class="pane" id="tab-tablas-sql">
   <div class="search-row">
-    <input class="search-input" id="q-art" placeholder="Buscar por descripción o 2º nº artículo…" />
-    <button class="btn btn-outline" onclick="loadArticulos(0)">🔍 Buscar</button>
-    <button class="btn btn-outline" onclick="exportTable('articulos')">⬇ CSV</button>
+    <select class="search-input" id="tabla-selector" style="flex:0 0 220px">
+      <option value="articulos">Artículos</option>
+      <option value="stock">Stock</option>
+    </select>
+    <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
+    <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
+    <button class="btn btn-outline" id="btn-export-tabla">⬇ CSV</button>
   </div>
   <div class="card" style="padding:0">
-    <div class="table-wrap" id="tbl-art-wrap">
-      <div class="empty"><div class="big">🗄</div>Importá artículos primero</div>
+    <div class="table-wrap" id="tbl-sql-wrap">
+      <div class="empty"><div class="big">🗄</div>Importá datos primero</div>
     </div>
   </div>
-  <div class="pagination" id="pag-art"></div>
-</div>
-
-<!-- ═══ VIEW STOCK ═══ -->
-<div class="pane" id="tab-stock-view">
-  <div class="search-row">
-    <input class="search-input" id="q-stk" placeholder="Buscar por descripción o 2º nº artículo…" />
-    <button class="btn btn-outline" onclick="loadStock(0)">🔍 Buscar</button>
-    <button class="btn btn-outline" onclick="exportTable('stock')">⬇ CSV</button>
-  </div>
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="tbl-stk-wrap">
-      <div class="empty"><div class="big">🗄</div>Importá stock primero</div>
-    </div>
-  </div>
-  <div class="pagination" id="pag-stk"></div>
+  <div class="pagination" id="pag-tabla"></div>
 </div>
 
 <!-- ═══ STOCK DETALLADO ═══ -->
 <div class="pane" id="tab-stock-detallado">
+
   <div class="card">
     <div class="card-title">Filtro</div>
     <div class="search-row" style="margin-bottom:0">
@@ -388,8 +373,7 @@
       tab.classList.add("active");
       document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
       if (tab.dataset.tab === "dashboard") loadStats();
-      if (tab.dataset.tab === "articulos-view") loadArticulos(0);
-      if (tab.dataset.tab === "stock-view") loadStock(0);
+      if (tab.dataset.tab === "tablas-sql") loadTablaSql(0);
       if (tab.dataset.tab === "stock-detallado") initStockDetallado();
     });
   });
@@ -512,45 +496,56 @@
     `;
   }
 
-  // ── Artículos view ──
-  const ART_COLS = [
-    { key: "id",            label: "ID" },
-    { key: "nro_corto",     label: "Nº Corto" },
-    { key: "segundo_nro",   label: "2º Nº Artículo" },
-    { key: "descripcion",   label: "Descripción" },
-    { key: "unidad_medida", label: "UM" },
-    { key: "rubro",         label: "Rubro" },
-  ];
+  // ── Tablas SQL (selector único) ──
+  const TABLA_COLS = {
+    articulos: [
+      { key: "id",            label: "ID" },
+      { key: "nro_corto",     label: "Nº Corto" },
+      { key: "segundo_nro",   label: "2º Nº Artículo" },
+      { key: "descripcion",   label: "Descripción" },
+      { key: "unidad_medida", label: "UM" },
+      { key: "rubro",         label: "Rubro" },
+    ],
+    stock: [
+      { key: "id",             label: "ID" },
+      { key: "nro_corto",      label: "Nº Corto" },
+      { key: "segundo_nro",    label: "2º Nº Artículo" },
+      { key: "descripcion",    label: "Descripción" },
+      { key: "unidad_negocio", label: "Unidad Negocio" },
+      { key: "existencias",    label: "Existencias" },
+      { key: "ubicacion",      label: "Ubicación" },
+      { key: "nro_lote_serie", label: "Lote/Serie" },
+    ],
+  };
+  const TABLA_ENDPOINT = { articulos: "articulos", stock: "stock" };
+  const TABLA_EXPORT   = { articulos: "articulos", stock: "stock_sucursales" };
+  const TABLA_EMPTY_MSG = {
+    articulos: "Importá artículos primero",
+    stock: "Importá stock primero",
+  };
 
-  async function loadArticulos(offset = 0) {
-    const q = document.getElementById("q-art").value;
-    const url = `${API}/api/articulos?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
+  async function loadTablaSql(offset = 0) {
+    const tabla = document.getElementById("tabla-selector").value;
+    const q = document.getElementById("q-tabla").value;
+    const url = `${API}/api/${TABLA_ENDPOINT[tabla]}?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
     const data = await fetch(url).then(r => r.json());
-    renderTable("tbl-art-wrap", ART_COLS, data.rows);
-    renderPagination("pag-art", data.total, offset, 50, "loadArticulos");
-  }
-  document.getElementById("q-art").addEventListener("keydown", e => e.key === "Enter" && loadArticulos(0));
 
-  // ── Stock view ──
-  const STK_COLS = [
-    { key: "id",             label: "ID" },
-    { key: "nro_corto",      label: "Nº Corto" },
-    { key: "segundo_nro",    label: "2º Nº Artículo" },
-    { key: "descripcion",    label: "Descripción" },
-    { key: "unidad_negocio", label: "Unidad Negocio" },
-    { key: "existencias",    label: "Existencias" },
-    { key: "ubicacion",      label: "Ubicación" },
-    { key: "nro_lote_serie", label: "Lote/Serie" },
-  ];
-
-  async function loadStock(offset = 0) {
-    const q = document.getElementById("q-stk").value;
-    const url = `${API}/api/stock?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
-    const data = await fetch(url).then(r => r.json());
-    renderTable("tbl-stk-wrap", STK_COLS, data.rows);
-    renderPagination("pag-stk", data.total, offset, 50, "loadStock");
+    const wrap = document.getElementById("tbl-sql-wrap");
+    if (!data.rows.length && offset === 0 && !q) {
+      wrap.innerHTML = `<div class="empty"><div class="big">🗄</div>${TABLA_EMPTY_MSG[tabla]}</div>`;
+      document.getElementById("pag-tabla").innerHTML = "";
+      return;
+    }
+    renderTable("tbl-sql-wrap", TABLA_COLS[tabla], data.rows);
+    renderPagination("pag-tabla", data.total, offset, 50, "loadTablaSql");
   }
-  document.getElementById("q-stk").addEventListener("keydown", e => e.key === "Enter" && loadStock(0));
+
+  document.getElementById("tabla-selector").addEventListener("change", () => loadTablaSql(0));
+  document.getElementById("q-tabla").addEventListener("keydown", e => e.key === "Enter" && loadTablaSql(0));
+  document.getElementById("btn-export-tabla").addEventListener("click", () => {
+    const tabla = document.getElementById("tabla-selector").value;
+    exportTable(TABLA_EXPORT[tabla]);
+  });
 
   // ── Stock Detallado ──
   let detChart = null;
