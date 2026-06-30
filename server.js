@@ -209,6 +209,18 @@ function initSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nro_corto INTEGER,
       descripcion TEXT,
+      rubro TEXT,
+      arranque REAL,
+      recepciones REAL,
+      consumo REAL,
+      necesidad_inicial REAL,
+      necesidad_actual REAL,
+      avance_pct REAL,
+      calculado_en TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS avance_x_rubro (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rubro TEXT,
       arranque REAL,
       recepciones REAL,
       consumo REAL,
@@ -1082,9 +1094,9 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
     }
 
     const resultado = withDb(db => {
-      // Universo de artículos: Nº corto sin duplicados desde Articulos
+      // Universo de artículos: Nº corto sin duplicados desde Articulos, con su Rubro
       const articulosBase = query(db, `
-        SELECT nro_corto, MAX(descripcion) as descripcion
+        SELECT nro_corto, MAX(descripcion) as descripcion, MAX(rubro) as rubro
         FROM articulos
         WHERE nro_corto IS NOT NULL
         GROUP BY nro_corto
@@ -1126,9 +1138,9 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
 
       db.run("DELETE FROM avance_x_articulo");
       const stmt = db.prepare(`INSERT INTO avance_x_articulo (
-        nro_corto, descripcion, arranque, recepciones, consumo,
+        nro_corto, descripcion, rubro, arranque, recepciones, consumo,
         necesidad_inicial, necesidad_actual, avance_pct
-      ) VALUES (?,?,?,?,?,?,?,?)`);
+      ) VALUES (?,?,?,?,?,?,?,?,?)`);
 
       let filas = 0;
       for (const art of articulosBase) {
@@ -1153,10 +1165,46 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
           avancePct = Math.abs(recepciones / necesidadInicial);
         }
 
-        stmt.run([nroCorto, art.descripcion, arranque, recepciones, consumo, necesidadInicial, necesidadActual, avancePct]);
+        stmt.run([nroCorto, art.descripcion, art.rubro, arranque, recepciones, consumo, necesidadInicial, necesidadActual, avancePct]);
         filas++;
       }
       stmt.free();
+
+      // ── Avance x Rubro: agregación de avance_x_articulo agrupando por rubro ──
+      const rubroAgg = query(db, `
+        SELECT
+          rubro,
+          SUM(arranque) as arranque,
+          SUM(recepciones) as recepciones,
+          SUM(consumo) as consumo,
+          SUM(COALESCE(necesidad_inicial, 0)) as necesidad_inicial,
+          SUM(COALESCE(necesidad_actual, 0)) as necesidad_actual
+        FROM avance_x_articulo
+        WHERE rubro IS NOT NULL AND rubro != ''
+        GROUP BY rubro
+      `);
+
+      db.run("DELETE FROM avance_x_rubro");
+      const stmtRubro = db.prepare(`INSERT INTO avance_x_rubro (
+        rubro, arranque, recepciones, consumo, necesidad_inicial, necesidad_actual, avance_pct
+      ) VALUES (?,?,?,?,?,?,?)`);
+
+      for (const r of rubroAgg) {
+        // Igual que en Avance x Artículo, la suma de necesidad_inicial es <= 0 (o 0 si ningún
+        // artículo del rubro tuvo necesidad). Si es 0, avance = 1 (100%); si no, valor absoluto.
+        const necesidadInicialRubro = r.necesidad_inicial;
+        let avancePctRubro;
+        if (!necesidadInicialRubro) {
+          avancePctRubro = 1;
+        } else {
+          avancePctRubro = Math.abs(r.recepciones / necesidadInicialRubro);
+        }
+        stmtRubro.run([
+          r.rubro, r.arranque, r.recepciones, r.consumo,
+          necesidadInicialRubro, r.necesidad_actual, avancePctRubro,
+        ]);
+      }
+      stmtRubro.free();
 
       return filas;
     });
@@ -1165,18 +1213,79 @@ app.post("/api/avance/calcular", requireDb, (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+// Columnas válidas para ordenar, evita inyección SQL vía el parámetro sort
+const AVANCE_SORT_COLS = new Set([
+  "nro_corto", "descripcion", "rubro", "arranque", "recepciones",
+  "consumo", "necesidad_inicial", "necesidad_actual", "avance_pct",
+]);
+const AVANCE_RUBRO_SORT_COLS = new Set([
+  "rubro", "arranque", "recepciones", "consumo",
+  "necesidad_inicial", "necesidad_actual", "avance_pct",
+]);
+
+function parseSortParams(req, validCols, defaultCol) {
+  const col = validCols.has(req.query.sort) ? req.query.sort : defaultCol;
+  const dir = req.query.dir === "asc" ? "ASC" : "DESC";
+  return { col, dir };
+}
+
+app.get("/api/avance/rubros", requireDb, (req, res) => {
+  try {
+    const rubros = readDb(db => query(db,
+      `SELECT DISTINCT rubro FROM avance_x_articulo WHERE rubro IS NOT NULL AND rubro != '' ORDER BY rubro`
+    )).map(r => r.rubro);
+    res.json({ rubros });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/avance", requireDb, (req, res) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit) || 50, 1000);
     const offset = parseInt(req.query.offset) || 0;
     const q      = req.query.q ? `%${req.query.q}%` : null;
-    const data   = readDb(db => {
-      const rows  = q
-        ? query(db, "SELECT * FROM avance_x_articulo WHERE descripcion LIKE ? ORDER BY nro_corto LIMIT ? OFFSET ?", [q, limit, offset])
-        : query(db, "SELECT * FROM avance_x_articulo ORDER BY nro_corto LIMIT ? OFFSET ?", [limit, offset]);
-      const total = q
-        ? query(db, "SELECT COUNT(*) as c FROM avance_x_articulo WHERE descripcion LIKE ?", [q])[0]?.c ?? 0
-        : query(db, "SELECT COUNT(*) as c FROM avance_x_articulo")[0]?.c ?? 0;
+    const rubro  = req.query.rubro || null;
+    const { col, dir } = parseSortParams(req, AVANCE_SORT_COLS, "nro_corto");
+
+    const data = readDb(db => {
+      const whereClauses = [];
+      const params = [];
+      if (q)     { whereClauses.push("descripcion LIKE ?"); params.push(q); }
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      const where = whereClauses.length ? "WHERE " + whereClauses.join(" AND ") : "";
+
+      const rows = query(db,
+        `SELECT * FROM avance_x_articulo ${where} ORDER BY ${col} ${dir} LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+      const total = query(db,
+        `SELECT COUNT(*) as c FROM avance_x_articulo ${where}`, params
+      )[0]?.c ?? 0;
+
+      return { rows, total, limit, offset };
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/avance-rubro", requireDb, (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    const rubro  = req.query.rubro || null;
+    const { col, dir } = parseSortParams(req, AVANCE_RUBRO_SORT_COLS, "arranque");
+
+    const data = readDb(db => {
+      const where = rubro ? "WHERE rubro = ?" : "";
+      const params = rubro ? [rubro] : [];
+
+      const rows = query(db,
+        `SELECT * FROM avance_x_rubro ${where} ORDER BY ${col} ${dir} LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+      const total = query(db,
+        `SELECT COUNT(*) as c FROM avance_x_rubro ${where}`, params
+      )[0]?.c ?? 0;
+
       return { rows, total, limit, offset };
     });
     res.json(data);
@@ -1188,7 +1297,7 @@ app.get("/api/export/:tabla", requireDb, (req, res) => {
     const validTables = [
       "articulos", "stock_sucursales", "stock_detallado", "pendiente_completo",
       "stock_arranque", "recepciones", "pmp_x_bom", "pmp_y_comex", "pgm", "pgm_x_bom",
-      "avance_x_articulo",
+      "avance_x_articulo", "avance_x_rubro",
     ];
     const tabla = validTables.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows  = readDb(db => query(db, `SELECT * FROM ${tabla}`));
