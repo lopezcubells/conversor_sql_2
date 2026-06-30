@@ -232,20 +232,59 @@
     }
     .search-input:focus { border-color: var(--accent); }
 
-    /* ── Avance: inputs de parámetros, compactos y uniformes ── */
+    /* ── Avance: parámetros de arranque, compactos y colapsables ── */
+    .avance-params-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .avance-param-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .avance-param-group label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
     .avance-param-input {
-      width: 124px;
-      flex: 0 0 124px;
-      height: 30px;
-      padding: 2px 8px;
-      font-size: 15px;
-      line-height: 1;
+      width: auto;
+      max-width: 118px;
+      box-sizing: content-box;
+      padding: 3px 6px !important;
+      font-size: 13px !important;
+      line-height: 1.2;
+      border-radius: 5px;
       color-scheme: dark;
     }
-    .avance-param-input::-webkit-datetime-edit { padding: 0; }
-    .avance-param-input::-webkit-calendar-picker-indicator {
-      padding: 2px;
-      margin-left: 2px;
+
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .collapsible-header .chevron {
+      font-size: 11px;
+      color: var(--muted);
+      transition: transform .2s;
+    }
+    .collapsible-header.collapsed .chevron { transform: rotate(-90deg); }
+    .collapsible-body {
+      overflow: hidden;
+      max-height: 400px;
+      transition: max-height .25s ease, opacity .2s ease, margin-top .2s ease;
+      opacity: 1;
+      margin-top: 14px;
+    }
+    .collapsible-body.collapsed {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
     }
 
     /* ── Toast ── */
@@ -767,31 +806,36 @@
 <!-- ═══ AVANCE ═══ -->
 <div class="pane" id="tab-avance">
   <div class="card">
-    <div class="card-title">Parámetros de arranque</div>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-      Definí estos parámetros una sola vez. Una vez establecidos con el botón, quedan fijos y se usan para calcular el avance en esta pestaña.
-    </p>
-    <div class="search-row" style="margin-bottom:0;align-items:flex-end;flex-wrap:wrap">
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha de arranque</label>
-        <input type="date" class="search-input avance-param-input" id="avance-fecha" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora de arranque</label>
-        <input type="time" class="search-input avance-param-input" id="avance-hora" step="1" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicial PMP</label>
-        <input type="date" class="search-input avance-param-input" id="avance-fecha-ini-pmp" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final PMP</label>
-        <input type="date" class="search-input avance-param-input" id="avance-fecha-fin-pmp" />
-      </div>
-      <button class="btn btn-primary" id="avance-btn-establecer">Establecer arranque</button>
-      <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
+    <div class="collapsible-header" id="avance-params-toggle">
+      <div class="card-title" style="margin-bottom:0">Parámetros de arranque</div>
+      <span class="chevron">▼</span>
     </div>
-    <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+    <div class="collapsible-body" id="avance-params-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+        Definí estos parámetros una sola vez. Una vez establecidos con el botón, quedan fijos y se usan para calcular el avance en esta pestaña.
+      </p>
+      <div class="avance-params-row">
+        <div class="avance-param-group">
+          <label>Fecha de arranque</label>
+          <input type="date" class="search-input avance-param-input" id="avance-fecha" />
+        </div>
+        <div class="avance-param-group">
+          <label>Hora de arranque</label>
+          <input type="time" class="search-input avance-param-input" id="avance-hora" step="1" />
+        </div>
+        <div class="avance-param-group">
+          <label>Fecha inicial PMP</label>
+          <input type="date" class="search-input avance-param-input" id="avance-fecha-ini-pmp" />
+        </div>
+        <div class="avance-param-group">
+          <label>Fecha final PMP</label>
+          <input type="date" class="search-input avance-param-input" id="avance-fecha-fin-pmp" />
+        </div>
+        <button class="btn btn-primary" id="avance-btn-establecer">Establecer arranque</button>
+        <button class="btn btn-outline" id="avance-btn-reset" style="display:none">↺ Restablecer</button>
+      </div>
+      <div id="avance-estado" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -1725,6 +1769,12 @@
     document.getElementById("avance-estado").textContent = "";
   }
 
+  // ── Sección de parámetros colapsable ──
+  document.getElementById("avance-params-toggle").addEventListener("click", () => {
+    document.getElementById("avance-params-toggle").classList.toggle("collapsed");
+    document.getElementById("avance-params-body").classList.toggle("collapsed");
+  });
+
   function initAvance() {
     const state = getAvanceState();
     if (state) {
@@ -1788,16 +1838,29 @@
 
   let avanceRubrosLoaded = false;
 
+  // Mismo subconjunto fijo que usa el backend para Avance x Rubro
+  const AVANCE_RUBRO_WHITELIST = [
+    "ETIQUETA FR", "ETIQUETA CT", "Tapón", "Cápsulas", "TETRA Envases",
+    "BOTELLA Vidrio", "Tapa", "Bandeja", "Cajas", "BIB Envase", "Pallets",
+  ];
+
   async function ensureAvanceRubrosLoaded() {
     if (avanceRubrosLoaded) return;
     try {
       const { rubros } = await fetch(`${API}/api/avance/rubros`).then(r => r.json());
-      [document.getElementById("avance-art-rubro-filter"), document.getElementById("avance-rubro-rubro-filter")].forEach(sel => {
-        rubros.forEach(r => {
-          const opt = document.createElement("option");
-          opt.value = r; opt.textContent = r;
-          sel.appendChild(opt);
-        });
+
+      const artSel = document.getElementById("avance-art-rubro-filter");
+      rubros.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.textContent = r;
+        artSel.appendChild(opt);
+      });
+
+      const rubroSel = document.getElementById("avance-rubro-rubro-filter");
+      AVANCE_RUBRO_WHITELIST.filter(r => rubros.includes(r)).forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.textContent = r;
+        rubroSel.appendChild(opt);
       });
       avanceRubrosLoaded = true;
     } catch (e) { console.error(e); }
