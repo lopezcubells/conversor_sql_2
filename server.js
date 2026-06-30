@@ -968,12 +968,17 @@ app.get("/api/recepciones/rubros", requireDb, (req, res) => {
 app.get("/api/recepciones/total-anio-actual", requireDb, (req, res) => {
   try {
     const anioActual = String(new Date().getFullYear());
-    const row = readDb(db => query(db, `
-      SELECT SUM(cantidad_recibida) as total
-      FROM recepciones
-      WHERE substr(fecha_recepcion, 1, 4) = ?
-        AND cantidad_recibida IS NOT NULL
-    `, [anioActual]))[0];
+    const rubro = req.query.rubro || null;
+    const row = readDb(db => {
+      const whereClauses = ["substr(fecha_recepcion, 1, 4) = ?", "cantidad_recibida IS NOT NULL"];
+      const params = [anioActual];
+      if (rubro) { whereClauses.push("rubro = ?"); params.push(rubro); }
+      return query(db, `
+        SELECT SUM(cantidad_recibida) as total
+        FROM recepciones
+        WHERE ${whereClauses.join(" AND ")}
+      `, params);
+    })[0];
     res.json({ anio: anioActual, total: row?.total ?? 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
