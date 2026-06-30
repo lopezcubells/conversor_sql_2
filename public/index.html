@@ -719,6 +719,21 @@
       <div class="done-badge">✓ Importado</div>
     </div>
 
+    <div class="card import-card" id="card-pdtt" title="Se lee la tabla ov_x_mes_facturacion del archivo Envases Tetra - Pendientes. Se calcula automáticamente la Fecha Facturación a partir de MES FACTURACION TETRA.">
+      <div class="card-title">Pendientes Tetra</div>
+      <div class="drop-zone" id="dz-pdtt">
+        <input type="file" accept=".xlsx,.xls" id="file-pdtt" />
+        <div class="icon">📂</div>
+        <p>Arrastrá o hacé clic</p>
+        <div class="filename" id="fn-pdtt"></div>
+      </div>
+      <div class="progress" id="prog-pdtt"><div class="progress-bar" id="pb-pdtt"></div></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-pdtt" disabled>⬆ Importar</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
   </div>
 </div>
 
@@ -736,6 +751,7 @@
       <option value="pgm">PGM</option>
       <option value="pgm-x-bom">PGM x BOM</option>
       <option value="costo-insumos">Costo de Insumos</option>
+      <option value="pendientes-tetra">Pendientes Tetra</option>
     </select>
     <input class="search-input" id="q-tabla" placeholder="Buscar por descripción o 2º nº artículo…" />
     <button class="btn btn-outline" onclick="loadTablaSql(0)">🔍 Buscar</button>
@@ -1033,6 +1049,7 @@
   setupDrop("dz-rec", "file-rec", "fn-rec", "btn-rec");
   setupDrop("dz-pgm", "file-pgm", "fn-pgm", "btn-pgm");
   setupDrop("dz-cti", "file-cti", "fn-cti", "btn-cti");
+  setupDrop("dz-pdtt", "file-pdtt", "fn-pdtt", "btn-pdtt");
 
   // ── Import ──
   async function doImport(endpoint, fileId, cardId, progId, pbId, btnId) {
@@ -1088,6 +1105,8 @@
     doImport("pgm-x-bom", "file-pgm", "card-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
   document.getElementById("btn-cti").addEventListener("click", () =>
     doImport("costo-insumos", "file-cti", "card-cti", "prog-cti", "pb-cti", "btn-cti"));
+  document.getElementById("btn-pdtt").addEventListener("click", () =>
+    doImport("pendientes-tetra", "file-pdtt", "card-pdtt", "prog-pdtt", "pb-pdtt", "btn-pdtt"));
 
   // ── Stats ──
   async function loadStats() {
@@ -1108,6 +1127,7 @@
         "card-rec": data.recepciones,
         "card-pgm": data.pgmTotal,
         "card-cti": data.costoInsumos,
+        "card-pdtt": data.pendientesTetra,
       };
       Object.entries(cardCounts).forEach(([cardId, count]) => {
         const card = document.getElementById(cardId);
@@ -1290,18 +1310,31 @@
       { key: "unidad_negocio", label: "Unidad Negocio" },
       { key: "costo_uni",      label: "Costo Uni" },
     ],
+    "pendientes-tetra": [
+      { key: "id",                     label: "ID" },
+      { key: "tp_ord",                 label: "Tp Ord" },
+      { key: "numero_orden",           label: "Nº Orden" },
+      { key: "nro_corto",              label: "Nº Corto" },
+      { key: "observaciones",          label: "Observaciones" },
+      { key: "cantidad_recibida",      label: "Cant. Recibida" },
+      { key: "fecha_recepcion",        label: "Fecha Recepción" },
+      { key: "tp_doc",                 label: "Tp Doc" },
+      { key: "numero_documento",       label: "Nº Documento" },
+      { key: "mes_facturacion_tetra",  label: "Mes Facturación Tetra" },
+      { key: "fecha_facturacion",      label: "Fecha Facturación" },
+    ],
   };
   const TABLA_ENDPOINT = {
     articulos: "articulos", stock: "stock", pendiente: "pendiente",
     "stock-arranque": "stock-arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp-x-bom", "pmp-y-comex": "pmp-y-comex", pgm: "pgm", "pgm-x-bom": "pgm-x-bom",
-    "costo-insumos": "costo-insumos",
+    "costo-insumos": "costo-insumos", "pendientes-tetra": "pendientes-tetra",
   };
   const TABLA_EXPORT = {
     articulos: "articulos", stock: "stock_sucursales", pendiente: "pendiente_completo",
     "stock-arranque": "stock_arranque", recepciones: "recepciones",
     "pmp-x-bom": "pmp_x_bom", "pmp-y-comex": "pmp_y_comex", pgm: "pgm", "pgm-x-bom": "pgm_x_bom",
-    "costo-insumos": "costo_insumos",
+    "costo-insumos": "costo_insumos", "pendientes-tetra": "pendientes_tetra",
   };
   const TABLA_EMPTY_MSG = {
     articulos: "Importá artículos primero",
@@ -1314,6 +1347,7 @@
     pgm: "Importá PGM x BOM primero",
     "pgm-x-bom": "Importá PGM x BOM primero",
     "costo-insumos": "Importá Costo de Insumos primero",
+    "pendientes-tetra": "Importá Pendientes Tetra primero",
   };
 
   async function loadTablaSql(offset = 0) {
@@ -2227,11 +2261,19 @@
         wrap.innerHTML = `<div class="empty"><div class="big">📦</div>Sin recepciones para este rubro</div>`;
         return;
       }
+
+      const esTetraEnvases = rubro === "TETRA Envases";
+      const headerExtra = esTetraEnvases ? "<th>Cantidad Facturada TetraPak</th>" : "";
+      const rowExtra = (r) => esTetraEnvases
+        ? `<td>${fmtNum(r.cantidad_facturada_tetrapak ?? 0)}</td>`
+        : "";
+
       wrap.innerHTML = `<table>
-        <thead><tr><th>Mes</th><th>Cantidad Recibida</th></tr></thead>
+        <thead><tr><th>Mes</th><th>Cantidad Recibida</th>${headerExtra}</tr></thead>
         <tbody>${rows.map(r => `<tr>
           <td>${fmtMesLabel(r.mes)}</td>
           <td>${fmtNum(r.cantidad_recibida)}</td>
+          ${rowExtra(r)}
         </tr>`).join("")}</tbody>
       </table>`;
     } catch (e) { console.error(e); }
