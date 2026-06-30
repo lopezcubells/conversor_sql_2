@@ -237,6 +237,134 @@
     /* ── Empty ── */
     .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
     .empty .big { font-size: 40px; margin-bottom: 8px; }
+
+    /* ── Rubros Detallado: KPI hero row ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--kpi-accent, var(--accent));
+    }
+    .kpi-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--mono);
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ── Rubro gallery cards ── */
+    .rubro-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .rubro-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--rubro-color, var(--accent));
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: transform .12s, border-color .15s, background .15s;
+      position: relative;
+    }
+    .rubro-card:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.03);
+    }
+    .rubro-card.active {
+      border-color: var(--rubro-color, var(--accent));
+      background: rgba(255,255,255,.05);
+      box-shadow: 0 0 0 1px var(--rubro-color, var(--accent));
+    }
+    .rubro-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 10px;
+      line-height: 1.3;
+      min-height: 34px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .rubro-card-units {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: var(--rubro-color, var(--accent));
+    }
+    .rubro-card-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .rubro-card-bar {
+      height: 4px;
+      border-radius: 99px;
+      background: var(--border);
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .rubro-card-bar-fill {
+      height: 100%;
+      background: var(--rubro-color, var(--accent));
+      border-radius: 99px;
+    }
+
+    /* ── Section heading inside Rubros Detallado ── */
+    .section-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin: 28px 0 14px;
+    }
+    .section-heading h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .section-heading .clear-filter {
+      font-size: 12px;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
   </style>
 </head>
 <body>
@@ -254,6 +382,7 @@
   <div class="tab" data-tab="importar">Importar</div>
   <div class="tab" data-tab="tablas-sql">Tablas SQL</div>
   <div class="tab" data-tab="stock-detallado">Stock detallado</div>
+  <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -360,6 +489,39 @@
   </div>
 </div>
 
+<!-- ═══ RUBROS DETALLADO ═══ -->
+<div class="pane" id="tab-rubros-detallado">
+
+  <div class="kpi-row" id="rd-kpis">
+    <div class="empty"><div class="big">📦</div>Cargando indicadores…</div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Rubros por volumen de stock</h2>
+    <span class="clear-filter" id="rd-clear-filter" style="display:none">✕ Quitar filtro</span>
+  </div>
+  <div class="rubro-gallery" id="rd-gallery"></div>
+
+  <div class="section-heading">
+    <h2 id="rd-chart-title">Distribución de unidades por rubro</h2>
+  </div>
+  <div class="card">
+    <div style="position:relative;height:420px">
+      <canvas id="rd-chart-rubros"></canvas>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2 id="rd-pareto-title">Concentración de inventario — top artículos</h2>
+  </div>
+  <div class="card">
+    <div style="position:relative;height:420px">
+      <canvas id="rd-chart-pareto"></canvas>
+    </div>
+  </div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -375,6 +537,7 @@
       if (tab.dataset.tab === "dashboard") loadStats();
       if (tab.dataset.tab === "tablas-sql") loadTablaSql(0);
       if (tab.dataset.tab === "stock-detallado") initStockDetallado();
+      if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
     });
   });
 
@@ -607,6 +770,251 @@
   // ── Export ──
   function exportTable(tabla) {
     window.open(`${API}/api/export/${tabla}`, "_blank");
+  }
+
+  // ── Rubros Detallado: dashboard de inventario ──
+
+  // Paleta categórica fija — un color por posición de ranking, nunca aleatoria.
+  // Pensada para fondo oscuro: tonos medios saturados, legibles, sin neón.
+  const RUBRO_PALETTE = [
+    "#4f8ef7", // azul    — acento principal de la app
+    "#34c97e", // verde
+    "#f7874f", // naranja
+    "#a78bfa", // violeta
+    "#22c7c7", // cian
+    "#f7c948", // ámbar
+    "#ec6f9b", // rosa
+    "#7dd87d", // verde claro
+    "#6b9bd1", // azul grisáceo
+    "#c97ef7", // púrpura
+  ];
+  const RUBRO_OTROS_COLOR = "#5f5e6b"; // gris neutro para "Otros"
+
+  function colorForRank(i, total) {
+    if (i < RUBRO_PALETTE.length) return RUBRO_PALETTE[i];
+    return RUBRO_OTROS_COLOR;
+  }
+
+  function fmtNum(n) {
+    return Math.round(n).toLocaleString("es-AR");
+  }
+
+  let rdResumenCache = null;
+  let rdRubroChart = null;
+  let rdParetoChart = null;
+  let rdActiveRubro = null;
+
+  async function initRubrosDetallado() {
+    await Promise.all([loadRdKpis(), loadRdResumen()]);
+    renderRdGallery();
+    renderRdRubroChart();
+    loadRdPareto(null);
+  }
+
+  async function loadRdKpis() {
+    try {
+      const k = await fetch(`${API}/api/rubros-detallado/kpis`).then(r => r.json());
+      const wrap = document.getElementById("rd-kpis");
+      wrap.innerHTML = `
+        <div class="kpi-card" style="--kpi-accent:#4f8ef7">
+          <div class="kpi-label">Artículos con stock</div>
+          <div class="kpi-value">${fmtNum(k.articulosConStock)}</div>
+          <div class="kpi-sub">con existencias &gt; 0</div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#34c97e">
+          <div class="kpi-label">Unidades totales</div>
+          <div class="kpi-value">${fmtNum(k.unidadesTotales)}</div>
+          <div class="kpi-sub">suma de existencias</div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#f7c948">
+          <div class="kpi-label">Rubros activos</div>
+          <div class="kpi-value">${fmtNum(k.totalRubros)}</div>
+          <div class="kpi-sub">con stock disponible</div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#a78bfa">
+          <div class="kpi-label">Rubro líder</div>
+          <div class="kpi-value" style="font-size:18px">${k.rubroLider ?? "—"}</div>
+          <div class="kpi-sub">${fmtNum(k.rubroLiderUnidades)} unidades</div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#5f5e6b">
+          <div class="kpi-label">Sin rubro asignado</div>
+          <div class="kpi-value">${fmtNum(k.articulosSinRubro)}</div>
+          <div class="kpi-sub">artículos a clasificar</div>
+        </div>
+      `;
+    } catch (e) { console.error(e); }
+  }
+
+  async function loadRdResumen() {
+    try {
+      const { rows } = await fetch(`${API}/api/rubros-detallado/resumen`).then(r => r.json());
+      rdResumenCache = rows;
+    } catch (e) { console.error(e); rdResumenCache = []; }
+  }
+
+  function renderRdGallery() {
+    const gallery = document.getElementById("rd-gallery");
+    if (!rdResumenCache || !rdResumenCache.length) {
+      gallery.innerHTML = `<div class="empty"><div class="big">🗄</div>Importá artículos y stock primero</div>`;
+      return;
+    }
+    const maxUnidades = rdResumenCache[0].unidades;
+    gallery.innerHTML = rdResumenCache.map((r, i) => {
+      const color = colorForRank(i, rdResumenCache.length);
+      const pctOfMax = maxUnidades > 0 ? (r.unidades / maxUnidades) * 100 : 0;
+      const isActive = rdActiveRubro === r.rubro;
+      return `
+        <div class="rubro-card${isActive ? " active" : ""}" style="--rubro-color:${color}" data-rubro="${r.rubro.replace(/"/g, "&quot;")}">
+          <div class="rubro-card-name">${r.rubro}</div>
+          <div class="rubro-card-units">${fmtNum(r.unidades)}</div>
+          <div class="rubro-card-meta">
+            <span>${r.articulos} artículos</span>
+            <span>${r.participacion.toFixed(1)}%</span>
+          </div>
+          <div class="rubro-card-bar"><div class="rubro-card-bar-fill" style="width:${pctOfMax}%"></div></div>
+        </div>
+      `;
+    }).join("");
+
+    gallery.querySelectorAll(".rubro-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const rubro = card.dataset.rubro;
+        rdActiveRubro = (rdActiveRubro === rubro) ? null : rubro;
+        renderRdGallery();
+        loadRdPareto(rdActiveRubro);
+        document.getElementById("rd-clear-filter").style.display = rdActiveRubro ? "inline" : "none";
+        document.getElementById("rd-pareto-title").textContent = rdActiveRubro
+          ? `Concentración de inventario — ${rdActiveRubro}`
+          : "Concentración de inventario — top artículos";
+      });
+    });
+  }
+
+  document.getElementById("rd-clear-filter").addEventListener("click", () => {
+    rdActiveRubro = null;
+    renderRdGallery();
+    loadRdPareto(null);
+    document.getElementById("rd-clear-filter").style.display = "none";
+    document.getElementById("rd-pareto-title").textContent = "Concentración de inventario — top artículos";
+  });
+
+  function renderRdRubroChart() {
+    if (!rdResumenCache || !rdResumenCache.length) return;
+    const top = rdResumenCache.slice(0, 12);
+    const otros = rdResumenCache.slice(12);
+    const labels = top.map(r => r.rubro);
+    const data = top.map(r => r.unidades);
+    const colors = top.map((r, i) => colorForRank(i, rdResumenCache.length));
+
+    if (otros.length) {
+      labels.push(`Otros (${otros.length} rubros)`);
+      data.push(otros.reduce((a, r) => a + r.unidades, 0));
+      colors.push(RUBRO_OTROS_COLOR);
+    }
+
+    const ctx = document.getElementById("rd-chart-rubros").getContext("2d");
+    if (rdRubroChart) rdRubroChart.destroy();
+    rdRubroChart = new Chart(ctx, {
+      type: "bar",
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${fmtNum(ctx.raw)} unidades`
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
+          y: { ticks: { color: "#e2e4ef", font: { size: 11 } }, grid: { display: false } },
+        }
+      }
+    });
+  }
+
+  async function loadRdPareto(rubro) {
+    try {
+      const url = `${API}/api/rubros-detallado/top-articulos?limit=15${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
+      const { rows } = await fetch(url).then(r => r.json());
+
+      const ctx = document.getElementById("rd-chart-pareto").getContext("2d");
+      const labels = rows.map(r => r.descripcion?.length > 26 ? r.descripcion.slice(0, 26) + "…" : r.descripcion);
+      const unidades = rows.map(r => r.unidades);
+      const acumulado = rows.map(r => r.acumuladoPct);
+
+      if (rdParetoChart) rdParetoChart.destroy();
+      rdParetoChart = new Chart(ctx, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Unidades",
+              data: unidades,
+              backgroundColor: "rgba(79,142,247,.7)",
+              borderRadius: 4,
+              borderSkipped: false,
+              yAxisID: "y",
+              order: 2,
+            },
+            {
+              type: "line",
+              label: "% acumulado",
+              data: acumulado,
+              borderColor: "#f7c948",
+              backgroundColor: "#f7c948",
+              borderWidth: 2,
+              pointRadius: 3,
+              pointBackgroundColor: "#f7c948",
+              yAxisID: "y1",
+              tension: 0.25,
+              order: 1,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: "#e2e4ef", boxWidth: 12, font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ctx.dataset.type === "line"
+                  ? ` ${ctx.raw.toFixed(1)}% acumulado`
+                  : ` ${fmtNum(ctx.raw)} unidades`
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#7b7f99", maxRotation: 60, minRotation: 60, font: { size: 10 } },
+              grid: { display: false }
+            },
+            y: {
+              position: "left",
+              ticks: { color: "#7b7f99", callback: v => fmtNum(v) },
+              grid: { color: "#2a2d3e" },
+              title: { display: true, text: "Unidades", color: "#7b7f99" }
+            },
+            y1: {
+              position: "right",
+              min: 0, max: 100,
+              ticks: { color: "#f7c948", callback: v => v + "%" },
+              grid: { display: false },
+              title: { display: true, text: "% acumulado", color: "#f7c948" }
+            }
+          }
+        }
+      });
+    } catch (e) { console.error(e); }
   }
 
   // ── DB ready banner ──
