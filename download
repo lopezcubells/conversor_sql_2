@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Importador Excel → SQL</title>
+  <style>
+    /* ── Tokens ── */
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3e;
+      --accent:    #4f8ef7;
+      --accent2:   #34c97e;
+      --warn:      #f7874f;
+      --text:      #e2e4ef;
+      --muted:     #7b7f99;
+      --radius:    10px;
+      --mono:      'JetBrains Mono', 'Fira Code', monospace;
+      --sans:      'Inter', system-ui, sans-serif;
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    header {
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 18px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+    header p  { color: var(--muted); font-size: 13px; }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 16px 32px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 20px;
+      cursor: pointer;
+      border-radius: var(--radius) var(--radius) 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid transparent;
+      border-bottom: none;
+      transition: color .15s, background .15s;
+      user-select: none;
+    }
+    .tab:hover   { color: var(--text); }
+    .tab.active  {
+      color: var(--text);
+      background: var(--surface);
+      border-color: var(--border);
+    }
+
+    .pane { display: none; padding: 28px 32px; }
+    .pane.active { display: block; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Stats grid ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-num  { font-size: 32px; font-weight: 700; font-family: var(--mono); color: var(--accent); }
+    .stat-lbl  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Upload zone ── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: rgba(79,142,247,.05); }
+    .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    .drop-zone .icon  { font-size: 32px; margin-bottom: 8px; }
+    .drop-zone p { color: var(--muted); font-size: 13px; }
+    .drop-zone .filename { margin-top: 8px; color: var(--accent); font-size: 13px; font-family: var(--mono); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent);  color: #fff; }
+    .btn-success  { background: var(--accent2); color: #fff; }
+    .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-row { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+
+    /* ── Mode toggle ── */
+    .mode-toggle { display: flex; gap: 6px; align-items: center; }
+    .mode-toggle label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--muted); }
+    .mode-toggle input[type=radio] { accent-color: var(--accent); }
+    .mode-toggle label:has(input:checked) { color: var(--text); }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    /* ── Search ── */
+    .search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .search-input {
+      flex: 1; min-width: 200px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 14px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      font-size: 13px;
+      max-width: 340px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all .3s;
+      z-index: 999;
+    }
+    #toast.show { transform: none; opacity: 1; }
+    #toast.ok   { border-left: 3px solid var(--accent2); }
+    #toast.err  { border-left: 3px solid var(--warn);   }
+
+    /* ── Progress ── */
+    .progress { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; margin-top: 12px; display: none; }
+    .progress-bar { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+
+    /* ── Log ── */
+    .log-entry {
+      display: flex; gap: 12px; align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-badge {
+      font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 99px;
+      background: rgba(52,201,126,.15); color: var(--accent2);
+    }
+    .log-meta { color: var(--muted); font-size: 12px; }
+
+    /* ── Pagination ── */
+    .pagination { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
+    .pagination span { color: var(--muted); font-size: 12px; }
+
+    /* ── Empty ── */
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty .big { font-size: 40px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div>
+    <h1>Importador Excel → SQL</h1>
+    <p>Cargá tus archivos y gestioná la base de datos</p>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="dashboard">Dashboard</div>
+  <div class="tab" data-tab="articulos-import">Importar Artículos</div>
+  <div class="tab" data-tab="stock-import">Importar Stock</div>
+  <div class="tab" data-tab="articulos-view">Ver Artículos</div>
+  <div class="tab" data-tab="stock-view">Ver Stock</div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="pane active" id="tab-dashboard">
+  <div class="stats" id="stats-grid">
+    <div class="stat"><div class="stat-num" id="cnt-articulos">—</div><div class="stat-lbl">Artículos</div></div>
+    <div class="stat"><div class="stat-num" id="cnt-stock">—</div><div class="stat-lbl">Registros de Stock</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Últimas importaciones</div>
+    <div id="log-list"><div class="empty"><div class="big">📋</div>Sin importaciones aún</div></div>
+  </div>
+</div>
+
+<!-- ═══ IMPORT ARTÍCULOS ═══ -->
+<div class="pane" id="tab-articulos-import">
+  <div class="card">
+    <div class="card-title">Archivo Excel — Artículos por Rubro</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Se lee la hoja <strong style="color:var(--text)">BD ART x RUBRO</strong> del archivo.
+    </p>
+
+    <div class="drop-zone" id="dz-art">
+      <input type="file" accept=".xlsx,.xls" id="file-art" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-art"></div>
+    </div>
+
+    <div class="progress" id="prog-art"><div class="progress-bar" id="pb-art"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-art" value="replace" checked> Reemplazar tabla</label>
+        <label><input type="radio" name="mode-art" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-art" disabled>⬆ Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ IMPORT STOCK ═══ -->
+<div class="pane" id="tab-stock-import">
+  <div class="card">
+    <div class="card-title">Archivo Excel — Stock por Sucursales</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+      Se lee la hoja <strong style="color:var(--text)">Sheet1</strong> del archivo.
+    </p>
+
+    <div class="drop-zone" id="dz-stk">
+      <input type="file" accept=".xlsx,.xls" id="file-stk" />
+      <div class="icon">📂</div>
+      <p>Arrastrá el archivo o hacé clic para seleccionarlo</p>
+      <div class="filename" id="fn-stk"></div>
+    </div>
+
+    <div class="progress" id="prog-stk"><div class="progress-bar" id="pb-stk"></div></div>
+
+    <div class="btn-row">
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode-stk" value="replace" checked> Reemplazar tabla</label>
+        <label><input type="radio" name="mode-stk" value="append"> Agregar registros</label>
+      </div>
+      <button class="btn btn-primary" id="btn-stk" disabled>⬆ Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VIEW ARTÍCULOS ═══ -->
+<div class="pane" id="tab-articulos-view">
+  <div class="search-row">
+    <input class="search-input" id="q-art" placeholder="Buscar por descripción o 2º nº artículo…" />
+    <button class="btn btn-outline" onclick="loadArticulos(0)">🔍 Buscar</button>
+    <button class="btn btn-outline" onclick="exportTable('articulos')">⬇ CSV</button>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="tbl-art-wrap">
+      <div class="empty"><div class="big">🗄</div>Importá artículos primero</div>
+    </div>
+  </div>
+  <div class="pagination" id="pag-art"></div>
+</div>
+
+<!-- ═══ VIEW STOCK ═══ -->
+<div class="pane" id="tab-stock-view">
+  <div class="search-row">
+    <input class="search-input" id="q-stk" placeholder="Buscar por descripción o 2º nº artículo…" />
+    <button class="btn btn-outline" onclick="loadStock(0)">🔍 Buscar</button>
+    <button class="btn btn-outline" onclick="exportTable('stock')">⬇ CSV</button>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="tbl-stk-wrap">
+      <div class="empty"><div class="big">🗄</div>Importá stock primero</div>
+    </div>
+  </div>
+  <div class="pagination" id="pag-stk"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const API = "";  // same origin
+
+  // ── Tabs ──
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab, .pane").forEach(el => el.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+      if (tab.dataset.tab === "dashboard") loadStats();
+      if (tab.dataset.tab === "articulos-view") loadArticulos(0);
+      if (tab.dataset.tab === "stock-view") loadStock(0);
+    });
+  });
+
+  // ── Toast ──
+  function toast(msg, type = "ok") {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.className = "show " + type;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("show"), 3500);
+  }
+
+  // ── Drop zones ──
+  function setupDrop(dzId, fileId, fnId, btnId) {
+    const dz = document.getElementById(dzId);
+    const fi = document.getElementById(fileId);
+    const fn = document.getElementById(fnId);
+    const bt = document.getElementById(btnId);
+
+    fi.addEventListener("change", () => {
+      if (fi.files[0]) { fn.textContent = fi.files[0].name; bt.disabled = false; }
+    });
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+    dz.addEventListener("drop", e => {
+      e.preventDefault(); dz.classList.remove("drag");
+      if (e.dataTransfer.files[0]) {
+        fi.files = e.dataTransfer.files;
+        fn.textContent = e.dataTransfer.files[0].name;
+        bt.disabled = false;
+      }
+    });
+  }
+  setupDrop("dz-art", "file-art", "fn-art", "btn-art");
+  setupDrop("dz-stk", "file-stk", "fn-stk", "btn-stk");
+
+  // ── Import ──
+  async function doImport(endpoint, fileId, modeRadio, progId, pbId, btnId) {
+    const file = document.getElementById(fileId).files[0];
+    if (!file) return toast("Seleccioná un archivo primero.", "err");
+
+    const mode = document.querySelector(`input[name="${modeRadio}"]:checked`).value;
+    const prog = document.getElementById(progId);
+    const pb   = document.getElementById(pbId);
+    const btn  = document.getElementById(btnId);
+
+    prog.style.display = "block";
+    pb.style.width = "30%";
+    btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    try {
+      pb.style.width = "70%";
+      const res = await fetch(`${API}/api/import/${endpoint}?mode=${mode}`, { method: "POST", body: fd });
+      pb.style.width = "100%";
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      toast(`✅ ${data.rows.toLocaleString()} filas importadas (modo: ${mode})`, "ok");
+      loadStats();
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    } finally {
+      setTimeout(() => { prog.style.display = "none"; pb.style.width = "0"; }, 600);
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById("btn-art").addEventListener("click", () =>
+    doImport("articulos", "file-art", "mode-art", "prog-art", "pb-art", "btn-art"));
+  document.getElementById("btn-stk").addEventListener("click", () =>
+    doImport("stock", "file-stk", "mode-stk", "prog-stk", "pb-stk", "btn-stk"));
+
+  // ── Stats ──
+  async function loadStats() {
+    try {
+      const data = await fetch(`${API}/api/stats`).then(r => r.json());
+      document.getElementById("cnt-articulos").textContent = data.articulos.toLocaleString();
+      document.getElementById("cnt-stock").textContent = data.stock.toLocaleString();
+
+      const ll = document.getElementById("log-list");
+      if (!data.logs.length) {
+        ll.innerHTML = `<div class="empty"><div class="big">📋</div>Sin importaciones aún</div>`;
+        return;
+      }
+      ll.innerHTML = data.logs.map(l => `
+        <div class="log-entry">
+          <span class="log-badge">${l.tabla}</span>
+          <div>
+            <div>${l.filename}</div>
+            <div class="log-meta">${l.filas.toLocaleString()} filas — ${new Date(l.fecha).toLocaleString("es-AR")}</div>
+          </div>
+        </div>`).join("");
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Table helpers ──
+  function renderTable(wrapId, cols, rows) {
+    const wrap = document.getElementById(wrapId);
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">🔍</div>Sin resultados</div>`; return;
+    }
+    wrap.innerHTML = `<table>
+      <thead><tr>${cols.map(c => `<th>${c.label}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${r[c.key] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function renderPagination(pagId, total, offset, limit, loadFn) {
+    const pag = document.getElementById(pagId);
+    const page = Math.floor(offset / limit) + 1;
+    const pages = Math.ceil(total / limit);
+    pag.innerHTML = `
+      <button class="btn btn-outline" ${offset === 0 ? "disabled" : ""} onclick="${loadFn}(${offset - limit})">← Anterior</button>
+      <span>Página ${page} de ${pages} · ${total.toLocaleString()} registros</span>
+      <button class="btn btn-outline" ${offset + limit >= total ? "disabled" : ""} onclick="${loadFn}(${offset + limit})">Siguiente →</button>
+    `;
+  }
+
+  // ── Artículos view ──
+  const ART_COLS = [
+    { key: "id",            label: "ID" },
+    { key: "nro_corto",     label: "Nº Corto" },
+    { key: "segundo_nro",   label: "2º Nº Artículo" },
+    { key: "descripcion",   label: "Descripción" },
+    { key: "unidad_medida", label: "UM" },
+    { key: "rubro",         label: "Rubro" },
+  ];
+
+  async function loadArticulos(offset = 0) {
+    const q = document.getElementById("q-art").value;
+    const url = `${API}/api/articulos?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
+    const data = await fetch(url).then(r => r.json());
+    renderTable("tbl-art-wrap", ART_COLS, data.rows);
+    renderPagination("pag-art", data.total, offset, 50, "loadArticulos");
+  }
+  document.getElementById("q-art").addEventListener("keydown", e => e.key === "Enter" && loadArticulos(0));
+
+  // ── Stock view ──
+  const STK_COLS = [
+    { key: "id",             label: "ID" },
+    { key: "nro_corto",      label: "Nº Corto" },
+    { key: "segundo_nro",    label: "2º Nº Artículo" },
+    { key: "descripcion",    label: "Descripción" },
+    { key: "unidad_negocio", label: "Unidad Negocio" },
+    { key: "existencias",    label: "Existencias" },
+    { key: "ubicacion",      label: "Ubicación" },
+    { key: "nro_lote_serie", label: "Lote/Serie" },
+  ];
+
+  async function loadStock(offset = 0) {
+    const q = document.getElementById("q-stk").value;
+    const url = `${API}/api/stock?limit=50&offset=${offset}${q ? "&q=" + encodeURIComponent(q) : ""}`;
+    const data = await fetch(url).then(r => r.json());
+    renderTable("tbl-stk-wrap", STK_COLS, data.rows);
+    renderPagination("pag-stk", data.total, offset, 50, "loadStock");
+  }
+  document.getElementById("q-stk").addEventListener("keydown", e => e.key === "Enter" && loadStock(0));
+
+  // ── Export ──
+  function exportTable(tabla) {
+    window.open(`${API}/api/export/${tabla}`, "_blank");
+  }
+
+  // ── DB ready banner ──
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#1a1d27;border-bottom:2px solid #f7874f;padding:10px 24px;font-size:13px;color:#f7874f;z-index:1000;display:none;text-align:center;";
+  banner.textContent = "⏳ Base de datos iniciando… esto toma unos segundos la primera vez.";
+  document.body.prepend(banner);
+
+  async function waitForDb() {
+    try {
+      const r = await fetch(`${API}/api/status`).then(r => r.json());
+      if (r.ready) { banner.style.display = "none"; loadStats(); }
+      else { banner.style.display = "block"; setTimeout(waitForDb, 1500); }
+    } catch { setTimeout(waitForDb, 2000); }
+  }
+  waitForDb();
+</script>
+</body>
+</html>
