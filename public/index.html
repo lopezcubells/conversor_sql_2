@@ -604,6 +604,7 @@
   <div class="tab" data-tab="pendientes">Pendientes</div>
   <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="recepciones-mes">Recepciones</div>
+  <div class="tab" data-tab="base-datos">Base de datos</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1017,6 +1018,56 @@
   </div>
 </div>
 
+<!-- ═══ BASE DE DATOS ═══ -->
+<div class="pane" id="tab-base-datos">
+
+  <div class="card">
+    <div class="card-title">Consumos IM/IF 2026 — 1er semestre</div>
+    <div id="db-pg-status" style="font-size:12px;color:var(--muted);margin-bottom:14px"></div>
+
+    <div class="search-row" style="flex-wrap:wrap;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Nº Corto</label>
+        <input type="number" class="search-input" id="db-f-nro" placeholder="ej: 88105" style="width:130px" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Tp Doc</label>
+        <select class="search-input" id="db-f-tpdoc" style="width:110px">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha desde</label>
+        <input type="date" class="search-input" id="db-f-desde" style="width:150px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha hasta</label>
+        <input type="date" class="search-input" id="db-f-hasta" style="width:150px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Usuario</label>
+        <select class="search-input" id="db-f-usuario" style="width:160px">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Explicación</label>
+        <input class="search-input" id="db-f-explicacion" placeholder="buscar texto…" style="width:200px" />
+      </div>
+      <button class="btn btn-primary" onclick="loadDbConsumos(0)">🔍 Buscar</button>
+      <button class="btn btn-outline" onclick="clearDbFiltros()">✕ Limpiar</button>
+    </div>
+  </div>
+
+  <div style="font-size:13px;color:var(--muted);margin-bottom:8px" id="db-count"></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="db-table-wrap">
+      <div class="empty"><div class="big">🐘</div>Cargando datos desde PostgreSQL…</div>
+    </div>
+  </div>
+  <div class="pagination" id="db-pagination"></div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1038,6 +1089,7 @@
       if (tab.dataset.tab === "pendientes") initPendientes();
       if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
+      if (tab.dataset.tab === "base-datos") initBaseDatos();
     });
   });
 
@@ -2402,6 +2454,124 @@
       </table>`;
     } catch (e) { console.error(e); }
   }
+
+  // ── Pestaña "Base de datos": consumos_im_if_2026_1s desde PostgreSQL ──
+
+  let dbFiltrosLoaded = false;
+
+  async function initBaseDatos() {
+    if (!dbFiltrosLoaded) {
+      try {
+        const res = await fetch(`${API}/api/db/consumos/filtros`);
+        if (!res.ok) {
+          const err = await res.json();
+          document.getElementById("db-pg-status").textContent = "⚠ " + err.error;
+          return;
+        }
+        const { tp_doc, id_usuario } = await res.json();
+
+        const tpSel = document.getElementById("db-f-tpdoc");
+        tp_doc.forEach(v => {
+          const o = document.createElement("option"); o.value = v; o.textContent = v; tpSel.appendChild(o);
+        });
+
+        const uSel = document.getElementById("db-f-usuario");
+        id_usuario.forEach(v => {
+          const o = document.createElement("option"); o.value = v; o.textContent = v; uSel.appendChild(o);
+        });
+
+        dbFiltrosLoaded = true;
+      } catch (e) {
+        document.getElementById("db-pg-status").textContent = "⚠ No se pudo conectar a PostgreSQL: " + e.message;
+        return;
+      }
+    }
+    loadDbConsumos(0);
+  }
+
+  function clearDbFiltros() {
+    ["db-f-nro", "db-f-explicacion"].forEach(id => document.getElementById(id).value = "");
+    ["db-f-tpdoc", "db-f-usuario"].forEach(id => document.getElementById(id).value = "");
+    ["db-f-desde", "db-f-hasta"].forEach(id => document.getElementById(id).value = "");
+    loadDbConsumos(0);
+  }
+
+  async function loadDbConsumos(offset = 0) {
+    const wrap   = document.getElementById("db-table-wrap");
+    const count  = document.getElementById("db-count");
+    const status = document.getElementById("db-pg-status");
+
+    const params = new URLSearchParams({ limit: 50, offset });
+    const nro        = document.getElementById("db-f-nro").value.trim();
+    const tp_doc     = document.getElementById("db-f-tpdoc").value;
+    const desde      = document.getElementById("db-f-desde").value;
+    const hasta      = document.getElementById("db-f-hasta").value;
+    const usuario    = document.getElementById("db-f-usuario").value;
+    const explicacion = document.getElementById("db-f-explicacion").value.trim();
+
+    if (nro)        params.set("nro_corto",   nro);
+    if (tp_doc)     params.set("tp_doc",       tp_doc);
+    if (desde)      params.set("fecha_desde",  desde);
+    if (hasta)      params.set("fecha_hasta",  hasta);
+    if (usuario)    params.set("usuario",      usuario);
+    if (explicacion) params.set("explicacion", explicacion);
+
+    wrap.innerHTML = `<div class="empty"><div class="big">⏳</div>Consultando PostgreSQL…</div>`;
+
+    try {
+      const res = await fetch(`${API}/api/db/consumos?${params}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error);
+      }
+      const { rows, total } = await res.json();
+
+      status.textContent = "";
+      count.textContent = `${total.toLocaleString()} registros encontrados`;
+
+      if (!rows.length) {
+        wrap.innerHTML = `<div class="empty"><div class="big">🐘</div>Sin resultados para estos filtros</div>`;
+        document.getElementById("db-pagination").innerHTML = "";
+        return;
+      }
+
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>Nº Corto</th><th>Unidad Neg.</th><th>Tp Doc</th>
+          <th>Nº Documento</th><th>Nº Art Ppal</th><th>Tp Ord</th>
+          <th>Nº Orden</th><th>Fecha Orden</th><th>Hora Día</th>
+          <th>Cantidad Trns</th><th>ID Usuario</th><th>Explicación</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${r.nro_corto_articulo ?? ""}</td>
+          <td>${r.unidad_negocio ?? ""}</td>
+          <td>${r.tp_doc ?? ""}</td>
+          <td>${r.numero_documento ?? ""}</td>
+          <td>${r.nro_art_ppal ?? ""}</td>
+          <td>${r.tp_ord ?? ""}</td>
+          <td>${r.numero_orden ?? ""}</td>
+          <td>${r.fecha_orden ? String(r.fecha_orden).slice(0,10) : ""}</td>
+          <td>${r.hora_dia ?? ""}</td>
+          <td style="color:${r.cantidad_trns < 0 ? '#f76060' : '#34c97e'};font-weight:600">${r.cantidad_trns != null ? fmtNum(r.cantidad_trns) : ""}</td>
+          <td>${r.id_usuario ?? ""}</td>
+          <td>${r.explicacion_transaccion ?? ""}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+
+      renderPagination("db-pagination", total, offset, 50, "loadDbConsumos");
+    } catch (e) {
+      status.textContent = "⚠ Error: " + e.message;
+      wrap.innerHTML = `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
+    }
+  }
+
+  // Enter en campo explicación dispara búsqueda
+  document.getElementById("db-f-explicacion").addEventListener("keydown", e => {
+    if (e.key === "Enter") loadDbConsumos(0);
+  });
+  document.getElementById("db-f-nro").addEventListener("keydown", e => {
+    if (e.key === "Enter") loadDbConsumos(0);
+  });
 
   // ── DB ready banner ──
   const banner = document.createElement("div");
