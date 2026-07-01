@@ -1882,7 +1882,6 @@ app.post("/api/pg/stock-consolidado/batch", requirePg, async (req, res) => {
       return res.status(400).json({ error: "Formato de lote inválido o vacío." });
     }
 
-    // En el primer lote de cada archivo, borramos los datos previos de ese archivo
     if (esPrimerLote) {
       await pgPool.query(
         "DELETE FROM stock_consolidado_ext WHERE archivo_origen = $1",
@@ -1890,24 +1889,30 @@ app.post("/api/pg/stock-consolidado/batch", requirePg, async (req, res) => {
       );
     }
 
-    // Armamos un INSERT multi-fila para máxima eficiencia
-    // (un solo round-trip al servidor por lote, en vez de N inserts)
+    // PostgreSQL tiene un límite de 65535 parámetros por query.
+    // Con 10 columnas, el máximo seguro es 6553 filas por INSERT.
+    // Usamos 500 para dejar margen amplio y que cada sub-lote sea rápido.
+    const SUB_BATCH = 500;
     const COLS = 10;
-    const placeholders = rows.map((_, i) =>
-      `($${i * COLS + 1},$${i * COLS + 2},$${i * COLS + 3},$${i * COLS + 4},$${i * COLS + 5},$${i * COLS + 6},$${i * COLS + 7},$${i * COLS + 8},$${i * COLS + 9},$${i * COLS + 10})`
-    ).join(",");
+    let totalInserted = 0;
 
-    const values = rows.flat();
+    for (let i = 0; i < rows.length; i += SUB_BATCH) {
+      const chunk = rows.slice(i, i + SUB_BATCH);
+      const placeholders = chunk.map((_, j) =>
+        `($${j * COLS + 1},$${j * COLS + 2},$${j * COLS + 3},$${j * COLS + 4},$${j * COLS + 5},$${j * COLS + 6},$${j * COLS + 7},$${j * COLS + 8},$${j * COLS + 9},$${j * COLS + 10})`
+      ).join(",");
 
-    await pgPool.query(
-      `INSERT INTO stock_consolidado_ext
-        (nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
-         ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen)
-       VALUES ${placeholders}`,
-      values
-    );
+      await pgPool.query(
+        `INSERT INTO stock_consolidado_ext
+          (nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
+           ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen)
+         VALUES ${placeholders}`,
+        chunk.flat()
+      );
+      totalInserted += chunk.length;
+    }
 
-    res.json({ success: true, inserted: rows.length });
+    res.json({ success: true, inserted: totalInserted });
   } catch (err) {
     console.error("PG batch error:", err.message);
     res.status(500).json({ error: err.message });
