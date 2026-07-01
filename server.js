@@ -6,7 +6,9 @@ const path      = require("path");
 const fs        = require("fs");
 const { Pool }  = require("pg");
 
-const app  = express();
+const app     = express();
+const PORT    = process.env.PORT || 3000;
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "database.db");
 
 // ── Conexión a PostgreSQL (solo lectura de tablas externas) ──
 let pgPool = null;
