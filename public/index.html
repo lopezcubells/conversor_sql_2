@@ -819,6 +819,45 @@
     </div>
 
   </div>
+
+  <div class="section-heading">
+    <h2>Importación de archivos a base de datos externa</h2>
+  </div>
+
+  <div class="card" id="pg-status-card" style="border-color:var(--border)">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div id="pg-status-dot" style="width:10px;height:10px;border-radius:50%;background:#555;flex-shrink:0"></div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)" id="pg-status-text">Verificando conexión a PostgreSQL…</div>
+        <div style="font-size:12px;color:var(--muted)" id="pg-status-sub"></div>
+      </div>
+      <button class="btn btn-outline" id="pg-btn-vaciar" style="margin-left:auto;border-color:rgba(247,96,96,.4);color:#f76060;display:none">🗑 Vaciar tabla</button>
+    </div>
+  </div>
+
+  <div class="import-grid">
+
+    <div class="card import-card" id="card-pgcsv" title="Importá el CSV de Stock Consolidado directamente a PostgreSQL. El parseo se hace en el navegador y se sube en lotes para máxima eficiencia.">
+      <div class="card-title">Stock Consolidado → PostgreSQL</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px">
+        Cargá el CSV de Stock Consolidado a la base de datos externa. Los datos persisten entre redeploys.
+      </p>
+      <div class="drop-zone" id="dz-pgcsv">
+        <input type="file" id="file-pgcsv" accept=".csv" />
+        <div class="icon">🐘</div>
+        <p>Arrastrá el CSV o hacé clic</p>
+        <div class="filename" id="fn-pgcsv"></div>
+      </div>
+      <div class="progress" id="prog-pgcsv"><div class="progress-bar" id="pb-pgcsv"></div></div>
+      <div id="info-pgcsv" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-pgcsv" disabled style="background:#e5484d;color:#fff">⬆ Importar a PostgreSQL</button>
+      </div>
+      <div class="done-badge">✓ Importado</div>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- ═══ TABLAS SQL ═══ -->
@@ -1589,6 +1628,133 @@
       btn.disabled = false;
     }
   });
+
+  // ── Importación a PostgreSQL (base de datos externa) ──
+
+  const PG_BATCH_SIZE = 20000;
+
+  async function checkPgStatus() {
+    const dot  = document.getElementById("pg-status-dot");
+    const text = document.getElementById("pg-status-text");
+    const sub  = document.getElementById("pg-status-sub");
+    const btn  = document.getElementById("pg-btn-vaciar");
+    try {
+      const res = await fetch(`${API}/api/pg/status`);
+      if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
+      const { rows } = await res.json();
+      dot.style.background = "#34c97e";
+      text.textContent = "PostgreSQL conectado";
+      sub.textContent = `${rows.toLocaleString()} filas en stock_consolidado_ext`;
+      btn.style.display = "inline-flex";
+      document.getElementById("card-pgcsv").style.opacity = "1";
+      document.getElementById("btn-pgcsv").disabled =
+        !document.getElementById("file-pgcsv").files[0];
+    } catch (e) {
+      dot.style.background = "#f76060";
+      text.textContent = "PostgreSQL no disponible";
+      sub.textContent = e.message;
+      btn.style.display = "none";
+      document.getElementById("card-pgcsv").style.opacity = ".5";
+    }
+  }
+
+  document.getElementById("pg-btn-vaciar").addEventListener("click", async () => {
+    if (!confirm("¿Vaciar toda la tabla stock_consolidado_ext en PostgreSQL? Esta acción no se puede deshacer.")) return;
+    try {
+      const res = await fetch(`${API}/api/pg/stock-consolidado`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast("🗑 Tabla vaciada en PostgreSQL", "ok");
+      document.getElementById("card-pgcsv").classList.remove("done");
+      checkPgStatus();
+    } catch (e) { toast("❌ " + e.message, "err"); }
+  });
+
+  setupDrop("dz-pgcsv", "file-pgcsv", "fn-pgcsv", "btn-pgcsv");
+  document.getElementById("file-pgcsv").addEventListener("change", () => {
+    const f = document.getElementById("file-pgcsv").files[0];
+    document.getElementById("btn-pgcsv").disabled = !f;
+  });
+
+  document.getElementById("btn-pgcsv").addEventListener("click", async () => {
+    const file = document.getElementById("file-pgcsv").files[0];
+    if (!file) return;
+
+    const btn  = document.getElementById("btn-pgcsv");
+    const prog = document.getElementById("prog-pgcsv");
+    const pb   = document.getElementById("pb-pgcsv");
+    const info = document.getElementById("info-pgcsv");
+    const card = document.getElementById("card-pgcsv");
+
+    btn.disabled = true;
+    prog.style.display = "block";
+    pb.style.width = "2%";
+    info.textContent = "Leyendo CSV en el navegador…";
+
+    try {
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = e => resolve(e.target.result);
+        reader.onerror = () => reject(new Error("Error leyendo el archivo"));
+        reader.readAsText(file, "utf-8");
+      });
+
+      info.textContent = "Parseando CSV…";
+      const { rows: csvRows } = parseCsvInBrowser(text);
+      if (!csvRows.length) throw new Error("El CSV no contiene filas con datos.");
+
+      const mappedRows = csvRows
+        .map(mapCsvRowToStockConsolidado)
+        .filter(r => r[0] != null);
+
+      info.textContent = `${mappedRows.length.toLocaleString()} filas encontradas. Enviando a PostgreSQL…`;
+
+      const totalBatches = Math.ceil(mappedRows.length / PG_BATCH_SIZE);
+      let totalInserted = 0;
+
+      for (let b = 0; b < totalBatches; b++) {
+        const batch = mappedRows.slice(b * PG_BATCH_SIZE, (b + 1) * PG_BATCH_SIZE);
+        info.textContent = `Lote ${b + 1}/${totalBatches} — ${totalInserted.toLocaleString()} filas insertadas…`;
+
+        const res = await fetch(`${API}/api/pg/stock-consolidado/batch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: batch, archivoOrigen: file.name, esPrimerLote: b === 0 }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Error en lote ${b + 1}`);
+        totalInserted += data.inserted;
+        pb.style.width = `${Math.round(((b + 1) / totalBatches) * 100)}%`;
+      }
+
+      const fin = await fetch(`${API}/api/pg/stock-consolidado/finalizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ totalFilas: totalInserted, archivoOrigen: file.name }),
+      });
+      const finData = await fin.json();
+
+      pb.style.width = "100%";
+      toast(`✅ ${totalInserted.toLocaleString()} filas → PostgreSQL (total en tabla: ${finData.totalEnPg?.toLocaleString()})`, "ok");
+      info.textContent = `Último resultado: ${totalInserted.toLocaleString()} filas importadas. Total en PostgreSQL: ${finData.totalEnPg?.toLocaleString()}.`;
+      card.classList.add("done");
+      checkPgStatus();
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    } finally {
+      setTimeout(() => { prog.style.display = "none"; pb.style.width = "0"; }, 800);
+      btn.disabled = false;
+    }
+  });
+
+  // Verificar estado de PG al entrar a la pestaña Importar
+  const origTabClick = document.querySelectorAll(".tab");
+  origTabClick.forEach(tab => {
+    tab.addEventListener("click", () => {
+      if (tab.dataset.tab === "importar") checkPgStatus();
+    });
+  });
+  // También verificar al cargar si ya estamos en esa pestaña
+  if (document.querySelector(".tab.active")?.dataset.tab === "importar") checkPgStatus();
 
   // ── Stats ──
   async function loadStats() {
