@@ -982,7 +982,40 @@ app.post("/api/import/stock-consolidado", requireDb, upload.array("files", 500),
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
-// ── Consolidación: Consumos IM/IF (carpeta con múltiples archivos "BD Consumos IM IF ...") ──
+// ── Stock Consolidado: endpoint de batch para CSV grande (parseo en el navegador) ──
+// El CSV ya viene con columnas Año, SemanaISO, NroCortoArticulo, etc. — es el consolidado
+// completo exportado desde la herramienta. Se parsea en el navegador y se sube en lotes.
+app.post("/api/import/stock-consolidado/batch", requireDb, (req, res) => {
+  try {
+    const { rows, archivoOrigen, esPrimerLote } = req.body || {};
+    if (!Array.isArray(rows)) return res.status(400).json({ error: "Formato de lote inválido." });
+
+    withDb(db => {
+      if (esPrimerLote) db.run("DELETE FROM stock_consolidado WHERE archivo_origen = ?", [archivoOrigen]);
+      const stmt = db.prepare(`INSERT INTO stock_consolidado (
+        nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
+        ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+      rows.forEach(r => stmt.run(r));
+      stmt.free();
+    });
+
+    res.json({ success: true, inserted: rows.length });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/import/stock-consolidado/finalizar", requireDb, (req, res) => {
+  try {
+    const { totalFilas, archivoOrigen } = req.body || {};
+    withDb(db => {
+      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)",
+        ["stock_consolidado", archivoOrigen || "csv", totalFilas || 0, "ok"]);
+    });
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+
 // Consolidación de Consumos IM/IF: el parseo de los archivos Excel se hace en el
 // NAVEGADOR (con SheetJS vía CDN), no en el servidor. Los archivos de esta carpeta
 // pueden superar el millón de filas, y tanto leer el .xlsx como insertarlo a través
