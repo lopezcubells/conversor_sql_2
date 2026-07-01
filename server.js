@@ -10,6 +10,13 @@ const app     = express();
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "database.db");
 
+app.use(cors());
+app.use(express.json({ limit: "25mb" }));
+app.get("/health", (req, res) => res.status(200).send("ok"));
+app.use(express.static(path.join(__dirname, "public")));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 150 * 1024 * 1024 } });
+
 // ── Conexión a PostgreSQL (solo lectura de tablas externas) ──
 let pgPool = null;
 if (process.env.DATABASE_URL) {
