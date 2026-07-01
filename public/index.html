@@ -1164,19 +1164,6 @@
         if (importBtn) importBtn.disabled = true;
       });
 
-      ["stkc", "cnsc", "stkccsv"].forEach(mod => {
-        const folderInput = document.getElementById(`folder-${mod}`) || document.getElementById(`file-${mod}`);
-        const fn = document.getElementById(`fn-${mod}`);
-        const card = document.getElementById(`card-${mod}`);
-        const importBtn = document.getElementById(`btn-${mod}`);
-        const info = document.getElementById(`info-${mod}`);
-        if (folderInput) folderInput.value = "";
-        if (fn) fn.textContent = "";
-        if (card) card.classList.remove("done");
-        if (importBtn) importBtn.disabled = true;
-        if (info) info.textContent = "";
-      });
-
       toast("🗑 Se quitaron todos los datos importados", "ok");
       loadStats();
     } catch (e) {
@@ -1207,9 +1194,6 @@
         "card-pgm": data.pgmTotal,
         "card-cti": data.costoInsumos,
         "card-pdtt": data.pendientesTetra,
-        "card-stkc": data.stockConsolidado,
-        "card-stkccsv": data.stockConsolidado,
-        "card-cnsc": data.consumoConsolidado,
       };
       Object.entries(cardCounts).forEach(([cardId, count]) => {
         const card = document.getElementById(cardId);
