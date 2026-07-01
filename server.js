@@ -4,6 +4,7 @@ const XLSX      = require("xlsx");
 const cors      = require("cors");
 const path      = require("path");
 const fs        = require("fs");
+const { Pool }  = require("pg");
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,49 @@ app.get("/health", (req, res) => res.status(200).send("ok"));
 app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 150 * 1024 * 1024 } });
+
+// ── Conexión a PostgreSQL (base de datos externa, opcional) ──
+// Solo se activa si la variable DATABASE_URL está definida en el entorno.
+// Si no está, todas las rutas /api/pg/* devuelven un error claro sin romper nada.
+let pgPool = null;
+if (process.env.DATABASE_URL) {
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },  // necesario para Railway
+  });
+  pgPool.connect()
+    .then(client => {
+      console.log("PostgreSQL conectado");
+      client.release();
+      return pgPool.query(`
+        CREATE TABLE IF NOT EXISTS stock_consolidado_ext (
+          id SERIAL PRIMARY KEY,
+          nro_corto INTEGER,
+          segundo_nro TEXT,
+          descripcion TEXT,
+          unidad_negocio TEXT,
+          existencias REAL,
+          ubicacion TEXT,
+          nro_lote_serie TEXT,
+          anio INTEGER,
+          semana_iso INTEGER,
+          archivo_origen TEXT,
+          importado_en TIMESTAMP DEFAULT NOW()
+        )
+      `);
+    })
+    .then(() => console.log("Tabla stock_consolidado_ext lista en PostgreSQL"))
+    .catch(err => console.error("Error conectando a PostgreSQL:", err.message));
+} else {
+  console.log("DATABASE_URL no definida — PostgreSQL desactivado");
+}
+
+function requirePg(req, res, next) {
+  if (!pgPool) return res.status(503).json({
+    error: "PostgreSQL no está configurado. Agregá DATABASE_URL como variable de entorno en Railway.",
+  });
+  next();
+}
 
 // ── Arrancar el servidor PRIMERO para pasar el healthcheck ──
 const server = app.listen(PORT, "0.0.0.0", () => console.log(`Servidor escuchando en 0.0.0.0:${PORT}`));
@@ -1814,6 +1858,109 @@ app.get("/api/avance-rubro", requireDb, (req, res) => {
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ══════════════════════════════════════════════════════
+// ── Endpoints de PostgreSQL (base de datos externa) ──
+// ══════════════════════════════════════════════════════
+
+// Estado de la conexión
+app.get("/api/pg/status", requirePg, async (req, res) => {
+  try {
+    const result = await pgPool.query("SELECT COUNT(*) as total FROM stock_consolidado_ext");
+    res.json({ connected: true, rows: parseInt(result.rows[0].total) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Insertar un lote de filas del CSV en PostgreSQL.
+// Cada lote llega como array de arrays desde el navegador.
+// Columnas: [nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
+//            ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen]
+app.post("/api/pg/stock-consolidado/batch", requirePg, async (req, res) => {
+  try {
+    const { rows, archivoOrigen, esPrimerLote } = req.body || {};
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(400).json({ error: "Formato de lote inválido o vacío." });
+    }
+
+    // En el primer lote de cada archivo, borramos los datos previos de ese archivo
+    if (esPrimerLote) {
+      await pgPool.query(
+        "DELETE FROM stock_consolidado_ext WHERE archivo_origen = $1",
+        [archivoOrigen]
+      );
+    }
+
+    // Armamos un INSERT multi-fila para máxima eficiencia
+    // (un solo round-trip al servidor por lote, en vez de N inserts)
+    const COLS = 10;
+    const placeholders = rows.map((_, i) =>
+      `($${i * COLS + 1},$${i * COLS + 2},$${i * COLS + 3},$${i * COLS + 4},$${i * COLS + 5},$${i * COLS + 6},$${i * COLS + 7},$${i * COLS + 8},$${i * COLS + 9},$${i * COLS + 10})`
+    ).join(",");
+
+    const values = rows.flat();
+
+    await pgPool.query(
+      `INSERT INTO stock_consolidado_ext
+        (nro_corto, segundo_nro, descripcion, unidad_negocio, existencias,
+         ubicacion, nro_lote_serie, anio, semana_iso, archivo_origen)
+       VALUES ${placeholders}`,
+      values
+    );
+
+    res.json({ success: true, inserted: rows.length });
+  } catch (err) {
+    console.error("PG batch error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Finalizar: registrar en log interno de SQLite (no en PG, para no mezclar)
+app.post("/api/pg/stock-consolidado/finalizar", requirePg, async (req, res) => {
+  try {
+    const { totalFilas, archivoOrigen } = req.body || {};
+    // Verificamos el conteo real en PG para confirmar
+    const result = await pgPool.query(
+      "SELECT COUNT(*) as total FROM stock_consolidado_ext WHERE archivo_origen = $1",
+      [archivoOrigen]
+    );
+    const totalEnPg = parseInt(result.rows[0].total);
+    res.json({ success: true, totalFilas, totalEnPg });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Leer datos paginados de PostgreSQL (para mostrar en Tablas SQL si se quiere)
+app.get("/api/pg/stock-consolidado", requirePg, async (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 50, 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    const q      = req.query.q ? `%${req.query.q}%` : null;
+
+    let queryText, params;
+    if (q) {
+      queryText = `SELECT * FROM stock_consolidado_ext WHERE descripcion ILIKE $1 ORDER BY id LIMIT $2 OFFSET $3`;
+      params = [q, limit, offset];
+    } else {
+      queryText = `SELECT * FROM stock_consolidado_ext ORDER BY id LIMIT $1 OFFSET $2`;
+      params = [limit, offset];
+    }
+    const rows = await pgPool.query(queryText, params);
+    const countRes = await pgPool.query(
+      q ? "SELECT COUNT(*) as c FROM stock_consolidado_ext WHERE descripcion ILIKE $1" : "SELECT COUNT(*) as c FROM stock_consolidado_ext",
+      q ? [q] : []
+    );
+    res.json({ rows: rows.rows, total: parseInt(countRes.rows[0].c), limit, offset });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Borrar todos los datos de PostgreSQL
+app.delete("/api/pg/stock-consolidado", requirePg, async (req, res) => {
+  try {
+    await pgPool.query("TRUNCATE TABLE stock_consolidado_ext RESTART IDENTITY");
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Fin endpoints PostgreSQL ──
 
 // Borra todos los datos de todas las tablas, dejando la app como recién desplegada.
 // No borra el esquema (las tablas siguen existiendo, vacías).
