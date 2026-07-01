@@ -4,8 +4,24 @@ const XLSX      = require("xlsx");
 const cors      = require("cors");
 const path      = require("path");
 const fs        = require("fs");
+const { Pool }  = require("pg");
 
 const app  = express();
+
+// ── Conexión a PostgreSQL (solo lectura de tablas externas) ──
+let pgPool = null;
+if (process.env.DATABASE_URL) {
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+  pgPool.connect()
+    .then(c => { console.log("PostgreSQL conectado"); c.release(); })
+    .catch(e => console.error("PostgreSQL error:", e.message));
+} else {
+  console.log("DATABASE_URL no definida — PostgreSQL desactivado");
+}
+
 // ── Arrancar el servidor PRIMERO para pasar el healthcheck ──
 const server = app.listen(PORT, "0.0.0.0", () => console.log(`Servidor escuchando en 0.0.0.0:${PORT}`));
 server.on("error", (err) => {
@@ -862,6 +878,58 @@ app.post("/api/import/pendientes-tetra", requireDb, upload.single("file"), (req,
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════
+// ── Pestaña "Base de datos": lectura desde PostgreSQL ──
+// ══════════════════════════════════════════════════════
+
+// Valores distintos de tp_doc y id_usuario para los filtros desplegables
+app.get("/api/db/consumos/filtros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const [tpDoc, usuario] = await Promise.all([
+      pgPool.query("SELECT DISTINCT tp_doc FROM consumos_im_if_2026_1s WHERE tp_doc IS NOT NULL ORDER BY tp_doc"),
+      pgPool.query("SELECT DISTINCT id_usuario FROM consumos_im_if_2026_1s WHERE id_usuario IS NOT NULL ORDER BY id_usuario"),
+    ]);
+    res.json({
+      tp_doc:     tpDoc.rows.map(r => r.tp_doc),
+      id_usuario: usuario.rows.map(r => r.id_usuario),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lectura paginada con filtros opcionales
+app.get("/api/db/consumos", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 50, 500);
+    const offset = parseInt(req.query.offset) || 0;
+    const { nro_corto, tp_doc, fecha_desde, fecha_hasta, usuario, explicacion } = req.query;
+
+    const whereClauses = [];
+    const params = [];
+    let p = 1;
+
+    if (nro_corto)    { whereClauses.push(`nro_corto_articulo = $${p++}`);          params.push(parseInt(nro_corto)); }
+    if (tp_doc)       { whereClauses.push(`tp_doc = $${p++}`);                      params.push(tp_doc); }
+    if (fecha_desde)  { whereClauses.push(`fecha_orden >= $${p++}`);                params.push(fecha_desde); }
+    if (fecha_hasta)  { whereClauses.push(`fecha_orden <= $${p++}`);                params.push(fecha_hasta); }
+    if (usuario)      { whereClauses.push(`id_usuario = $${p++}`);                  params.push(usuario); }
+    if (explicacion)  { whereClauses.push(`explicacion_transaccion ILIKE $${p++}`); params.push(`%${explicacion}%`); }
+
+    const where = whereClauses.length ? "WHERE " + whereClauses.join(" AND ") : "";
+
+    const [rows, count] = await Promise.all([
+      pgPool.query(
+        `SELECT * FROM consumos_im_if_2026_1s ${where} ORDER BY fecha_orden DESC, hora_dia DESC LIMIT $${p} OFFSET $${p+1}`,
+        [...params, limit, offset]
+      ),
+      pgPool.query(`SELECT COUNT(*) as c FROM consumos_im_if_2026_1s ${where}`, params),
+    ]);
+
+    res.json({ rows: rows.rows, total: parseInt(count.rows[0].c), limit, offset });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // Borra todos los datos de todas las tablas, dejando la app como recién desplegada.
 // No borra el esquema (las tablas siguen existiendo, vacías).
