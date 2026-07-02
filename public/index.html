@@ -1527,16 +1527,17 @@
   let detChart = null;
   async function initStockDetallado() {
     const sel = document.getElementById("rubro-filter");
-    if (sel.options.length <= 1) {
-      try {
-        const { rubros } = await fetch(`${API}/api/stock-detallado/rubros`).then(r => r.json());
-        rubros.forEach(r => {
-          const opt = document.createElement("option");
-          opt.value = r; opt.textContent = r;
-          sel.appendChild(opt);
-        });
-      } catch (e) { console.error(e); }
-    }
+    try {
+      const { rubros } = await fetch(`${API}/api/stock-detallado/rubros`).then(r => r.json());
+      const current = sel.value;
+      sel.innerHTML = `<option value="">Todos los rubros</option>`;
+      rubros.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.textContent = r;
+        sel.appendChild(opt);
+      });
+      if (current) sel.value = current;
+    } catch (e) { console.error(e); }
     loadDetChart();
   }
 
@@ -1843,16 +1844,17 @@
 
   async function initPendientes() {
     const sel = document.getElementById("pend-rubro-filter");
-    if (sel.options.length <= 1) {
-      try {
-        const { rubros } = await fetch(`${API}/api/pendientes/rubros`).then(r => r.json());
-        rubros.forEach(r => {
-          const opt = document.createElement("option");
-          opt.value = r; opt.textContent = r;
-          sel.appendChild(opt);
-        });
-      } catch (e) { console.error(e); }
-    }
+    try {
+      const { rubros } = await fetch(`${API}/api/pendientes/rubros`).then(r => r.json());
+      const current = sel.value;
+      sel.innerHTML = `<option value="">Todos los rubros</option>`;
+      rubros.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.textContent = r;
+        sel.appendChild(opt);
+      });
+      if (current) sel.value = current;
+    } catch (e) { console.error(e); }
     refreshPendientes();
   }
 
@@ -2161,23 +2163,29 @@
   ];
 
   async function ensureAvanceRubrosLoaded() {
-    if (avanceRubrosLoaded) return;
     try {
       const { rubros } = await fetch(`${API}/api/avance/rubros`).then(r => r.json());
 
       const artSel = document.getElementById("avance-art-rubro-filter");
+      const currentArt = artSel.value;
+      artSel.innerHTML = `<option value="">Todos los rubros</option>`;
       rubros.forEach(r => {
         const opt = document.createElement("option");
         opt.value = r; opt.textContent = r;
         artSel.appendChild(opt);
       });
+      if (currentArt) artSel.value = currentArt;
 
       const rubroSel = document.getElementById("avance-rubro-rubro-filter");
+      const currentRubro = rubroSel.value;
+      rubroSel.innerHTML = `<option value="">Todos los rubros</option>`;
       AVANCE_RUBRO_WHITELIST.filter(r => rubros.includes(r)).forEach(r => {
         const opt = document.createElement("option");
         opt.value = r; opt.textContent = r;
         rubroSel.appendChild(opt);
       });
+      if (currentRubro) rubroSel.value = currentRubro;
+
       avanceRubrosLoaded = true;
     } catch (e) { console.error(e); }
   }
@@ -2349,20 +2357,23 @@
 
   async function initRecepcionesMes() {
     const sel = document.getElementById("rec-mes-rubro-filter");
-    if (!recMesRubrosLoaded) {
-      try {
-        const { rubros } = await fetch(`${API}/api/recepciones/rubros`).then(r => r.json());
-        sel.innerHTML = "";
-        rubros.forEach(r => {
-          const opt = document.createElement("option");
-          opt.value = r; opt.textContent = r;
-          sel.appendChild(opt);
-        });
-        // Filtro de selección única sin opción "Todos los rubros": por defecto TETRA Envases
+    try {
+      const { rubros } = await fetch(`${API}/api/recepciones/rubros`).then(r => r.json());
+      const current = sel.value;
+      sel.innerHTML = "";
+      rubros.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.textContent = r;
+        sel.appendChild(opt);
+      });
+      // Mantener selección previa si sigue existiendo, si no usar TETRA Envases por defecto
+      if (current && rubros.includes(current)) {
+        sel.value = current;
+      } else {
         sel.value = rubros.includes(REC_MES_DEFAULT_RUBRO) ? REC_MES_DEFAULT_RUBRO : (rubros[0] ?? "");
-        recMesRubrosLoaded = true;
-      } catch (e) { console.error(e); }
-    }
+      }
+      recMesRubrosLoaded = true;
+    } catch (e) { console.error(e); }
     loadRecepcionesMes();
     loadRecepcionesAnioActual();
   }
@@ -2460,31 +2471,35 @@
   let dbFiltrosLoaded = false;
 
   async function initBaseDatos() {
-    if (!dbFiltrosLoaded) {
-      try {
-        const res = await fetch(`${API}/api/db/consumos/filtros`);
-        if (!res.ok) {
-          const err = await res.json();
-          document.getElementById("db-pg-status").textContent = "⚠ " + err.error;
-          return;
-        }
-        const { tp_doc, id_usuario } = await res.json();
-
-        const tpSel = document.getElementById("db-f-tpdoc");
-        tp_doc.forEach(v => {
-          const o = document.createElement("option"); o.value = v; o.textContent = v; tpSel.appendChild(o);
-        });
-
-        const uSel = document.getElementById("db-f-usuario");
-        id_usuario.forEach(v => {
-          const o = document.createElement("option"); o.value = v; o.textContent = v; uSel.appendChild(o);
-        });
-
-        dbFiltrosLoaded = true;
-      } catch (e) {
-        document.getElementById("db-pg-status").textContent = "⚠ No se pudo conectar a PostgreSQL: " + e.message;
+    try {
+      const res = await fetch(`${API}/api/db/consumos/filtros`);
+      if (!res.ok) {
+        const err = await res.json();
+        document.getElementById("db-pg-status").textContent = "⚠ " + err.error;
         return;
       }
+      const { tp_doc, id_usuario } = await res.json();
+
+      const tpSel = document.getElementById("db-f-tpdoc");
+      const currentTp = tpSel.value;
+      tpSel.innerHTML = `<option value="">Todos</option>`;
+      tp_doc.forEach(v => {
+        const o = document.createElement("option"); o.value = v; o.textContent = v; tpSel.appendChild(o);
+      });
+      if (currentTp) tpSel.value = currentTp;
+
+      const uSel = document.getElementById("db-f-usuario");
+      const currentU = uSel.value;
+      uSel.innerHTML = `<option value="">Todos</option>`;
+      id_usuario.forEach(v => {
+        const o = document.createElement("option"); o.value = v; o.textContent = v; uSel.appendChild(o);
+      });
+      if (currentU) uSel.value = currentU;
+
+      dbFiltrosLoaded = true;
+    } catch (e) {
+      document.getElementById("db-pg-status").textContent = "⚠ No se pudo conectar a PostgreSQL: " + e.message;
+      return;
     }
     loadDbConsumos(0);
   }
