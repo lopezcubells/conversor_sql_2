@@ -871,6 +871,36 @@ app.get("/api/db/consumos/filtros", async (req,res) => {
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+// Rubros stock desde view_stock_x_rubro
+app.get("/api/pg/rubros-stock", async (req,res) => {
+  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+  try {
+    const result = await pgPool.query(
+      "SELECT DISTINCT rubro FROM view_stock_x_rubro WHERE rubro IS NOT NULL ORDER BY rubro"
+    );
+    res.json({ rubros: result.rows.map(r => r.rubro) });
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+app.get("/api/pg/rubros-stock/chart", async (req,res) => {
+  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros : req.query.rubros ? [req.query.rubros] : [];
+    if (!rubros.length) return res.json({ rows: [] });
+
+    const placeholders = rubros.map((_,i) => `$${i+1}`).join(",");
+    const result = await pgPool.query(
+      `SELECT rubro, SUM(existencias_fisicas) as existencias_fisicas
+       FROM view_stock_x_rubro
+       WHERE rubro IN (${placeholders})
+       GROUP BY rubro
+       ORDER BY existencias_fisicas DESC`,
+      rubros
+    );
+    res.json({ rows: result.rows });
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
 app.get("/api/db/consumos", async (req,res) => {
   if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
   try {
