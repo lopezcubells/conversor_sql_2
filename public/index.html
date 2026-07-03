@@ -605,6 +605,7 @@
   <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="recepciones-mes">Recepciones</div>
   <div class="tab" data-tab="base-datos">Base de datos</div>
+  <div class="tab" data-tab="rotacion">Rotación</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1058,6 +1059,27 @@
   <div class="pagination" id="db-pagination"></div>
 </div>
 
+<!-- ═══ ROTACIÓN ═══ -->
+<div class="pane" id="tab-rotacion">
+
+  <div class="card">
+    <div class="card-title">Filtro</div>
+    <div id="rot-pg-status" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <div style="display:flex;flex-direction:column;gap:4px;max-width:320px">
+      <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Rubro</label>
+      <select class="search-input" id="rot-rubro-filter"></select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" id="rot-chart-title">Rotación en días</div>
+    <div style="position:relative;height:420px">
+      <canvas id="rot-chart"></canvas>
+    </div>
+  </div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1080,6 +1102,7 @@
       if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
       if (tab.dataset.tab === "base-datos") initBaseDatos();
+      if (tab.dataset.tab === "rotacion") initRotacion();
     });
   });
 
@@ -2459,6 +2482,106 @@
   document.getElementById("db-f-nro").addEventListener("keydown", e => {
     if (e.key === "Enter") loadDbConsumos(0);
   });
+
+  // ── Pestaña "Rotación": rotacion_2026 desde PostgreSQL ──
+
+  const MES_NOMBRES = {
+    1:"Ene", 2:"Feb", 3:"Mar", 4:"Abr", 5:"May", 6:"Jun",
+    7:"Jul", 8:"Ago", 9:"Sep", 10:"Oct", 11:"Nov", 12:"Dic"
+  };
+
+  let rotBarChart = null;
+  let rotRubrosLoaded = false;
+
+  async function initRotacion() {
+    const sel    = document.getElementById("rot-rubro-filter");
+    const status = document.getElementById("rot-pg-status");
+
+    // Siempre recargar rubros al entrar para reflejar datos actuales
+    try {
+      const res = await fetch(`${API}/api/pg/rotacion/rubros`);
+      if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
+      const { rubros } = await res.json();
+      const current = sel.value;
+      sel.innerHTML = "";
+      rubros.forEach(r => {
+        const o = document.createElement("option");
+        o.value = r; o.textContent = r;
+        sel.appendChild(o);
+      });
+      if (current && rubros.includes(current)) sel.value = current;
+      status.textContent = "";
+      rotRubrosLoaded = true;
+    } catch (e) {
+      status.textContent = "⚠ " + e.message;
+      return;
+    }
+
+    loadRotacionChart();
+  }
+
+  document.getElementById("rot-rubro-filter").addEventListener("change", loadRotacionChart);
+
+  async function loadRotacionChart() {
+    const rubro  = document.getElementById("rot-rubro-filter").value;
+    const status = document.getElementById("rot-pg-status");
+    if (!rubro) return;
+
+    try {
+      const res = await fetch(`${API}/api/pg/rotacion/chart?rubro=${encodeURIComponent(rubro)}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
+
+      const labels = rows.map(r => MES_NOMBRES[r.numero_mes] ?? r.numero_mes);
+      const data   = rows.map(r => Math.round(parseFloat(r.pr)));
+
+      // Título dinámico con el rubro seleccionado
+      document.getElementById("rot-chart-title").textContent = `Rotación en días — ${rubro}`;
+
+      const ctx = document.getElementById("rot-chart").getContext("2d");
+      if (rotBarChart) rotBarChart.destroy();
+      rotBarChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "PR (días)",
+            data,
+            backgroundColor: "rgba(167,139,250,.75)",
+            borderColor: "#a78bfa",
+            borderWidth: 1,
+            borderRadius: 4,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top: 30 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.raw} días` } },
+            datalabels: {
+              anchor: "end", align: "end", offset: 4,
+              color: "#e2e4ef",
+              font: { weight: "bold", size: 12 },
+              formatter: v => v,
+            }
+          },
+          scales: {
+            x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
+            y: { ticks: { color: "#7b7f99" }, grid: { color: "#2a2d3e" },
+                 title: { display: true, text: "Días", color: "#7b7f99" } },
+          }
+        },
+        plugins: [ChartDataLabels],
+      });
+
+      status.textContent = "";
+    } catch (e) {
+      status.textContent = "⚠ " + e.message;
+    }
+  }
 
   // ── DB ready banner ──
   const banner = document.createElement("div");
