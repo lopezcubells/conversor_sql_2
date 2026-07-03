@@ -813,31 +813,21 @@
 <!-- ═══ RUBROS DETALLADO ═══ -->
 <div class="pane" id="tab-rubros-detallado">
 
-  <div class="kpi-row" id="rd-kpis">
-    <div class="empty"><div class="big">📦</div>Cargando indicadores…</div>
-  </div>
-
-  <div class="section-heading">
-    <h2>Rubros por volumen de stock</h2>
-    <span class="clear-filter" id="rd-clear-filter" style="display:none">✕ Quitar filtro</span>
-  </div>
-  <div class="rubro-gallery" id="rd-gallery"></div>
-
-  <div class="section-heading">
-    <h2 id="rd-chart-title">Distribución de unidades por rubro</h2>
-  </div>
   <div class="card">
-    <div style="position:relative;height:420px">
-      <canvas id="rd-chart-rubros"></canvas>
+    <div class="card-title">Filtro de rubros</div>
+    <div id="rd-pg-status" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <div id="rd-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-primary" onclick="loadRubrosChart()">🔍 Aplicar</button>
+      <button class="btn btn-outline" onclick="rdSelectAll()">Seleccionar todos</button>
+      <button class="btn btn-outline" onclick="rdClearAll()">Limpiar</button>
     </div>
   </div>
 
-  <div class="section-heading">
-    <h2 id="rd-pareto-title">Concentración de inventario — top artículos</h2>
-  </div>
+  <div class="section-heading"><h2>Existencias físicas por rubro</h2></div>
   <div class="card">
-    <div style="position:relative;height:420px">
-      <canvas id="rd-chart-pareto"></canvas>
+    <div style="position:relative;height:520px">
+      <canvas id="rd-chart-rubros"></canvas>
     </div>
   </div>
 
@@ -1615,222 +1605,104 @@
 
   let rdResumenCache = null;
   let rdRubroChart = null;
-  let rdParetoChart = null;
-  let rdActiveRubro = null;
+  // ── Rubros detallado: stock desde PostgreSQL view_stock_x_rubro ──
+
+  let rdBarChart = null;
+  let rdAllRubros = [];
 
   async function initRubrosDetallado() {
-    await Promise.all([loadRdKpis(), loadRdResumen()]);
-    renderRdGallery();
-    renderRdRubroChart();
-    loadRdPareto(null);
+    const status = document.getElementById("rd-pg-status");
+    const checksDiv = document.getElementById("rd-rubro-checks");
+
+    if (!rdAllRubros.length) {
+      try {
+        const res = await fetch(`${API}/api/pg/rubros-stock`);
+        if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
+        const { rubros } = await res.json();
+        rdAllRubros = rubros;
+        checksDiv.innerHTML = "";
+        rubros.forEach(r => {
+          const label = document.createElement("label");
+          label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:6px;white-space:nowrap";
+          const cb = document.createElement("input");
+          cb.type = "checkbox"; cb.value = r; cb.checked = true;
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(r));
+          checksDiv.appendChild(label);
+        });
+        status.textContent = "";
+      } catch (e) {
+        status.textContent = "⚠ " + e.message;
+        return;
+      }
+    }
+    loadRubrosChart();
   }
 
-  async function loadRdKpis() {
-    try {
-      const k = await fetch(`${API}/api/rubros-detallado/kpis`).then(r => r.json());
-      const wrap = document.getElementById("rd-kpis");
-      wrap.innerHTML = `
-        <div class="kpi-card" style="--kpi-accent:#4f8ef7">
-          <div class="kpi-label">Artículos con stock</div>
-          <div class="kpi-value">${fmtNum(k.articulosConStock)}</div>
-          <div class="kpi-sub">con existencias &gt; 0</div>
-        </div>
-        <div class="kpi-card" style="--kpi-accent:#34c97e">
-          <div class="kpi-label">Unidades totales</div>
-          <div class="kpi-value">${fmtNum(k.unidadesTotales)}</div>
-          <div class="kpi-sub">suma de existencias</div>
-        </div>
-        <div class="kpi-card" style="--kpi-accent:#f7c948">
-          <div class="kpi-label">Rubros activos</div>
-          <div class="kpi-value">${fmtNum(k.totalRubros)}</div>
-          <div class="kpi-sub">con stock disponible</div>
-        </div>
-        <div class="kpi-card" style="--kpi-accent:#a78bfa">
-          <div class="kpi-label">Rubro líder</div>
-          <div class="kpi-value" style="font-size:18px">${k.rubroLider ?? "—"}</div>
-          <div class="kpi-sub">${fmtNum(k.rubroLiderUnidades)} unidades</div>
-        </div>
-        <div class="kpi-card" style="--kpi-accent:#5f5e6b">
-          <div class="kpi-label">Sin rubro asignado</div>
-          <div class="kpi-value">${fmtNum(k.articulosSinRubro)}</div>
-          <div class="kpi-sub">artículos a clasificar</div>
-        </div>
-      `;
-    } catch (e) { console.error(e); }
+  function rdGetSelected() {
+    return Array.from(document.querySelectorAll("#rd-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function rdSelectAll() {
+    document.querySelectorAll("#rd-rubro-checks input").forEach(cb => cb.checked = true);
+  }
+  function rdClearAll() {
+    document.querySelectorAll("#rd-rubro-checks input").forEach(cb => cb.checked = false);
   }
 
-  async function loadRdResumen() {
-    try {
-      const { rows } = await fetch(`${API}/api/rubros-detallado/resumen`).then(r => r.json());
-      rdResumenCache = rows;
-    } catch (e) { console.error(e); rdResumenCache = []; }
-  }
-
-  function renderRdGallery() {
-    const gallery = document.getElementById("rd-gallery");
-    if (!rdResumenCache || !rdResumenCache.length) {
-      gallery.innerHTML = `<div class="empty"><div class="big">🗄</div>Importá artículos y stock primero</div>`;
+  async function loadRubrosChart() {
+    const selected = rdGetSelected();
+    if (!selected.length) {
+      if (rdBarChart) { rdBarChart.destroy(); rdBarChart = null; }
       return;
     }
-    const maxUnidades = rdResumenCache[0].unidades;
-    gallery.innerHTML = rdResumenCache.map((r, i) => {
-      const color = colorForRank(i, rdResumenCache.length);
-      const pctOfMax = maxUnidades > 0 ? (r.unidades / maxUnidades) * 100 : 0;
-      const isActive = rdActiveRubro === r.rubro;
-      return `
-        <div class="rubro-card${isActive ? " active" : ""}" style="--rubro-color:${color}" data-rubro="${r.rubro.replace(/"/g, "&quot;")}">
-          <div class="rubro-card-name">${r.rubro}</div>
-          <div class="rubro-card-units">${fmtNum(r.unidades)}</div>
-          <div class="rubro-card-meta">
-            <span>${r.articulos} artículos</span>
-            <span>${r.participacion.toFixed(1)}%</span>
-          </div>
-          <div class="rubro-card-bar"><div class="rubro-card-bar-fill" style="width:${pctOfMax}%"></div></div>
-        </div>
-      `;
-    }).join("");
-
-    gallery.querySelectorAll(".rubro-card").forEach(card => {
-      card.addEventListener("click", () => {
-        const rubro = card.dataset.rubro;
-        rdActiveRubro = (rdActiveRubro === rubro) ? null : rubro;
-        renderRdGallery();
-        loadRdPareto(rdActiveRubro);
-        document.getElementById("rd-clear-filter").style.display = rdActiveRubro ? "inline" : "none";
-        document.getElementById("rd-pareto-title").textContent = rdActiveRubro
-          ? `Concentración de inventario — ${rdActiveRubro}`
-          : "Concentración de inventario — top artículos";
-      });
-    });
-  }
-
-  document.getElementById("rd-clear-filter").addEventListener("click", () => {
-    rdActiveRubro = null;
-    renderRdGallery();
-    loadRdPareto(null);
-    document.getElementById("rd-clear-filter").style.display = "none";
-    document.getElementById("rd-pareto-title").textContent = "Concentración de inventario — top artículos";
-  });
-
-  function renderRdRubroChart() {
-    if (!rdResumenCache || !rdResumenCache.length) return;
-    const top = rdResumenCache.slice(0, 12);
-    const otros = rdResumenCache.slice(12);
-    const labels = top.map(r => r.rubro);
-    const data = top.map(r => r.unidades);
-    const colors = top.map((r, i) => colorForRank(i, rdResumenCache.length));
-
-    if (otros.length) {
-      labels.push(`Otros (${otros.length} rubros)`);
-      data.push(otros.reduce((a, r) => a + r.unidades, 0));
-      colors.push(RUBRO_OTROS_COLOR);
-    }
-
-    const ctx = document.getElementById("rd-chart-rubros").getContext("2d");
-    if (rdRubroChart) rdRubroChart.destroy();
-    rdRubroChart = new Chart(ctx, {
-      type: "bar",
-      data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: "y",
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => ` ${fmtNum(ctx.raw)} unidades`
-            }
-          }
-        },
-        scales: {
-          x: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
-          y: { ticks: { color: "#e2e4ef", font: { size: 11 } }, grid: { display: false } },
-        }
-      }
-    });
-  }
-
-  async function loadRdPareto(rubro) {
     try {
-      const url = `${API}/api/rubros-detallado/top-articulos?limit=15${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
-      const { rows } = await fetch(url).then(r => r.json());
+      const params = new URLSearchParams();
+      selected.forEach(r => params.append("rubros", r));
+      const res = await fetch(`${API}/api/pg/rubros-stock/chart?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
 
-      const ctx = document.getElementById("rd-chart-pareto").getContext("2d");
-      const labels = rows.map(r => r.descripcion?.length > 26 ? r.descripcion.slice(0, 26) + "…" : r.descripcion);
-      const unidades = rows.map(r => r.unidades);
-      const acumulado = rows.map(r => r.acumuladoPct);
+      const labels = rows.map(r => r.rubro);
+      const data   = rows.map(r => parseFloat(r.existencias_fisicas));
 
-      if (rdParetoChart) rdParetoChart.destroy();
-      rdParetoChart = new Chart(ctx, {
+      const ctx = document.getElementById("rd-chart-rubros").getContext("2d");
+      if (rdBarChart) rdBarChart.destroy();
+      rdBarChart = new Chart(ctx, {
+        type: "bar",
         data: {
           labels,
-          datasets: [
-            {
-              type: "bar",
-              label: "Unidades",
-              data: unidades,
-              backgroundColor: "rgba(79,142,247,.7)",
-              borderRadius: 4,
-              borderSkipped: false,
-              yAxisID: "y",
-              order: 2,
-            },
-            {
-              type: "line",
-              label: "% acumulado",
-              data: acumulado,
-              borderColor: "#f7c948",
-              backgroundColor: "#f7c948",
-              borderWidth: 2,
-              pointRadius: 3,
-              pointBackgroundColor: "#f7c948",
-              yAxisID: "y1",
-              tension: 0.25,
-              order: 1,
-            }
-          ]
+          datasets: [{
+            label: "Existencias físicas",
+            data,
+            backgroundColor: "rgba(79,142,247,.75)",
+            borderColor: "#4f8ef7",
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
         },
         options: {
+          indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              display: true,
-              labels: { color: "#e2e4ef", boxWidth: 12, font: { size: 11 } }
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ctx.dataset.type === "line"
-                  ? ` ${ctx.raw.toFixed(1)}% acumulado`
-                  : ` ${fmtNum(ctx.raw)} unidades`
-              }
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${fmtNum(ctx.raw)}` } },
+            datalabels: {
+              anchor: "end", align: "end", offset: 4,
+              color: "#e2e4ef", font: { weight: "bold", size: 11 },
+              formatter: v => fmtNum(v),
             }
           },
+          layout: { padding: { right: 80 } },
           scales: {
-            x: {
-              ticks: { color: "#7b7f99", maxRotation: 60, minRotation: 60, font: { size: 10 } },
-              grid: { display: false }
-            },
-            y: {
-              position: "left",
-              ticks: { color: "#7b7f99", callback: v => fmtNum(v) },
-              grid: { color: "#2a2d3e" },
-              title: { display: true, text: "Unidades", color: "#7b7f99" }
-            },
-            y1: {
-              position: "right",
-              min: 0, max: 100,
-              ticks: { color: "#f7c948", callback: v => v + "%" },
-              grid: { display: false },
-              title: { display: true, text: "% acumulado", color: "#f7c948" }
-            }
+            x: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
+            y: { ticks: { color: "#7b7f99" }, grid: { display: false } },
           }
-        }
+        },
+        plugins: [ChartDataLabels],
       });
-    } catch (e) { console.error(e); }
+    } catch (e) { document.getElementById("rd-pg-status").textContent = "⚠ " + e.message; }
   }
-
   // ── Pendientes: dashboard de gestión ──
 
   const PEND_PALETTE = [
