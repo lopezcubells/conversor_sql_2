@@ -895,11 +895,19 @@
       <div id="av-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
 
       <div id="av-rubro-filter-section" style="display:none;margin-top:16px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Filtrar por rubro</div>
-        <div id="av-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-outline" onclick="avSelectAllRubros()" style="font-size:12px;padding:4px 10px">Todos</button>
-          <button class="btn btn-outline" onclick="avClearAllRubros()" style="font-size:12px;padding:4px 10px">Ninguno</button>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Filtrar por rubro</div>
+        <div style="position:relative;display:inline-block" id="av-rubro-dropdown-wrap">
+          <button class="btn btn-outline" id="av-rubro-dropdown-btn" style="min-width:220px;display:flex;justify-content:space-between;align-items:center;gap:8px" onclick="avToggleDropdown()">
+            <span id="av-rubro-btn-label">Todos los rubros</span>
+            <span style="font-size:10px">▼</span>
+          </button>
+          <div id="av-rubro-dropdown" style="display:none;position:absolute;z-index:200;top:calc(100% + 4px);left:0;min-width:280px;max-height:320px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+            <div style="display:flex;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+              <button class="btn btn-outline" onclick="avSelectAllRubros()" style="font-size:11px;padding:2px 8px;flex:1">Todos</button>
+              <button class="btn btn-outline" onclick="avClearAllRubros()" style="font-size:11px;padding:2px 8px;flex:1">Ninguno</button>
+            </div>
+            <div id="av-rubro-checks"></div>
+          </div>
         </div>
       </div>
 
@@ -2007,11 +2015,15 @@
     try {
       const saved = JSON.parse(localStorage.getItem(AV_STORAGE_KEY) || "null");
       if (!saved) return;
-      document.getElementById("av-fe-arranque").value      = saved.fe_arranque_stock  || "";
-      document.getElementById("av-hora-arranque").value    = saved.hora_arranque_stock || "";
-      document.getElementById("av-fe-inicio-pmp").value    = saved.fe_inicio_pmp       || "";
-      document.getElementById("av-fe-final-pmp").value     = saved.fe_final_pmp        || "";
+      document.getElementById("av-fe-arranque").value      = saved.fe_arranque_stock   || "";
+      document.getElementById("av-hora-arranque").value    = saved.hora_arranque_stock  || "";
+      document.getElementById("av-fe-inicio-pmp").value    = saved.fe_inicio_pmp        || "";
+      document.getElementById("av-fe-final-pmp").value     = saved.fe_final_pmp         || "";
       avMostrarEstado(saved);
+      // Si hay rubros guardados y ya están los checks poblados, restaurar selección
+      if (saved.rubros_seleccionados?.length) {
+        avPoblarRubros(saved.rubros_seleccionados, saved.rubros_seleccionados);
+      }
     } catch (e) {}
   }
 
@@ -2029,9 +2041,11 @@
     if (!p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp || !p.fe_final_pmp) {
       toast("Completá los 4 parámetros antes de guardar.", "err"); return;
     }
+    // Guardar también los rubros actualmente seleccionados
+    p.rubros_seleccionados = avGetRubrosSeleccionados();
     localStorage.setItem(AV_STORAGE_KEY, JSON.stringify(p));
     avMostrarEstado(p);
-    toast("✅ Parámetros guardados", "ok");
+    toast("✅ Parámetros y rubros guardados", "ok");
   });
 
   // Barra de progreso inline para columna avance (valor 0-100)
@@ -2051,43 +2065,77 @@
   let avArticulosData = [];
   let avRubroData     = [];
 
-  // ── Selector de rubros ──
+  // ── Selector de rubros (dropdown compacto) ──
+
+  function avToggleDropdown() {
+    const dd = document.getElementById("av-rubro-dropdown");
+    dd.style.display = dd.style.display === "none" ? "block" : "none";
+  }
+
+  // Cierra el dropdown al hacer clic afuera
+  document.addEventListener("click", e => {
+    const wrap = document.getElementById("av-rubro-dropdown-wrap");
+    if (wrap && !wrap.contains(e.target)) {
+      const dd = document.getElementById("av-rubro-dropdown");
+      if (dd) dd.style.display = "none";
+    }
+  });
+
   function avGetRubrosSeleccionados() {
     return Array.from(document.querySelectorAll("#av-rubro-checks input:checked")).map(cb => cb.value);
   }
+
+  function avUpdateDropdownLabel() {
+    const todos    = document.querySelectorAll("#av-rubro-checks input").length;
+    const marcados = document.querySelectorAll("#av-rubro-checks input:checked").length;
+    const label    = document.getElementById("av-rubro-btn-label");
+    if (!label) return;
+    label.textContent = marcados === 0     ? "Sin rubros seleccionados"
+                      : marcados === todos  ? "Todos los rubros"
+                      : `${marcados} de ${todos} rubros`;
+  }
+
   function avSelectAllRubros() {
     document.querySelectorAll("#av-rubro-checks input").forEach(cb => cb.checked = true);
+    avUpdateDropdownLabel();
     avAplicarFiltroRubros();
   }
   function avClearAllRubros() {
     document.querySelectorAll("#av-rubro-checks input").forEach(cb => cb.checked = false);
+    avUpdateDropdownLabel();
     avAplicarFiltroRubros();
   }
 
-  function avPoblarRubros(rubros) {
+  function avPoblarRubros(rubros, seleccionados = null) {
     const checks = document.getElementById("av-rubro-checks");
+    const selSet = seleccionados ? new Set(seleccionados) : null;
     checks.innerHTML = "";
     rubros.forEach(r => {
       const label = document.createElement("label");
-      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:6px;white-space:nowrap";
+      label.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:5px 4px;border-radius:4px;transition:background .1s";
+      label.addEventListener("mouseenter", () => label.style.background = "rgba(255,255,255,.04)");
+      label.addEventListener("mouseleave", () => label.style.background = "");
       const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.value = r; cb.checked = true;
-      cb.addEventListener("change", avAplicarFiltroRubros);
+      cb.type    = "checkbox";
+      cb.value   = r;
+      cb.checked = selSet ? selSet.has(r) : true;  // restaurar selección guardada, o todo marcado
+      cb.addEventListener("change", () => { avUpdateDropdownLabel(); avAplicarFiltroRubros(); });
       label.appendChild(cb);
       label.appendChild(document.createTextNode(r));
       checks.appendChild(label);
     });
     document.getElementById("av-rubro-filter-section").style.display = rubros.length ? "block" : "none";
+    avUpdateDropdownLabel();
   }
 
   function avAplicarFiltroRubros() {
     const seleccionados = new Set(avGetRubrosSeleccionados());
     avRenderRubro(avRubroData.filter(r => seleccionados.has(r.rubro)));
-    const artFiltrados = avArticulosData.filter(r => seleccionados.has(r.rubro));
+    const artBase = avArticulosData.filter(r => seleccionados.has(r.rubro));
     const q = document.getElementById("av-art-q").value.trim().toLowerCase();
-    avRenderArticulos(q ? artFiltrados.filter(r =>
+    avRenderArticulos(q ? artBase.filter(r =>
       String(r.descripcion ?? "").toLowerCase().includes(q) ||
-      String(r.cod_corto ?? "").toLowerCase().includes(q)) : artFiltrados);
+      String(r.cod_corto ?? "").toLowerCase().includes(q)) : artBase);
   }
 
   function avRenderRubro(rows) {
@@ -2187,15 +2235,19 @@
 
       avRenderRubro(data.avance_x_rubro);
 
-      avArticulosData = data.avance_x_articulo;
       avRubroData     = data.avance_x_rubro;
+      avArticulosData = data.avance_x_articulo;
 
-      // Poblar selector de rubros con los que devolvió la función
+      // Poblar selector con todos los rubros que devolvió la función,
+      // pero restaurar la selección guardada si existe
       const rubros = [...new Set(data.avance_x_rubro.map(r => r.rubro).filter(Boolean))].sort();
-      avPoblarRubros(rubros);
+      const saved  = JSON.parse(localStorage.getItem(AV_STORAGE_KEY) || "null");
+      const selGuardados = saved?.rubros_seleccionados?.length ? saved.rubros_seleccionados : null;
+      avPoblarRubros(rubros, selGuardados);
 
       document.getElementById("av-art-q").value = "";
-      avRenderArticulos(avArticulosData);
+      // Renderizar solo los rubros seleccionados (los guardados, o todos si no hay guardados)
+      avAplicarFiltroRubros();
 
       info.textContent = `✓ ${data.avance_x_rubro.length} rubros · ${data.avance_x_articulo.length} artículos`;
       toast("✅ Avance calculado", "ok");
