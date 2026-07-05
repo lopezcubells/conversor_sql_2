@@ -63,12 +63,6 @@ function requireDb(req, res, next) {
   next();
 }
 
-// Whitelist de rubros para Avance x Rubro
-const AVANCE_RUBRO_WHITELIST = [
-  "ETIQUETA FR","ETIQUETA CT","Tapón","Cápsulas","TETRA Envases",
-  "BOTELLA Vidrio","Tapa","Bandeja","Cajas","BIB Envase","Pallets",
-];
-
 function initSchema() {
   const db = loadDb();
   db.run(`PRAGMA journal_mode=WAL`);
@@ -749,115 +743,6 @@ app.get("/api/recepciones/por-mes", requireDb, (req,res) => {
   } catch(err){ res.status(500).json({error:err.message}); }
 });
 
-// Avance
-app.get("/api/avance/indicador", requireDb, (req,res) => {
-  try {
-    const ph = AVANCE_RUBRO_WHITELIST.map(()=>"?").join(",");
-    const row = readDb(db => query(db, `SELECT SUM(costo_recepciones) as cr, SUM(costo_necesidad_inicial) as cni FROM avance_x_articulo WHERE rubro IN (${ph})`, AVANCE_RUBRO_WHITELIST))[0];
-    const indicador = (row?.cni??0) > 0 ? (row.cr/row.cni) : null;
-    res.json({ indicadorAvance: indicador });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/avance/rubros", requireDb, (req,res) => {
-  try {
-    const rubros = readDb(db => query(db,"SELECT DISTINCT rubro FROM avance_x_articulo WHERE rubro IS NOT NULL AND rubro!='' ORDER BY rubro")).map(r=>r.rubro);
-    res.json({ rubros });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-
-const AVANCE_SORT_COLS = new Set(["nro_corto","descripcion","rubro","arranque","recepciones","consumo","necesidad_inicial","necesidad_actual","avance_pct","costo_u","costo_recepciones","costo_necesidad_inicial"]);
-const AVANCE_RUBRO_SORT_COLS = new Set(["rubro","arranque","recepciones","consumo","necesidad_inicial","necesidad_actual","avance_pct"]);
-function parseSortParams(req, validCols, defaultCol) {
-  const col = validCols.has(req.query.sort) ? req.query.sort : defaultCol;
-  const dir = req.query.dir === "asc" ? "ASC" : "DESC";
-  return { col, dir };
-}
-
-app.get("/api/avance", requireDb, (req,res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit)||50, 1000);
-    const offset = parseInt(req.query.offset)||0;
-    const q = req.query.q ? `%${req.query.q}%` : null;
-    const rubro = req.query.rubro||null;
-    const { col, dir } = parseSortParams(req, AVANCE_SORT_COLS, "nro_corto");
-    const data = readDb(db => {
-      const clauses=[]; const params=[];
-      if (q)     { clauses.push("descripcion LIKE ?"); params.push(q); }
-      if (rubro) { clauses.push("rubro=?"); params.push(rubro); }
-      const where = clauses.length ? "WHERE "+clauses.join(" AND ") : "";
-      return {
-        rows:  query(db, `SELECT * FROM avance_x_articulo ${where} ORDER BY ${col} ${dir} LIMIT ? OFFSET ?`, [...params,limit,offset]),
-        total: query(db, `SELECT COUNT(*) as c FROM avance_x_articulo ${where}`, params)[0]?.c??0,
-        limit, offset,
-      };
-    });
-    res.json(data);
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-
-app.get("/api/avance-rubro", requireDb, (req,res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit)||100, 1000);
-    const offset = parseInt(req.query.offset)||0;
-    const rubro = req.query.rubro||null;
-    const { col, dir } = parseSortParams(req, AVANCE_RUBRO_SORT_COLS, "avance_pct");
-    const data = readDb(db => {
-      const ph = AVANCE_RUBRO_WHITELIST.map(()=>"?").join(",");
-      const clauses = [`rubro IN (${ph})`]; const params = [...AVANCE_RUBRO_WHITELIST];
-      if (rubro) { clauses.push("rubro=?"); params.push(rubro); }
-      const where = "WHERE "+clauses.join(" AND ");
-      return {
-        rows:  query(db, `SELECT * FROM avance_x_rubro ${where} ORDER BY ${col} ${dir} LIMIT ? OFFSET ?`, [...params,limit,offset]),
-        total: query(db, `SELECT COUNT(*) as c FROM avance_x_rubro ${where}`, params)[0]?.c??0,
-        limit, offset,
-      };
-    });
-    res.json(data);
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-
-app.post("/api/avance/calcular", requireDb, (req,res) => {
-  try {
-    const { fechaArranque, horaArranque, fechaInicialPmp, fechaFinalPmp } = req.body||{};
-    if (!fechaArranque||!horaArranque) return res.status(400).json({error:"Cargá Fecha y Hora de arranque."});
-    if (!fechaInicialPmp||!fechaFinalPmp) return res.status(400).json({error:"Cargá Fecha Inicial y Final PMP."});
-    const resultado = withDb(db => {
-      const arts = query(db,"SELECT nro_corto, MAX(descripcion) as descripcion, MAX(rubro) as rubro FROM articulos WHERE nro_corto IS NOT NULL GROUP BY nro_corto");
-      const arranqueMap = new Map(query(db,"SELECT nro_corto, SUM(existencias) as total FROM stock_arranque WHERE nro_corto IS NOT NULL GROUP BY nro_corto").map(r=>[r.nro_corto,r.total]));
-      const recMap = new Map(query(db,"SELECT nro_corto, SUM(cantidad_recibida) as total FROM recepciones WHERE nro_corto IS NOT NULL AND cantidad_recibida IS NOT NULL AND fecha_recepcion>=? AND hora_recepcion>? GROUP BY nro_corto",[fechaArranque,horaArranque]).map(r=>[r.nro_corto,r.total]));
-      const consMap = new Map(query(db,"SELECT codigo_corto_comp, SUM(cantidad_insumo) as total FROM pmp_x_bom WHERE codigo_corto_comp IS NOT NULL AND cantidad_insumo IS NOT NULL AND dia>=? AND dia<=? GROUP BY codigo_corto_comp",[fechaInicialPmp,fechaFinalPmp]).map(r=>[r.codigo_corto_comp,r.total]));
-      const costoMap = new Map(query(db,"SELECT nro_corto, MAX(costo_uni) as costo_uni FROM costo_insumos WHERE nro_corto IS NOT NULL GROUP BY nro_corto").map(r=>[r.nro_corto,r.costo_uni]));
-      db.run("DELETE FROM avance_x_articulo");
-      const stmt = db.prepare(`INSERT INTO avance_x_articulo (nro_corto,descripcion,rubro,arranque,recepciones,consumo,necesidad_inicial,necesidad_actual,avance_pct,costo_u,costo_recepciones,costo_necesidad_inicial) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-      for (const art of arts) {
-        const arr = arranqueMap.get(art.nro_corto)??0;
-        const rec = recMap.get(art.nro_corto)??0;
-        const con = consMap.get(art.nro_corto)??0;
-        const ni  = arr-con < 0 ? arr-con : null;
-        const na  = arr+rec-con < 0 ? arr+rec-con : null;
-        const av  = ni==null||ni===0 ? 1 : Math.abs(rec/ni);
-        const cu  = costoMap.get(art.nro_corto)??null;
-        const cr  = cu!=null ? rec*cu : null;
-        const cni = cu!=null&&ni!=null ? Math.abs(ni)*cu : null;
-        stmt.run([art.nro_corto,art.descripcion,art.rubro,arr,rec,con,ni,na,av,cu,cr,cni]);
-      }
-      stmt.free();
-      db.run("DELETE FROM avance_x_rubro");
-      const rubroAgg = query(db,`SELECT rubro, SUM(arranque) as arranque, SUM(recepciones) as recepciones, SUM(consumo) as consumo, SUM(COALESCE(necesidad_inicial,0)) as necesidad_inicial, SUM(COALESCE(necesidad_actual,0)) as necesidad_actual FROM avance_x_articulo WHERE rubro IS NOT NULL AND rubro!='' GROUP BY rubro`);
-      const stmtR = db.prepare(`INSERT INTO avance_x_rubro (rubro,arranque,recepciones,consumo,necesidad_inicial,necesidad_actual,avance_pct) VALUES (?,?,?,?,?,?,?)`);
-      for (const r of rubroAgg) {
-        const av = !r.necesidad_inicial ? 1 : Math.abs(r.recepciones/r.necesidad_inicial);
-        stmtR.run([r.rubro,r.arranque,r.recepciones,r.consumo,r.necesidad_inicial,r.necesidad_actual,av]);
-      }
-      stmtR.free();
-      const ph = AVANCE_RUBRO_WHITELIST.map(()=>"?").join(",");
-      const ind = query(db,`SELECT SUM(costo_recepciones) as cr, SUM(costo_necesidad_inicial) as cni FROM avance_x_articulo WHERE rubro IN (${ph})`,AVANCE_RUBRO_WHITELIST)[0];
-      const indicadorAvance = (ind?.cni??0)>0 ? ind.cr/ind.cni : null;
-      return { filas: arts.length, indicadorAvance };
-    });
-    res.json({ success: true, rows: resultado.filas, indicadorAvance: resultado.indicadorAvance });
-  } catch(err){ console.error(err); res.status(500).json({error:err.message}); }
-});
 
 // PostgreSQL endpoints
 app.get("/api/db/consumos/filtros", async (req,res) => {
@@ -964,7 +849,7 @@ app.post("/api/reset-all", requireDb, (req,res) => {
 // Export CSV
 app.get("/api/export/:tabla", requireDb, (req,res) => {
   try {
-    const valid = ["articulos","stock_sucursales","stock_detallado","pendiente_completo","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","avance_x_articulo","avance_x_rubro","costo_insumos","pendientes_tetra","stock_consolidado","consumo_consolidado"];
+    const valid = ["articulos","stock_sucursales","stock_detallado","pendiente_completo","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","costo_insumos","pendientes_tetra","stock_consolidado","consumo_consolidado"];
     const tabla = valid.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows = readDb(db => query(db, `SELECT * FROM ${tabla}`));
     if (!rows.length) return res.status(404).json({error:"Sin datos"});
