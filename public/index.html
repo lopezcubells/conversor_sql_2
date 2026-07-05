@@ -893,6 +893,16 @@
         </div>
       </div>
       <div id="av-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+
+      <div id="av-rubro-filter-section" style="display:none;margin-top:16px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Filtrar por rubro</div>
+        <div id="av-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="avSelectAllRubros()" style="font-size:12px;padding:4px 10px">Todos</button>
+          <button class="btn btn-outline" onclick="avClearAllRubros()" style="font-size:12px;padding:4px 10px">Ninguno</button>
+        </div>
+      </div>
+
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-outline" id="av-btn-guardar">💾 Guardar parámetros</button>
         <button class="btn btn-success" id="av-btn-calcular">⚙ Calcular avance</button>
@@ -2039,6 +2049,46 @@
 
   // Datos en memoria para filtrado local de artículos
   let avArticulosData = [];
+  let avRubroData     = [];
+
+  // ── Selector de rubros ──
+  function avGetRubrosSeleccionados() {
+    return Array.from(document.querySelectorAll("#av-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function avSelectAllRubros() {
+    document.querySelectorAll("#av-rubro-checks input").forEach(cb => cb.checked = true);
+    avAplicarFiltroRubros();
+  }
+  function avClearAllRubros() {
+    document.querySelectorAll("#av-rubro-checks input").forEach(cb => cb.checked = false);
+    avAplicarFiltroRubros();
+  }
+
+  function avPoblarRubros(rubros) {
+    const checks = document.getElementById("av-rubro-checks");
+    checks.innerHTML = "";
+    rubros.forEach(r => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:6px;white-space:nowrap";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = r; cb.checked = true;
+      cb.addEventListener("change", avAplicarFiltroRubros);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(r));
+      checks.appendChild(label);
+    });
+    document.getElementById("av-rubro-filter-section").style.display = rubros.length ? "block" : "none";
+  }
+
+  function avAplicarFiltroRubros() {
+    const seleccionados = new Set(avGetRubrosSeleccionados());
+    avRenderRubro(avRubroData.filter(r => seleccionados.has(r.rubro)));
+    const artFiltrados = avArticulosData.filter(r => seleccionados.has(r.rubro));
+    const q = document.getElementById("av-art-q").value.trim().toLowerCase();
+    avRenderArticulos(q ? artFiltrados.filter(r =>
+      String(r.descripcion ?? "").toLowerCase().includes(q) ||
+      String(r.cod_corto ?? "").toLowerCase().includes(q)) : artFiltrados);
+  }
 
   function avRenderRubro(rows) {
     const wrap = document.getElementById("av-rubro-wrap");
@@ -2097,12 +2147,16 @@
 
   function avFiltrarArticulos() {
     const q = document.getElementById("av-art-q").value.trim().toLowerCase();
+    const seleccionados = new Set(avGetRubrosSeleccionados());
+    const base = seleccionados.size
+      ? avArticulosData.filter(r => seleccionados.has(r.rubro))
+      : avArticulosData;
     const filtrados = q
-      ? avArticulosData.filter(r =>
+      ? base.filter(r =>
           String(r.descripcion ?? "").toLowerCase().includes(q) ||
           String(r.cod_corto ?? "").toLowerCase().includes(q) ||
           String(r.rubro ?? "").toLowerCase().includes(q))
-      : avArticulosData;
+      : base;
     avRenderArticulos(filtrados);
   }
   document.getElementById("av-art-q").addEventListener("keydown", e => {
@@ -2134,6 +2188,12 @@
       avRenderRubro(data.avance_x_rubro);
 
       avArticulosData = data.avance_x_articulo;
+      avRubroData     = data.avance_x_rubro;
+
+      // Poblar selector de rubros con los que devolvió la función
+      const rubros = [...new Set(data.avance_x_rubro.map(r => r.rubro).filter(Boolean))].sort();
+      avPoblarRubros(rubros);
+
       document.getElementById("av-art-q").value = "";
       avRenderArticulos(avArticulosData);
 
