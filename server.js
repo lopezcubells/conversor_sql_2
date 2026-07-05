@@ -756,6 +756,36 @@ app.get("/api/db/consumos/filtros", async (req,res) => {
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+// ── Avance desde funciones PostgreSQL ──
+
+app.post("/api/pg/avance/calcular", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp } = req.body || {};
+    if (!fe_arranque_stock || !hora_arranque_stock || !fe_inicio_pmp || !fe_final_pmp)
+      return res.status(400).json({ error: "Completá los 4 parámetros antes de calcular." });
+
+    const [rubro, articulo] = await Promise.all([
+      pgPool.query(
+        `SELECT * FROM avance_x_rubro($1::date, $2::time, $3::date, $4::date)`,
+        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp]
+      ),
+      pgPool.query(
+        `SELECT * FROM avance_x_articulo($1::date, $2::time, $3::date, $4::date)`,
+        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp]
+      ),
+    ]);
+
+    res.json({
+      avance_x_rubro:    rubro.rows,
+      avance_x_articulo: articulo.rows,
+    });
+  } catch (e) {
+    console.error("PG avance error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Rotación desde rotacion_2026
 app.get("/api/pg/rotacion/rubros", async (req,res) => {
   if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
