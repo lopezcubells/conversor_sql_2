@@ -574,6 +574,7 @@
   <div class="tab" data-tab="stock-detallado">Stock detallado</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="pendientes">Pendientes</div>
+  <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="recepciones-mes">Recepciones</div>
   <div class="tab" data-tab="base-datos">Base de datos</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
@@ -863,6 +864,73 @@
 </div>
 
 
+<!-- ═══ AVANCE ═══ -->
+<div class="pane" id="tab-avance">
+
+  <!-- Parámetros -->
+  <div class="card">
+    <div class="collapsible-header" id="avance-params-toggle">
+      <div class="card-title" style="margin-bottom:0">Parámetros de avance</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body" id="avance-params-body">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha de arranque</label>
+          <input type="date" class="search-input" id="av-fe-arranque" style="width:160px;color-scheme:dark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora de arranque</label>
+          <input type="time" class="search-input" id="av-hora-arranque" step="1" style="width:140px;color-scheme:dark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicio PMP</label>
+          <input type="date" class="search-input" id="av-fe-inicio-pmp" style="width:160px;color-scheme:dark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final PMP</label>
+          <input type="date" class="search-input" id="av-fe-final-pmp" style="width:160px;color-scheme:dark" />
+        </div>
+      </div>
+      <div id="av-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-outline" id="av-btn-guardar">💾 Guardar parámetros</button>
+        <button class="btn btn-success" id="av-btn-calcular">⚙ Calcular avance</button>
+        <span id="av-calc-info" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avance x Rubro -->
+  <div class="section-heading"><h2>Avance x Rubro</h2></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="av-rubro-wrap">
+      <div class="empty"><div class="big">⚙</div>Calculá el avance para ver los resultados</div>
+    </div>
+  </div>
+
+  <!-- Avance x Artículo (colapsable, inicia oculto) -->
+  <div class="card" style="margin-top:24px">
+    <div class="collapsible-header collapsed" id="avance-art-toggle">
+      <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:0">Avance x Artículo</h2>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body collapsible-body-tall collapsed" id="avance-art-body">
+      <div class="search-row" style="margin-top:14px">
+        <input class="search-input" id="av-art-q" placeholder="Buscar por descripción o código…" />
+        <button class="btn btn-outline" onclick="avFiltrarArticulos()">🔍 Buscar</button>
+      </div>
+      <div class="card" style="padding:0;margin-top:8px">
+        <div class="table-wrap" id="av-art-wrap">
+          <div class="empty"><div class="big">⚙</div>Calculá el avance para ver los resultados</div>
+        </div>
+      </div>
+      <div class="pagination" id="av-art-pagination"></div>
+    </div>
+  </div>
+
+</div>
+
 <!-- ═══ RECEPCIONES ═══ -->
 <div class="pane" id="tab-recepciones-mes">
   <div class="card">
@@ -980,6 +1048,7 @@
       if (tab.dataset.tab === "stock-detallado") initStockDetallado();
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "pendientes") initPendientes();
+      if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
       if (tab.dataset.tab === "base-datos") initBaseDatos();
       if (tab.dataset.tab === "rotacion") initRotacion();
@@ -1896,6 +1965,190 @@
     } catch (e) {
       status.textContent = "⚠ " + e.message;
     }
+  }
+
+  // ── Avance (PostgreSQL) ──
+
+  const AV_STORAGE_KEY = "avance-params-pg";
+  const AV_PARAM_IDS   = ["av-fe-arranque", "av-hora-arranque", "av-fe-inicio-pmp", "av-fe-final-pmp"];
+
+  // Colapsable de parámetros
+  document.getElementById("avance-params-toggle").addEventListener("click", () => {
+    document.getElementById("avance-params-toggle").classList.toggle("collapsed");
+    document.getElementById("avance-params-body").classList.toggle("collapsed");
+  });
+
+  // Colapsable de Avance x Artículo
+  document.getElementById("avance-art-toggle").addEventListener("click", () => {
+    document.getElementById("avance-art-toggle").classList.toggle("collapsed");
+    document.getElementById("avance-art-body").classList.toggle("collapsed");
+  });
+
+  function avGetParams() {
+    return {
+      fe_arranque_stock:  document.getElementById("av-fe-arranque").value,
+      hora_arranque_stock: document.getElementById("av-hora-arranque").value,
+      fe_inicio_pmp:      document.getElementById("av-fe-inicio-pmp").value,
+      fe_final_pmp:       document.getElementById("av-fe-final-pmp").value,
+    };
+  }
+
+  function avRestoreParams() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(AV_STORAGE_KEY) || "null");
+      if (!saved) return;
+      document.getElementById("av-fe-arranque").value      = saved.fe_arranque_stock  || "";
+      document.getElementById("av-hora-arranque").value    = saved.hora_arranque_stock || "";
+      document.getElementById("av-fe-inicio-pmp").value    = saved.fe_inicio_pmp       || "";
+      document.getElementById("av-fe-final-pmp").value     = saved.fe_final_pmp        || "";
+      avMostrarEstado(saved);
+    } catch (e) {}
+  }
+
+  function avMostrarEstado(p) {
+    const estado = document.getElementById("av-params-estado");
+    if (p.fe_arranque_stock && p.hora_arranque_stock && p.fe_inicio_pmp && p.fe_final_pmp) {
+      estado.innerHTML = `✓ Guardado: <strong style="color:var(--text)">${p.fe_arranque_stock} ${p.hora_arranque_stock}</strong> · PMP: <strong style="color:var(--text)">${p.fe_inicio_pmp} → ${p.fe_final_pmp}</strong>`;
+    } else {
+      estado.textContent = "";
+    }
+  }
+
+  document.getElementById("av-btn-guardar").addEventListener("click", () => {
+    const p = avGetParams();
+    if (!p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp || !p.fe_final_pmp) {
+      toast("Completá los 4 parámetros antes de guardar.", "err"); return;
+    }
+    localStorage.setItem(AV_STORAGE_KEY, JSON.stringify(p));
+    avMostrarEstado(p);
+    toast("✅ Parámetros guardados", "ok");
+  });
+
+  // Barra de progreso inline para columna avance (valor 0-100)
+  function avanceBar(val) {
+    const v    = parseFloat(val) || 0;
+    const pct  = Math.min(v, 100);
+    const color = v >= 100 ? "#34c97e" : v >= 50 ? "#f7c948" : "#f76060";
+    return `<div style="display:flex;align-items:center;gap:8px;min-width:140px">
+      <div style="flex:1;height:8px;border-radius:99px;background:var(--border);overflow:hidden;min-width:70px">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:99px"></div>
+      </div>
+      <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${color};min-width:44px;text-align:right">${Math.round(v)}%</span>
+    </div>`;
+  }
+
+  // Datos en memoria para filtrado local de artículos
+  let avArticulosData = [];
+
+  function avRenderRubro(rows) {
+    const wrap = document.getElementById("av-rubro-wrap");
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📊</div>Sin datos para estos parámetros</div>`;
+      return;
+    }
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        <th>Rubro</th><th>Arranque</th><th>Recepciones</th><th>Consumo</th>
+        <th>Nec. Inicial</th><th>Nec. Actual</th><th>Avance</th><th>Exceso</th><th>Tipo</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.rubro ?? ""}</td>
+        <td>${fmtNum(r.stock_arranque ?? 0)}</td>
+        <td>${fmtNum(r.recepciones ?? 0)}</td>
+        <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
+        <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
+        <td>${avanceBar(r.avance)}</td>
+        <td>${r.exceso != null ? fmtNum(r.exceso) : ""}</td>
+        <td>${r.tipo ?? ""}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function avRenderArticulos(rows) {
+    const wrap = document.getElementById("av-art-wrap");
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📊</div>Sin resultados</div>`;
+      document.getElementById("av-art-pagination").innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        <th>Cód. Corto</th><th>Rubro</th><th>Descripción</th><th>Arranque</th>
+        <th>Recepciones</th><th>Consumo</th><th>Nec. Inicial</th><th>Nec. Actual</th>
+        <th>Mín Rec/Nec</th><th>Avance</th><th>Exceso</th><th>Tipo Exceso</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.cod_corto ?? ""}</td>
+        <td>${r.rubro ?? ""}</td>
+        <td>${r.descripcion ?? ""}</td>
+        <td>${fmtNum(r.stock_arranque ?? 0)}</td>
+        <td>${fmtNum(r.recepciones ?? 0)}</td>
+        <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
+        <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
+        <td>${r.minimo_rec_vs_nec != null ? fmtNum(r.minimo_rec_vs_nec) : ""}</td>
+        <td>${avanceBar(r.avance)}</td>
+        <td>${r.exceso != null ? fmtNum(r.exceso) : ""}</td>
+        <td>${r.tipo_exceso ?? ""}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function avFiltrarArticulos() {
+    const q = document.getElementById("av-art-q").value.trim().toLowerCase();
+    const filtrados = q
+      ? avArticulosData.filter(r =>
+          String(r.descripcion ?? "").toLowerCase().includes(q) ||
+          String(r.cod_corto ?? "").toLowerCase().includes(q) ||
+          String(r.rubro ?? "").toLowerCase().includes(q))
+      : avArticulosData;
+    avRenderArticulos(filtrados);
+  }
+  document.getElementById("av-art-q").addEventListener("keydown", e => {
+    if (e.key === "Enter") avFiltrarArticulos();
+  });
+
+  document.getElementById("av-btn-calcular").addEventListener("click", async () => {
+    const p    = avGetParams();
+    const btn  = document.getElementById("av-btn-calcular");
+    const info = document.getElementById("av-calc-info");
+
+    if (!p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp || !p.fe_final_pmp) {
+      toast("Completá los 4 parámetros antes de calcular.", "err"); return;
+    }
+
+    btn.disabled = true;
+    info.textContent = "Calculando…";
+    document.getElementById("av-rubro-wrap").innerHTML = `<div class="empty"><div class="big">⏳</div>Consultando PostgreSQL…</div>`;
+
+    try {
+      const res = await fetch(`${API}/api/pg/avance/calcular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      avRenderRubro(data.avance_x_rubro);
+
+      avArticulosData = data.avance_x_articulo;
+      document.getElementById("av-art-q").value = "";
+      avRenderArticulos(avArticulosData);
+
+      info.textContent = `✓ ${data.avance_x_rubro.length} rubros · ${data.avance_x_articulo.length} artículos`;
+      toast("✅ Avance calculado", "ok");
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+      info.textContent = "";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function initAvance() {
+    avRestoreParams();
   }
 
   // ── DB ready banner ──
