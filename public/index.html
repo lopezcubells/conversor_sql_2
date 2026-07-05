@@ -867,8 +867,16 @@
 <!-- ═══ AVANCE ═══ -->
 <div class="pane" id="tab-avance">
 
-  <!-- Parámetros -->
-  <div class="card">
+  <!-- 1. Avance x Rubro -->
+  <div class="section-heading"><h2>Avance x Rubro</h2></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="av-rubro-wrap">
+      <div class="empty"><div class="big">⚙</div>Calculá el avance para ver los resultados</div>
+    </div>
+  </div>
+
+  <!-- 2. Parámetros -->
+  <div class="card" style="margin-top:24px">
     <div class="collapsible-header" id="avance-params-toggle">
       <div class="card-title" style="margin-bottom:0">Parámetros de avance</div>
       <span class="chevron">▼</span>
@@ -893,7 +901,6 @@
         </div>
       </div>
       <div id="av-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
-
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-outline" id="av-btn-guardar">💾 Guardar parámetros</button>
         <button class="btn btn-success" id="av-btn-calcular">⚙ Calcular avance</button>
@@ -902,7 +909,7 @@
     </div>
   </div>
 
-  <!-- Filtro de rubros (fuera del colapsable, card propia) -->
+  <!-- 3. Filtro de rubros -->
   <div class="card" id="av-rubro-filter-section" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
@@ -917,16 +924,8 @@
     <div id="av-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px"></div>
   </div>
 
-  <!-- Avance x Rubro -->
-  <div class="section-heading"><h2>Avance x Rubro</h2></div>
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="av-rubro-wrap">
-      <div class="empty"><div class="big">⚙</div>Calculá el avance para ver los resultados</div>
-    </div>
-  </div>
-
-  <!-- Avance x Artículo (colapsable, inicia oculto) -->
-  <div class="card" style="margin-top:24px">
+  <!-- 4. Avance x Artículo (colapsable, inicia oculto) -->
+  <div class="card" style="margin-top:8px">
     <div class="collapsible-header collapsed" id="avance-art-toggle">
       <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:0">Avance x Artículo</h2>
       <span class="chevron">▼</span>
@@ -2048,20 +2047,36 @@
 
   // Barra de progreso inline para columna avance (valor 0-100)
   function avanceBar(val) {
-    const v    = parseFloat(val) || 0;
-    const pct  = Math.min(v, 100);
-    const color = v >= 100 ? "#34c97e" : v >= 50 ? "#f7c948" : "#f76060";
+    const v   = parseFloat(val) || 0;
+    const pct = Math.min(v, 100);
     return `<div style="display:flex;align-items:center;gap:8px;min-width:140px">
       <div style="flex:1;height:8px;border-radius:99px;background:var(--border);overflow:hidden;min-width:70px">
-        <div style="height:100%;width:${pct}%;background:${color};border-radius:99px"></div>
+        <div style="height:100%;width:${pct}%;background:#34c97e;border-radius:99px"></div>
       </div>
-      <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${color};min-width:44px;text-align:right">${Math.round(v)}%</span>
+      <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:#34c97e;min-width:44px;text-align:right">${Math.round(v)}%</span>
     </div>`;
   }
 
-  // Datos en memoria para filtrado local de artículos
+  // Datos en memoria para filtrado y sort local
   let avArticulosData = [];
   let avRubroData     = [];
+  let avRubroSort     = { col: "avance", dir: "desc" };
+  let avArtSort       = { col: "avance", dir: "desc" };
+
+  function avTh(label, col, sortState, fn) {
+    const active = sortState.col === col;
+    const arrow  = active ? (sortState.dir === "desc" ? "▼" : "▲") : "▾";
+    return `<th class="sortable${active?" sort-active":""}" onclick="${fn}('${col}')" style="cursor:pointer;user-select:none">${label} <span style="opacity:${active?1:.4}">${arrow}</span></th>`;
+  }
+
+  function avSortData(data, col, dir) {
+    return [...data].sort((a, b) => {
+      const va = a[col] ?? "", vb = b[col] ?? "";
+      const na = parseFloat(va), nb = parseFloat(vb);
+      const cmp = (!isNaN(na) && !isNaN(nb)) ? na - nb : String(va).localeCompare(String(vb));
+      return dir === "desc" ? -cmp : cmp;
+    });
+  }
 
   // ── Selector de rubros (pills, card propia fuera del colapsable) ──
 
@@ -2112,18 +2127,33 @@
       String(r.cod_corto ?? "").toLowerCase().includes(q)) : artBase);
   }
 
+  function sortAvRubro(col) {
+    if (avRubroSort.col === col) avRubroSort.dir = avRubroSort.dir === "desc" ? "asc" : "desc";
+    else { avRubroSort.col = col; avRubroSort.dir = "desc"; }
+    avAplicarFiltroRubros();
+  }
+
   function avRenderRubro(rows) {
     const wrap = document.getElementById("av-rubro-wrap");
     if (!rows.length) {
       wrap.innerHTML = `<div class="empty"><div class="big">📊</div>Sin datos para estos parámetros</div>`;
       return;
     }
+    const sorted = avSortData(rows, avRubroSort.col, avRubroSort.dir);
+    const s = avRubroSort;
     wrap.innerHTML = `<table>
       <thead><tr>
-        <th>Rubro</th><th>Arranque</th><th>Recepciones</th><th>Consumo</th>
-        <th>Nec. Inicial</th><th>Nec. Actual</th><th>Avance</th><th>Exceso</th><th>Tipo</th>
+        ${avTh("Rubro",       "rubro",            s, "sortAvRubro")}
+        ${avTh("Arranque",    "stock_arranque",    s, "sortAvRubro")}
+        ${avTh("Recepciones", "recepciones",       s, "sortAvRubro")}
+        ${avTh("Consumo",     "consumo",           s, "sortAvRubro")}
+        ${avTh("Nec. Inicial","necesidad_inicial", s, "sortAvRubro")}
+        ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvRubro")}
+        ${avTh("Avance",      "avance",            s, "sortAvRubro")}
+        ${avTh("Exceso",      "exceso",            s, "sortAvRubro")}
+        ${avTh("Tipo",        "tipo",              s, "sortAvRubro")}
       </tr></thead>
-      <tbody>${rows.map(r => `<tr>
+      <tbody>${sorted.map(r => `<tr>
         <td>${r.rubro ?? ""}</td>
         <td>${fmtNum(r.stock_arranque ?? 0)}</td>
         <td>${fmtNum(r.recepciones ?? 0)}</td>
@@ -2137,6 +2167,12 @@
     </table>`;
   }
 
+  function sortAvArt(col) {
+    if (avArtSort.col === col) avArtSort.dir = avArtSort.dir === "desc" ? "asc" : "desc";
+    else { avArtSort.col = col; avArtSort.dir = "desc"; }
+    avFiltrarArticulos();
+  }
+
   function avRenderArticulos(rows) {
     const wrap = document.getElementById("av-art-wrap");
     if (!rows.length) {
@@ -2144,13 +2180,24 @@
       document.getElementById("av-art-pagination").innerHTML = "";
       return;
     }
+    const sorted = avSortData(rows, avArtSort.col, avArtSort.dir);
+    const s = avArtSort;
     wrap.innerHTML = `<table>
       <thead><tr>
-        <th>Cód. Corto</th><th>Rubro</th><th>Descripción</th><th>Arranque</th>
-        <th>Recepciones</th><th>Consumo</th><th>Nec. Inicial</th><th>Nec. Actual</th>
-        <th>Mín Rec/Nec</th><th>Avance</th><th>Exceso</th><th>Tipo Exceso</th>
+        ${avTh("Cód. Corto",  "cod_corto",         s, "sortAvArt")}
+        ${avTh("Rubro",       "rubro",             s, "sortAvArt")}
+        ${avTh("Descripción", "descripcion",       s, "sortAvArt")}
+        ${avTh("Arranque",    "stock_arranque",    s, "sortAvArt")}
+        ${avTh("Recepciones", "recepciones",       s, "sortAvArt")}
+        ${avTh("Consumo",     "consumo",           s, "sortAvArt")}
+        ${avTh("Nec. Inicial","necesidad_inicial", s, "sortAvArt")}
+        ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvArt")}
+        ${avTh("Mín Rec/Nec", "minimo_rec_vs_nec", s, "sortAvArt")}
+        ${avTh("Avance",      "avance",            s, "sortAvArt")}
+        ${avTh("Exceso",      "exceso",            s, "sortAvArt")}
+        ${avTh("Tipo Exceso", "tipo_exceso",       s, "sortAvArt")}
       </tr></thead>
-      <tbody>${rows.map(r => `<tr>
+      <tbody>${sorted.map(r => `<tr>
         <td>${r.cod_corto ?? ""}</td>
         <td>${r.rubro ?? ""}</td>
         <td>${r.descripcion ?? ""}</td>
