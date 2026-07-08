@@ -786,6 +786,44 @@ app.post("/api/pg/avance/calcular", async (req, res) => {
   }
 });
 
+// ── Cobertura y Faltantes ──
+
+const COBERTURA_RUBROS = [
+  'Bandeja','BIB Bolsa','BIB Envase','BIB Manijas','BOTELLA Vidrio',
+  'Cajas','Cápsulas','ETIQUETA CT','ETIQUETA FR','ETIQUETA Medallas y Stickers',
+  'ETIQUETA Rotulo','FILM Termocontraible','Pallets','Plancha','Separador',
+  'Stretch','Tapa','Tapón','TETRA Envases',
+];
+
+app.post("/api/pg/cobertura", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { hora_arranque_stock, fe_inicio_semana, fe_final_semana, rubros_seleccionados } = req.body || {};
+    if (!hora_arranque_stock || !fe_inicio_semana || !fe_final_semana)
+      return res.status(400).json({ error: "Completá los 3 parámetros antes de aplicar." });
+
+    // Usar rubros seleccionados o todos los de la whitelist
+    const rubros = (rubros_seleccionados && rubros_seleccionados.length)
+      ? rubros_seleccionados.filter(r => COBERTURA_RUBROS.includes(r))
+      : COBERTURA_RUBROS;
+
+    const placeholders = rubros.map((_, i) => `$${i + 4}`).join(",");
+
+    const result = await pgPool.query(
+      `SELECT * FROM cobertura_semanal($1::time, $2::date, $3::date)
+       WHERE rubro IN (${placeholders})
+         AND (arranque + recepciones + programado) > 0
+       ORDER BY quiebres DESC`,
+      [hora_arranque_stock, fe_inicio_semana, fe_final_semana, ...rubros]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (e) {
+    console.error("PG cobertura error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Rotación desde rotacion_2026
 app.get("/api/pg/rotacion/rubros", async (req,res) => {
   if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
