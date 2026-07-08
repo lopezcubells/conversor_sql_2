@@ -268,6 +268,11 @@
     }
     .collapsible-body-tall.collapsed {
       display: none;
+    }
+    /* ── Cobertura: celdas de día con color condicional ── */
+    .cob-pos { background: rgba(52,201,126,.15); color: #1a6642; font-weight:600; }
+    .cob-neg { background: rgba(247,96,96,.18);  color: #7a1a1a; font-weight:600; }
+
       max-height: none;
       opacity: 1;
     }
@@ -578,6 +583,7 @@
   <div class="tab" data-tab="recepciones-mes">Recepciones</div>
   <div class="tab" data-tab="base-datos">Base de datos</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
+  <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1044,6 +1050,65 @@
 
 </div>
 
+<!-- ═══ COBERTURA Y FALTANTES ═══ -->
+<div class="pane" id="tab-cobertura">
+
+  <!-- 1. Filtro por rubro (colapsable, inicia oculto) -->
+  <div class="card">
+    <div class="collapsible-header collapsed" id="cob-rubro-toggle">
+      <div class="card-title" style="margin-bottom:0">Filtro por rubro</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body collapsible-body-tall collapsed" id="cob-rubro-body">
+      <div style="display:flex;gap:8px;margin:14px 0 12px">
+        <button class="btn btn-outline" onclick="cobSelectAll()" style="font-size:12px">Todos</button>
+        <button class="btn btn-outline" onclick="cobClearAll()" style="font-size:12px">Ninguno</button>
+      </div>
+      <div id="cob-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- 2. Tablero de cobertura -->
+  <div class="section-heading"><h2>Tablero de cobertura</h2></div>
+  <div id="cob-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
+
+  <!-- Filtros de columna inline -->
+  <div class="search-row" style="margin-bottom:8px">
+    <input class="search-input" id="cob-q-cod" placeholder="Filtrar Cód. Corto…" style="max-width:180px" oninput="cobFiltrar()" />
+    <input class="search-input" id="cob-q-desc" placeholder="Filtrar Descripción…" oninput="cobFiltrar()" />
+    <span id="cob-count" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="cob-table-wrap">
+      <div class="empty"><div class="big">📋</div>Configurá los parámetros y presioná "Guardar y aplicar"</div>
+    </div>
+  </div>
+  <div class="pagination" id="cob-pagination"></div>
+
+  <!-- 3. Parámetros -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-title">Parámetros</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora stock de arranque</label>
+        <input type="time" class="search-input" id="cob-hora" step="60" style="width:140px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicio semana</label>
+        <input type="date" class="search-input" id="cob-fe-inicio" style="width:160px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final semana</label>
+        <input type="date" class="search-input" id="cob-fe-final" style="width:160px;color-scheme:dark" />
+      </div>
+      <button class="btn btn-success" id="cob-btn-aplicar">💾 Guardar y aplicar parámetros</button>
+    </div>
+    <div id="cob-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+  </div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1067,6 +1132,7 @@
       if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
       if (tab.dataset.tab === "base-datos") initBaseDatos();
       if (tab.dataset.tab === "rotacion") initRotacion();
+      if (tab.dataset.tab === "cobertura") initCobertura();
     });
   });
 
@@ -2282,6 +2348,239 @@
 
   function initAvance() {
     avRestoreParams();
+  }
+
+  // ── Cobertura y Faltantes ──
+
+  const COB_STORAGE_KEY = "cobertura-params";
+  const COB_PAGE_SIZE   = 30;
+  const COB_RUBROS_LISTA = [
+    'Bandeja','BIB Bolsa','BIB Envase','BIB Manijas','BOTELLA Vidrio',
+    'Cajas','Cápsulas','ETIQUETA CT','ETIQUETA FR','ETIQUETA Medallas y Stickers',
+    'ETIQUETA Rotulo','FILM Termocontraible','Pallets','Plancha','Separador',
+    'Stretch','Tapa','Tapón','TETRA Envases',
+  ];
+
+  let cobAllData     = [];   // todos los datos cargados (sin filtrar)
+  let cobFilteredData = [];  // datos filtrados por rubro + texto
+  let cobSort        = { col: null, dir: "asc" };
+  let cobPage        = 0;
+  let cobRubrosInit  = false;
+
+  // ── Colapsable filtro rubro ──
+  document.getElementById("cob-rubro-toggle").addEventListener("click", () => {
+    document.getElementById("cob-rubro-toggle").classList.toggle("collapsed");
+    document.getElementById("cob-rubro-body").classList.toggle("collapsed");
+  });
+
+  // ── Inicializar rubros con pills ──
+  function cobInitRubros(seleccionados) {
+    if (cobRubrosInit) {
+      // Solo restaurar selección
+      document.querySelectorAll("#cob-rubro-checks input").forEach(cb => {
+        cb.checked = seleccionados ? seleccionados.includes(cb.value) : true;
+        cb.closest("label").style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      });
+      return;
+    }
+    const checks = document.getElementById("cob-rubro-checks");
+    checks.innerHTML = "";
+    COB_RUBROS_LISTA.forEach(r => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 12px;border:1px solid var(--border);border-radius:99px;white-space:nowrap;transition:border-color .15s";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = r;
+      cb.checked = seleccionados ? seleccionados.includes(r) : true;
+      cb.style.accentColor = "#4f8ef7";
+      cb.addEventListener("change", () => {
+        label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+        cobFiltrar();
+      });
+      label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      label.appendChild(cb); label.appendChild(document.createTextNode(r));
+      checks.appendChild(label);
+    });
+    cobRubrosInit = true;
+  }
+
+  function cobGetRubrosSeleccionados() {
+    return Array.from(document.querySelectorAll("#cob-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function cobSelectAll() {
+    document.querySelectorAll("#cob-rubro-checks input").forEach(cb => {
+      cb.checked = true; cb.closest("label").style.borderColor = "var(--accent)";
+    });
+    cobFiltrar();
+  }
+  function cobClearAll() {
+    document.querySelectorAll("#cob-rubro-checks input").forEach(cb => {
+      cb.checked = false; cb.closest("label").style.borderColor = "var(--border)";
+    });
+    cobFiltrar();
+  }
+
+  // ── Sort ──
+  function cobSortBy(col) {
+    if (cobSort.col === col) cobSort.dir = cobSort.dir === "asc" ? "desc" : "asc";
+    else { cobSort.col = col; cobSort.dir = "asc"; }
+    cobApplySort();
+    cobPage = 0;
+    cobRender();
+  }
+
+  function cobApplySort() {
+    if (!cobSort.col) return;
+    const col = cobSort.col, dir = cobSort.dir;
+    cobFilteredData.sort((a, b) => {
+      const va = a[col] ?? "", vb = b[col] ?? "";
+      const na = parseFloat(va), nb = parseFloat(vb);
+      const cmp = (!isNaN(na) && !isNaN(nb)) ? na - nb : String(va).localeCompare(String(vb));
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  // ── Filtrar por rubro + texto ──
+  function cobFiltrar() {
+    const rubros = new Set(cobGetRubrosSeleccionados());
+    const qCod   = document.getElementById("cob-q-cod").value.trim().toLowerCase();
+    const qDesc  = document.getElementById("cob-q-desc").value.trim().toLowerCase();
+    cobFilteredData = cobAllData.filter(r => {
+      if (!rubros.has(r.rubro)) return false;
+      if (qCod  && !String(r.cod_corto   ?? "").toLowerCase().includes(qCod))  return false;
+      if (qDesc && !String(r.descripcion ?? "").toLowerCase().includes(qDesc)) return false;
+      return true;
+    });
+    cobApplySort();
+    cobPage = 0;
+    cobRender();
+  }
+
+  // ── Render tabla paginada ──
+  const DIA_COLS = Array.from({length:14}, (_,i) => `dia_${i+1}`);
+
+  function cobDiaCell(val) {
+    const n = parseFloat(val);
+    if (isNaN(n) || n === 0) return `<td>${val != null ? fmtNum(n) : ""}</td>`;
+    const cls = n > 0 ? "cob-pos" : "cob-neg";
+    return `<td class="${cls}">${fmtNum(n)}</td>`;
+  }
+
+  function cobThSort(label, col) {
+    const active = cobSort.col === col;
+    const arrow  = active ? (cobSort.dir === "asc" ? "▲" : "▼") : "▾";
+    return `<th class="sortable${active?" sort-active":""}" onclick="cobSortBy('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label} <span style="opacity:${active?1:.4}">${arrow}</span></th>`;
+  }
+
+  function cobRender() {
+    const wrap  = document.getElementById("cob-table-wrap");
+    const total = cobFilteredData.length;
+    document.getElementById("cob-count").textContent = total ? `${total.toLocaleString()} registros` : "";
+
+    if (!total) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin resultados para este filtro</div>`;
+      document.getElementById("cob-pagination").innerHTML = "";
+      return;
+    }
+
+    const start = cobPage * COB_PAGE_SIZE;
+    const page  = cobFilteredData.slice(start, start + COB_PAGE_SIZE);
+
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        ${cobThSort("Cód. Corto",  "cod_corto")}
+        ${cobThSort("Descripción", "descripcion")}
+        ${cobThSort("Rubro",       "rubro")}
+        ${cobThSort("Arranque",    "arranque")}
+        ${cobThSort("Recepciones", "recepciones")}
+        ${cobThSort("Quiebres",    "quiebres")}
+        ${DIA_COLS.map((_,i) => cobThSort(`Día ${i+1}`, `dia_${i+1}`)).join("")}
+      </tr></thead>
+      <tbody>${page.map(r => `<tr>
+        <td>${r.cod_corto ?? ""}</td>
+        <td>${r.descripcion ?? ""}</td>
+        <td>${r.rubro ?? ""}</td>
+        <td>${r.arranque != null ? fmtNum(r.arranque) : ""}</td>
+        <td>${r.recepciones != null ? fmtNum(r.recepciones) : ""}</td>
+        <td>${r.quiebres ?? ""}</td>
+        ${DIA_COLS.map(col => cobDiaCell(r[col])).join("")}
+      </tr>`).join("")}</tbody>
+    </table>`;
+
+    renderPagination("cob-pagination", total, start, COB_PAGE_SIZE, "cobGoPage");
+  }
+
+  function cobGoPage(offset) {
+    cobPage = Math.floor(offset / COB_PAGE_SIZE);
+    cobRender();
+  }
+
+  // ── Parámetros: guardar y aplicar ──
+  function cobRestoreParams() {
+    try {
+      const s = JSON.parse(localStorage.getItem(COB_STORAGE_KEY) || "null");
+      if (!s) return;
+      document.getElementById("cob-hora").value     = s.hora_arranque_stock || "";
+      document.getElementById("cob-fe-inicio").value = s.fe_inicio_semana    || "";
+      document.getElementById("cob-fe-final").value  = s.fe_final_semana     || "";
+      if (s.rubros_seleccionados) cobInitRubros(s.rubros_seleccionados);
+      cobMostrarEstado(s);
+    } catch(e) {}
+  }
+
+  function cobMostrarEstado(p) {
+    const el = document.getElementById("cob-params-estado");
+    if (p.hora_arranque_stock && p.fe_inicio_semana && p.fe_final_semana) {
+      el.innerHTML = `✓ Guardado: hora <strong style="color:var(--text)">${p.hora_arranque_stock}</strong> · semana <strong style="color:var(--text)">${p.fe_inicio_semana} → ${p.fe_final_semana}</strong>`;
+    } else {
+      el.textContent = "";
+    }
+  }
+
+  document.getElementById("cob-btn-aplicar").addEventListener("click", async () => {
+    const hora  = document.getElementById("cob-hora").value;
+    const ini   = document.getElementById("cob-fe-inicio").value;
+    const fin   = document.getElementById("cob-fe-final").value;
+    if (!hora || !ini || !fin) {
+      toast("Completá los 3 parámetros antes de aplicar.", "err"); return;
+    }
+
+    const rubros = cobGetRubrosSeleccionados();
+    const params = { hora_arranque_stock: hora, fe_inicio_semana: ini, fe_final_semana: fin, rubros_seleccionados: rubros };
+    localStorage.setItem(COB_STORAGE_KEY, JSON.stringify(params));
+    cobMostrarEstado(params);
+
+    const btn    = document.getElementById("cob-btn-aplicar");
+    const status = document.getElementById("cob-status");
+    btn.disabled = true;
+    status.textContent = "Consultando PostgreSQL…";
+    document.getElementById("cob-table-wrap").innerHTML = `<div class="empty"><div class="big">⏳</div>Generando tablero…</div>`;
+
+    try {
+      const res = await fetch(`${API}/api/pg/cobertura`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      cobAllData = data.rows;
+      cobSort = { col: null, dir: "asc" };
+      cobPage = 0;
+      cobFiltrar();
+      status.textContent = "";
+      toast(`✅ ${data.rows.length.toLocaleString()} registros cargados`, "ok");
+    } catch (e) {
+      status.textContent = "⚠ " + e.message;
+      toast("❌ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function initCobertura() {
+    cobInitRubros(null);
+    cobRestoreParams();
   }
 
   // ── DB ready banner ──
