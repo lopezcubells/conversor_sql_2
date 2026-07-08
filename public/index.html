@@ -270,8 +270,8 @@
       display: none;
     }
     /* ── Cobertura: celdas de día con color condicional ── */
-    .cob-pos { background: rgba(52,201,126,.15); color: #1a6642; font-weight:600; }
-    .cob-neg { background: rgba(247,96,96,.18);  color: #7a1a1a; font-weight:600; }
+    .cob-pos { background: #1a4731; color: #6ee7a8; font-weight:600; }
+    .cob-neg { background: #4a1515; color: #fca5a5; font-weight:600; }
 
       max-height: none;
       opacity: 1;
@@ -2457,6 +2457,25 @@
 
   // ── Render tabla paginada ──
   const DIA_COLS = Array.from({length:14}, (_,i) => `dia_${i+1}`);
+  const DIAS_SEMANA = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+  // Genera las etiquetas "Lun 7/7", "Mar 8/7", etc. a partir de fe_inicio_semana
+  let cobDiaLabels = DIA_COLS.map((_,i) => `Día ${i+1}`); // default
+
+  function cobCalcDiaLabels(feInicioSemana) {
+    if (!feInicioSemana) return;
+    // Parsear la fecha como local (sin conversión UTC) para evitar desfase de un día
+    const [y, m, d] = feInicioSemana.split("-").map(Number);
+    const base = new Date(y, m - 1, d);
+    cobDiaLabels = DIA_COLS.map((_, i) => {
+      const fecha = new Date(base);
+      fecha.setDate(base.getDate() + i);
+      const dia  = DIAS_SEMANA[fecha.getDay()];
+      const dd   = fecha.getDate();
+      const mm   = fecha.getMonth() + 1;
+      return `${dia} ${dd}/${mm}`;
+    });
+  }
 
   function cobDiaCell(val) {
     const n = parseFloat(val);
@@ -2493,7 +2512,7 @@
         ${cobThSort("Arranque",    "arranque")}
         ${cobThSort("Recepciones", "recepciones")}
         ${cobThSort("Quiebres",    "quiebres")}
-        ${DIA_COLS.map((_,i) => cobThSort(`Día ${i+1}`, `dia_${i+1}`)).join("")}
+        ${DIA_COLS.map((col,i) => cobThSort(cobDiaLabels[i], col)).join("")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
         <td>${r.cod_corto ?? ""}</td>
@@ -2523,6 +2542,7 @@
       document.getElementById("cob-fe-inicio").value = s.fe_inicio_semana    || "";
       document.getElementById("cob-fe-final").value  = s.fe_final_semana     || "";
       if (s.rubros_seleccionados) cobInitRubros(s.rubros_seleccionados);
+      cobCalcDiaLabels(s.fe_inicio_semana);
       cobMostrarEstado(s);
     } catch(e) {}
   }
@@ -2565,6 +2585,7 @@
       if (!res.ok) throw new Error(data.error || "Error desconocido");
 
       cobAllData = data.rows;
+      cobCalcDiaLabels(ini);  // actualizar encabezados con fechas reales
       cobSort = { col: null, dir: "asc" };
       cobPage = 0;
       cobFiltrar();
