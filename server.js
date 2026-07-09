@@ -632,16 +632,6 @@ app.get("/api/rubros-detallado/top-articulos", requireDb, (req,res) => {
 
 
 // PostgreSQL endpoints
-app.get("/api/db/consumos/filtros", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
-  try {
-    const [tp, usr] = await Promise.all([
-      pgPool.query("SELECT DISTINCT tp_doc FROM consumos_im_if_2026_1s WHERE tp_doc IS NOT NULL ORDER BY tp_doc"),
-      pgPool.query("SELECT DISTINCT id_usuario FROM consumos_im_if_2026_1s WHERE id_usuario IS NOT NULL ORDER BY id_usuario"),
-    ]);
-    res.json({ tp_doc: tp.rows.map(r=>r.tp_doc), id_usuario: usr.rows.map(r=>r.id_usuario) });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
 
 // ── Avance desde funciones PostgreSQL ──
 
@@ -768,27 +758,6 @@ app.get("/api/pg/rubros-stock/chart", async (req,res) => {
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
-app.get("/api/db/consumos", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
-  try {
-    const limit = Math.min(parseInt(req.query.limit)||50, 500);
-    const offset = parseInt(req.query.offset)||0;
-    const { nro_corto, tp_doc, fecha_desde, fecha_hasta, usuario, explicacion } = req.query;
-    const clauses=[]; const params=[]; let p=1;
-    if (nro_corto)    { clauses.push(`nro_corto_articulo=$${p++}`); params.push(parseInt(nro_corto)); }
-    if (tp_doc)       { clauses.push(`tp_doc=$${p++}`); params.push(tp_doc); }
-    if (fecha_desde)  { clauses.push(`fecha_orden>=$${p++}`); params.push(fecha_desde); }
-    if (fecha_hasta)  { clauses.push(`fecha_orden<=$${p++}`); params.push(fecha_hasta); }
-    if (usuario)      { clauses.push(`id_usuario=$${p++}`); params.push(usuario); }
-    if (explicacion)  { clauses.push(`explicacion_transaccion ILIKE $${p++}`); params.push(`%${explicacion}%`); }
-    const where = clauses.length ? "WHERE "+clauses.join(" AND ") : "";
-    const [rows, count] = await Promise.all([
-      pgPool.query(`SELECT * FROM consumos_im_if_2026_1s ${where} ORDER BY fecha_orden DESC, hora_dia DESC LIMIT $${p} OFFSET $${p+1}`, [...params,limit,offset]),
-      pgPool.query(`SELECT COUNT(*) as c FROM consumos_im_if_2026_1s ${where}`, params),
-    ]);
-    res.json({ rows: rows.rows, total: parseInt(count.rows[0].c), limit, offset });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
 
 // Reset
 app.post("/api/reset-all", requireDb, (req,res) => {

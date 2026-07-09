@@ -537,7 +537,6 @@
   <div class="tab" data-tab="tablas-sql">Tablas SQL</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="avance">Avance</div>
-  <div class="tab" data-tab="base-datos">Base de datos</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
 </div>
@@ -835,54 +834,6 @@
 
 
 <!-- ═══ BASE DE DATOS ═══ -->
-<div class="pane" id="tab-base-datos">
-
-  <div class="card">
-    <div class="card-title">Consumos IM/IF 2026 — 1er semestre</div>
-    <div id="db-pg-status" style="font-size:12px;color:var(--muted);margin-bottom:14px"></div>
-
-    <div class="search-row" style="flex-wrap:wrap;align-items:flex-end">
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Nº Corto</label>
-        <input type="number" class="search-input" id="db-f-nro" placeholder="ej: 88105" style="width:130px" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Tp Doc</label>
-        <select class="search-input" id="db-f-tpdoc" style="width:110px">
-          <option value="">Todos</option>
-        </select>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha desde</label>
-        <input type="date" class="search-input" id="db-f-desde" style="width:150px;color-scheme:dark" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha hasta</label>
-        <input type="date" class="search-input" id="db-f-hasta" style="width:150px;color-scheme:dark" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Usuario</label>
-        <select class="search-input" id="db-f-usuario" style="width:160px">
-          <option value="">Todos</option>
-        </select>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Explicación</label>
-        <input class="search-input" id="db-f-explicacion" placeholder="buscar texto…" style="width:200px" />
-      </div>
-      <button class="btn btn-primary" onclick="loadDbConsumos(0)">🔍 Buscar</button>
-      <button class="btn btn-outline" onclick="clearDbFiltros()">✕ Limpiar</button>
-    </div>
-  </div>
-
-  <div style="font-size:13px;color:var(--muted);margin-bottom:8px" id="db-count"></div>
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="db-table-wrap">
-      <div class="empty"><div class="big">🐘</div>Cargando datos desde PostgreSQL…</div>
-    </div>
-  </div>
-  <div class="pagination" id="db-pagination"></div>
-</div>
 
 <!-- ═══ ROTACIÓN ═══ -->
 <div class="pane" id="tab-rotacion">
@@ -982,7 +933,6 @@
       if (tab.dataset.tab === "tablas-sql") loadTablaSql(0);
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "avance") initAvance();
-      if (tab.dataset.tab === "base-datos") initBaseDatos();
       if (tab.dataset.tab === "rotacion") initRotacion();
       if (tab.dataset.tab === "cobertura") initCobertura();
     });
