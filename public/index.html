@@ -872,17 +872,18 @@
         type: "bar",
         label: "PR (días)",
         data,
-        backgroundColor: data.map(v => objetivo !== null && v > objetivo
-          ? "rgba(248,113,113,.8)"   // rojo: por encima del objetivo
-          : "rgba(167,139,250,.75)"), // violeta: dentro del objetivo
-        borderColor: data.map(v => objetivo !== null && v > objetivo ? "#f87171" : "#a78bfa"),
+        backgroundColor: "rgba(167,139,250,.75)",
+        borderColor: "#a78bfa",
         borderWidth: 1,
         borderRadius: 4,
         borderSkipped: false,
         datalabels: {
           anchor: "start", align: "end", offset: 6,
-          color: "#0f1117",
-          font: { weight: "bold", size: 12 },
+          color: "#ffffff",
+          backgroundColor: "rgba(30,32,48,.65)",
+          borderRadius: 3,
+          padding: { top: 2, bottom: 2, left: 5, right: 5 },
+          font: { weight: "bold", size: 13 },
           formatter: v => v,
         },
       },
