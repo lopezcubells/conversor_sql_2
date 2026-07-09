@@ -221,6 +221,8 @@
     /* ── Cobertura: celdas de día con color condicional ── */
     .cob-pos { background: #1a4731; color: #6ee7a8; font-weight:600; }
     .cob-neg { background: #4a1515; color: #fca5a5; font-weight:600; }
+    .cob-resizable { resize: horizontal; overflow: hidden; position: relative; }
+    .cob-resizable::after { content:""; position:absolute; right:3px; top:50%; transform:translateY(-50%); width:3px; height:14px; border-left:1px solid rgba(255,255,255,.25); border-right:1px solid rgba(255,255,255,.25); pointer-events:none; }
 
       max-height: none;
       opacity: 1;
@@ -635,7 +637,7 @@
 
   <!-- Filtros de columna inline -->
   <div class="search-row" style="margin-bottom:8px">
-    <input class="search-input" id="cob-q-cod" placeholder="Filtrar Cód. Corto…" style="max-width:180px" oninput="cobFiltrar()" />
+    <input class="search-input" id="cob-q-cod" placeholder="Filtrar COD…" style="max-width:180px" oninput="cobFiltrar()" />
     <input class="search-input" id="cob-q-desc" placeholder="Filtrar Descripción…" oninput="cobFiltrar()" />
     <span id="cob-count" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
   </div>
@@ -1307,20 +1309,29 @@
     const start = cobPage * COB_PAGE_SIZE;
     const page  = cobFilteredData.slice(start, start + COB_PAGE_SIZE);
 
-    wrap.innerHTML = `<table>
+    wrap.innerHTML = `<table style="table-layout:fixed;width:100%">
+      <colgroup>
+        <col style="width:70px">
+        <col class="cob-col-desc" style="width:var(--cob-desc-w,200px);min-width:80px">
+        <col class="cob-col-rub"  style="width:var(--cob-rub-w,130px);min-width:60px">
+        <col style="width:88px">
+        <col style="width:100px">
+        <col style="width:82px">
+        ${DIA_COLS.map(() => `<col style="width:82px">`).join("")}
+      </colgroup>
       <thead><tr>
-        ${cobThSort("Cód. Corto",  "cod_corto")}
-        ${cobThSort("Descripción", "descripcion")}
-        ${cobThSort("Rubro",       "rubro")}
+        ${cobThSort("COD",         "cod_corto")}
+        <th class="sortable cob-resizable${cobSort.col==="descripcion"?" sort-active":""}" onclick="cobSortBy('descripcion')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Descripción <span style="opacity:${cobSort.col==="descripcion"?1:.4}">${cobSort.col==="descripcion"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
+        <th class="sortable cob-resizable${cobSort.col==="rubro"?" sort-active":""}" onclick="cobSortBy('rubro')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Rubro <span style="opacity:${cobSort.col==="rubro"?1:.4}">${cobSort.col==="rubro"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
         ${cobThSort("Arranque",    "arranque")}
         ${cobThSort("Recepciones", "recepciones")}
         ${cobThSort("Quiebres",    "quiebres")}
         ${DIA_COLS.map((col,i) => cobThSort(cobDiaLabels[i], col)).join("")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
-        <td>${r.cod_corto ?? ""}</td>
-        <td>${r.descripcion ?? ""}</td>
-        <td>${r.rubro ?? ""}</td>
+        <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.descripcion ?? "").replace(/"/g,"&quot;")}">${r.descripcion ?? ""}</td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.rubro ?? "").replace(/"/g,"&quot;")}">${r.rubro ?? ""}</td>
         <td>${r.arranque != null ? fmtNum(r.arranque) : ""}</td>
         <td>${r.recepciones != null ? fmtNum(r.recepciones) : ""}</td>
         <td>${r.quiebres ?? ""}</td>
