@@ -566,40 +566,6 @@ app.get("/api/stats", requireDb, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Generic read endpoints
-const GENERIC_TABLES = {
-  "articulos":      { table: "articulos",        searchCols: ["descripcion","segundo_nro"] },
-  "stock":          { table: "stock_sucursales", searchCols: ["unidad_negocio"] },
-  "pendiente":      { table: "pendiente_completo", searchCols: ["descripcion","segundo_nro"] },
-  "stock-arranque": { table: "stock_arranque",   searchCols: ["unidad_negocio"] },
-  "recepciones":    { table: "recepciones",      searchCols: ["segundo_nro","observaciones"] },
-  "pmp-x-bom":      { table: "pmp_x_bom",       searchCols: ["producto","descripcion_comp"] },
-  "pmp-y-comex":    { table: "pmp_y_comex",      searchCols: ["producto"] },
-  "pgm":            { table: "pgm",              searchCols: ["producto"] },
-  "pgm-x-bom":      { table: "pgm_x_bom",       searchCols: ["producto","descripcion_comp"] },
-  "costo-insumos":  { table: "costo_insumos",   searchCols: ["segundo_nro"] },
-  "pendientes-tetra": { table: "pendientes_tetra", searchCols: ["observaciones","mes_facturacion_tetra"] },
-  "stock-consolidado": { table: "stock_consolidado", searchCols: ["descripcion","segundo_nro"] },
-  "consumo-consolidado": { table: "consumo_consolidado", searchCols: ["explicacion_transaccion","id_usuario"] },
-};
-Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
-  app.get(`/api/${route}`, requireDb, (req, res) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit)||50, 500);
-      const offset = parseInt(req.query.offset)||0;
-      const q = req.query.q ? `%${req.query.q}%` : null;
-      const data = readDb(db => {
-        const where = cfg.searchCols.map(c => `${c} LIKE ?`).join(" OR ");
-        const rows  = q ? query(db, `SELECT * FROM ${cfg.table} WHERE ${where} LIMIT ? OFFSET ?`, [...cfg.searchCols.map(()=>q), limit, offset])
-                        : query(db, `SELECT * FROM ${cfg.table} LIMIT ? OFFSET ?`, [limit, offset]);
-        const total = q ? query(db, `SELECT COUNT(*) as c FROM ${cfg.table} WHERE ${where}`, cfg.searchCols.map(()=>q))[0]?.c??0
-                        : query(db, `SELECT COUNT(*) as c FROM ${cfg.table}`)[0]?.c??0;
-        return { rows, total, limit, offset };
-      });
-      res.json(data);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
-});
 
 
 // Rubros detallado
@@ -770,20 +736,6 @@ app.post("/api/reset-all", requireDb, (req,res) => {
   } catch(err){ console.error(err); res.status(500).json({error:err.message}); }
 });
 
-// Export CSV
-app.get("/api/export/:tabla", requireDb, (req,res) => {
-  try {
-    const valid = ["articulos","stock_sucursales","pendiente_completo","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","costo_insumos","pendientes_tetra","stock_consolidado","consumo_consolidado"];
-    const tabla = valid.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
-    const rows = readDb(db => query(db, `SELECT * FROM ${tabla}`));
-    if (!rows.length) return res.status(404).json({error:"Sin datos"});
-    const headers = Object.keys(rows[0]).join(",");
-    const csv = [headers, ...rows.map(r => Object.values(r).map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","))].join("\n");
-    res.setHeader("Content-Type","text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition",`attachment; filename=${tabla}.csv`);
-    res.send("\uFEFF"+csv);
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
 
 // Init sql.js
 async function initSql() {
