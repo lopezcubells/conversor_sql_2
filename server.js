@@ -601,41 +601,6 @@ Object.entries(GENERIC_TABLES).forEach(([route, cfg]) => {
   });
 });
 
-// Stock Detallado
-app.get("/api/stock-detallado/rubros", requireDb, (req, res) => {
-  try {
-    const rubros = readDb(db => query(db, "SELECT DISTINCT rubro FROM stock_detallado WHERE rubro IS NOT NULL AND rubro!='' ORDER BY rubro")).map(r=>r.rubro);
-    res.json({ rubros });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/stock-detallado", requireDb, (req, res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const limit = Math.min(parseInt(req.query.limit)||50,500);
-    const offset = parseInt(req.query.offset)||0;
-    const data = readDb(db => {
-      const where = rubro ? "WHERE rubro=?" : "";
-      const params = rubro ? [rubro] : [];
-      return {
-        rows: query(db, `SELECT * FROM stock_detallado ${where} ORDER BY existencias DESC LIMIT ? OFFSET ?`, [...params,limit,offset]),
-        total: query(db, `SELECT COUNT(*) as c FROM stock_detallado ${where}`, params)[0]?.c??0,
-        limit, offset,
-      };
-    });
-    res.json(data);
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/stock-detallado/chart", requireDb, (req, res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const data = readDb(db => {
-      const where = rubro ? "WHERE rubro=?" : "";
-      const params = rubro ? [rubro] : [];
-      return query(db, `SELECT descripcion, SUM(existencias) as total FROM stock_detallado ${where} GROUP BY descripcion ORDER BY total DESC LIMIT 50`, params);
-    });
-    res.json({ rows: data });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
 
 // Rubros detallado
 app.get("/api/rubros-detallado/kpis", requireDb, (req,res) => {
@@ -917,7 +882,7 @@ app.post("/api/reset-all", requireDb, (req,res) => {
 // Export CSV
 app.get("/api/export/:tabla", requireDb, (req,res) => {
   try {
-    const valid = ["articulos","stock_sucursales","stock_detallado","pendiente_completo","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","costo_insumos","pendientes_tetra","stock_consolidado","consumo_consolidado"];
+    const valid = ["articulos","stock_sucursales","pendiente_completo","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","costo_insumos","pendientes_tetra","stock_consolidado","consumo_consolidado"];
     const tabla = valid.includes(req.params.tabla) ? req.params.tabla : "stock_sucursales";
     const rows = readDb(db => query(db, `SELECT * FROM ${tabla}`));
     if (!rows.length) return res.status(404).json({error:"Sin datos"});

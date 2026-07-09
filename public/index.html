@@ -576,7 +576,6 @@
   <div class="tab active" data-tab="dashboard">Dashboard</div>
   <div class="tab" data-tab="importar">Importar</div>
   <div class="tab" data-tab="tablas-sql">Tablas SQL</div>
-  <div class="tab" data-tab="stock-detallado">Stock detallado</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="pendientes">Pendientes</div>
   <div class="tab" data-tab="avance">Avance</div>
@@ -768,26 +767,6 @@
   <div class="pagination" id="pag-tabla"></div>
 </div>
 
-<!-- ═══ STOCK DETALLADO ═══ -->
-<div class="pane" id="tab-stock-detallado">
-
-  <div class="card">
-    <div class="card-title">Filtro</div>
-    <div class="search-row" style="margin-bottom:0">
-      <select class="search-input" id="rubro-filter" style="flex:0 0 320px">
-        <option value="">Todos los rubros</option>
-      </select>
-      <button class="btn btn-outline" onclick="exportTable('stock_detallado')">⬇ CSV</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Existencias por artículo</div>
-    <div id="chart-wrap" style="position:relative;height:900px">
-      <canvas id="chart-detallado"></canvas>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ RUBROS DETALLADO ═══ -->
 <div class="pane" id="tab-rubros-detallado">
@@ -1125,7 +1104,6 @@
       document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
       if (tab.dataset.tab === "dashboard") loadStats();
       if (tab.dataset.tab === "tablas-sql") loadTablaSql(0);
-      if (tab.dataset.tab === "stock-detallado") initStockDetallado();
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "pendientes") initPendientes();
       if (tab.dataset.tab === "avance") initAvance();
@@ -1566,63 +1544,6 @@
     exportTable(TABLA_EXPORT[tabla]);
   });
 
-  // ── Stock Detallado ──
-  let detChart = null;
-  async function initStockDetallado() {
-    const sel = document.getElementById("rubro-filter");
-    try {
-      const { rubros } = await fetch(`${API}/api/stock-detallado/rubros`).then(r => r.json());
-      const current = sel.value;
-      sel.innerHTML = `<option value="">Todos los rubros</option>`;
-      rubros.forEach(r => {
-        const opt = document.createElement("option");
-        opt.value = r; opt.textContent = r;
-        sel.appendChild(opt);
-      });
-      if (current) sel.value = current;
-    } catch (e) { console.error(e); }
-    loadDetChart();
-  }
-
-  document.getElementById("rubro-filter").addEventListener("change", () => {
-    loadDetChart();
-  });
-
-  async function loadDetChart() {
-    const rubro = document.getElementById("rubro-filter").value;
-    const url = `${API}/api/stock-detallado/chart?limit=50${rubro ? "&rubro=" + encodeURIComponent(rubro) : ""}`;
-    const { rows } = await fetch(url).then(r => r.json());
-
-    const ctx = document.getElementById("chart-detallado").getContext("2d");
-    const labels = rows.map(r => r.descripcion?.length > 28 ? r.descripcion.slice(0, 28) + "…" : r.descripcion);
-    const values = rows.map(r => r.existencias);
-
-    if (detChart) detChart.destroy();
-    detChart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: "Existencias",
-          data: values,
-          backgroundColor: "rgba(79,142,247,.65)",
-          borderColor: "#4f8ef7",
-          borderWidth: 1,
-          borderRadius: 4,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: "y",
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { color: "#7b7f99" }, grid: { color: "#2a2d3e" } },
-          y: { ticks: { color: "#e2e4ef", font: { size: 11 } }, grid: { display: false } },
-        }
-      }
-    });
-  }
 
   // ── Export ──
   function exportTable(tabla) {
