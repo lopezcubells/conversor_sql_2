@@ -802,47 +802,78 @@
       if (!res.ok) throw new Error((await res.json()).error);
       const { rows } = await res.json();
 
-      const labels = rows.map(r => MES_NOMBRES[r.numero_mes] ?? r.numero_mes);
-      const data   = rows.map(r => Math.round(parseFloat(r.pr)));
+      const labels   = rows.map(r => MES_NOMBRES[r.numero_mes] ?? r.numero_mes);
+      const data     = rows.map(r => Math.round(parseFloat(r.pr)));
+      const objetivo = rows[0]?.objetivo != null ? parseFloat(rows[0].objetivo) : null;
 
       // Título dinámico con el rubro seleccionado
       document.getElementById("rot-chart-title").textContent = `Rotación en días — ${rubro}`;
+
+      const datasets = [
+        {
+          type: "bar",
+          label: "PR (días)",
+          data,
+          backgroundColor: "rgba(167,139,250,.75)",
+          borderColor: "#a78bfa",
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+          datalabels: {
+            anchor: "end", align: "end", offset: 4,
+            color: "#e2e4ef",
+            font: { weight: "bold", size: 12 },
+            formatter: v => v,
+          },
+        },
+      ];
+
+      if (objetivo !== null) {
+        datasets.push({
+          type: "line",
+          label: "Objetivo",
+          data: labels.map(() => objetivo),
+          borderColor: "#f59e0b",
+          borderWidth: 2,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+          tension: 0,
+          datalabels: { display: false },
+        });
+      }
 
       const ctx = document.getElementById("rot-chart").getContext("2d");
       if (rotBarChart) rotBarChart.destroy();
       rotBarChart = new Chart(ctx, {
         type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "PR (días)",
-            data,
-            backgroundColor: "rgba(167,139,250,.75)",
-            borderColor: "#a78bfa",
-            borderWidth: 1,
-            borderRadius: 4,
-            borderSkipped: false,
-          }]
-        },
+        data: { labels, datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           layout: { padding: { top: 30 } },
           plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.raw} días` } },
+            legend: { display: objetivo !== null, labels: { color: "#e2e4ef", boxWidth: 16, padding: 16 } },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.type === "line"
+                  ? ` Objetivo: ${ctx.raw} días`
+                  : ` ${ctx.raw} días`,
+              }
+            },
             datalabels: {
               anchor: "end", align: "end", offset: 4,
               color: "#e2e4ef",
               font: { weight: "bold", size: 12 },
               formatter: v => v,
-            }
+            },
           },
           scales: {
             x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
             y: { ticks: { color: "#7b7f99" }, grid: { color: "#2a2d3e" },
                  title: { display: true, text: "Días", color: "#7b7f99" } },
-          }
+          },
         },
         plugins: [ChartDataLabels],
       });

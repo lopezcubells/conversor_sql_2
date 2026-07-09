@@ -111,7 +111,7 @@ app.get("/api/pg/rotacion/chart", async (req, res) => {
     const rubro = req.query.rubro;
     if (!rubro) return res.status(400).json({ error: "Indicá un rubro." });
     const result = await pgPool.query(
-      `SELECT numero_mes, pr
+      `SELECT numero_mes, pr, objetivo
        FROM rotacion_2026
        WHERE rubro = $1
        ORDER BY numero_mes ASC`,
