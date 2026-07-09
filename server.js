@@ -121,3 +121,56 @@ app.get("/api/pg/rotacion/chart", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Inmovilizados ──
+
+app.get("/api/pg/inmovilizados/rubros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const result = await pgPool.query(
+      "SELECT DISTINCT rubro FROM view_avance_inmovilizados WHERE rubro IS NOT NULL ORDER BY rubro"
+    );
+    res.json({ rubros: result.rows.map(r => r.rubro) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/pg/inmovilizados/evolucion", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const where  = rubros.length ? "WHERE rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const result = await pgPool.query(
+      `SELECT fecha,
+              SUM(costo_obsoleto)            AS costo_obsoleto,
+              SUM(costo_activo_sin_rotacion) AS costo_activo_sin_rotacion,
+              SUM(costo_activo)              AS costo_activo
+       FROM view_avance_inmovilizados
+       ${where}
+       GROUP BY fecha
+       ORDER BY fecha ASC`,
+      params
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/pg/inmovilizados/detalle", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const result = await pgPool.query(
+      `SELECT cod_corto, descripcion, rubro, obsoleto, costo_obsoleto
+       FROM view_avance_inmovilizados
+       WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+       ${and}
+       ORDER BY obsoleto DESC`,
+      params
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+

@@ -487,6 +487,7 @@
   <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
+  <div class="tab" data-tab="inmovilizados">Inmovilizados</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -702,6 +703,45 @@
 
 </div>
 
+<!-- ═══ INMOVILIZADOS ═══ -->
+<div class="pane" id="tab-inmovilizados">
+
+  <!-- 1. Filtro rubro -->
+  <div class="card">
+    <div class="collapsible-header" id="inm-rubro-toggle">
+      <div class="card-title" style="margin-bottom:0">Filtro por rubro</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body collapsible-body-tall" id="inm-rubro-body">
+      <div style="display:flex;gap:8px;margin:14px 0 12px">
+        <button class="btn btn-outline" onclick="inmSelectAll()" style="font-size:12px">Todos</button>
+        <button class="btn btn-outline" onclick="inmClearAll()" style="font-size:12px">Ninguno</button>
+      </div>
+      <div id="inm-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- 2. Gráfico evolución -->
+  <div class="section-heading"><h2>Evolución Costo Inmovilizados</h2></div>
+  <div id="inm-chart-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
+  <div class="card">
+    <div style="position:relative;height:420px">
+      <canvas id="inm-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- 3. Tabla detalle -->
+  <div class="section-heading" style="margin-top:24px"><h2>Detalle inmovilizados</h2></div>
+  <div id="inm-table-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="inm-table-wrap">
+      <div class="empty"><div class="big">📋</div>Seleccioná un rubro para ver el detalle</div>
+    </div>
+  </div>
+  <div class="pagination" id="inm-pagination"></div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -719,6 +759,7 @@
       if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "rotacion") initRotacion();
       if (tab.dataset.tab === "cobertura") initCobertura();
+      if (tab.dataset.tab === "inmovilizados") initInmovilizados();
     });
   });
 
@@ -1593,6 +1634,218 @@
   function initCobertura() {
     cobInitRubros(null);
     cobRestoreParams();
+  }
+
+  // ── Inmovilizados ──
+
+  let inmChart        = null;
+  let inmRubrosLoaded = false;
+  let inmDetalleData  = [];
+  let inmPage         = 0;
+  const INM_PAGE_SIZE = 50;
+
+  document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
+    document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
+    document.getElementById("inm-rubro-body").classList.toggle("collapsed");
+  });
+
+  function inmGetRubros() {
+    return Array.from(document.querySelectorAll("#inm-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function inmSelectAll() {
+    document.querySelectorAll("#inm-rubro-checks input").forEach(cb => {
+      cb.checked = true; cb.closest("label").style.borderColor = "var(--accent)";
+    });
+    inmLoad();
+  }
+  function inmClearAll() {
+    document.querySelectorAll("#inm-rubro-checks input").forEach(cb => {
+      cb.checked = false; cb.closest("label").style.borderColor = "var(--border)";
+    });
+    inmLoad();
+  }
+
+  async function inmInitRubros() {
+    if (inmRubrosLoaded) return;
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/rubros`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rubros } = await res.json();
+      const checks = document.getElementById("inm-rubro-checks");
+      checks.innerHTML = "";
+      rubros.forEach(r => {
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 12px;border:1px solid var(--accent);border-radius:99px;white-space:nowrap;transition:border-color .15s";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = r; cb.checked = true;
+        cb.style.accentColor = "#4f8ef7";
+        cb.addEventListener("change", () => {
+          label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+          inmLoad();
+        });
+        label.appendChild(cb); label.appendChild(document.createTextNode(r));
+        checks.appendChild(label);
+      });
+      inmRubrosLoaded = true;
+    } catch (e) {
+      document.getElementById("inm-chart-status").textContent = "⚠ Error cargando rubros: " + e.message;
+    }
+  }
+
+  async function inmLoad() {
+    const rubros = inmGetRubros();
+    const params = new URLSearchParams();
+    rubros.forEach(r => params.append("rubros", r));
+
+    // Gráfico evolución
+    const chartStatus = document.getElementById("inm-chart-status");
+    chartStatus.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/evolucion?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
+      inmRenderChart(rows);
+      chartStatus.textContent = "";
+    } catch (e) { chartStatus.textContent = "⚠ " + e.message; }
+
+    // Tabla detalle
+    const tableStatus = document.getElementById("inm-table-status");
+    tableStatus.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/detalle?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
+      inmDetalleData = rows;
+      inmPage = 0;
+      inmRenderTable();
+      tableStatus.textContent = rows.length ? `${rows.length.toLocaleString()} registros` : "";
+    } catch (e) { tableStatus.textContent = "⚠ " + e.message; }
+  }
+
+  function inmFmtFecha(str) {
+    if (!str) return "";
+    const d = new Date(str);
+    if (isNaN(d)) return str;
+    return d.toLocaleDateString("es-AR", { year: "numeric", month: "short" });
+  }
+
+  function inmRenderChart(rows) {
+    const labels      = rows.map(r => inmFmtFecha(r.fecha));
+    const obsoleto    = rows.map(r => Math.round(parseFloat(r.costo_obsoleto    ?? 0)));
+    const sinRotacion = rows.map(r => Math.round(parseFloat(r.costo_activo_sin_rotacion ?? 0)));
+    const activo      = rows.map(r => Math.round(parseFloat(r.costo_activo      ?? 0)));
+
+    const fmtTick = v => {
+      if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " M";
+      if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(0) + " k";
+      return v;
+    };
+
+    const lblStyle = {
+      color: "#ffffff",
+      backgroundColor: "rgba(30,32,48,.65)",
+      borderRadius: 3,
+      padding: { top: 2, bottom: 2, left: 4, right: 4 },
+      font: { weight: "bold", size: 11 },
+      display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+      formatter: v => v > 0 ? Math.round(v).toLocaleString("es-AR") : "",
+    };
+
+    const ctx = document.getElementById("inm-chart").getContext("2d");
+    if (inmChart) inmChart.destroy();
+    inmChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Costo obsoleto",
+            data: obsoleto,
+            backgroundColor: "rgba(249,115,22,.8)",
+            borderColor: "#f97316",
+            borderWidth: 1,
+            stack: "costos",
+            datalabels: { ...lblStyle, anchor: "center", align: "center" },
+          },
+          {
+            label: "Costo activo sin rotación",
+            data: sinRotacion,
+            backgroundColor: "rgba(30,64,175,.8)",
+            borderColor: "#1e40af",
+            borderWidth: 1,
+            stack: "costos",
+            datalabels: { ...lblStyle, anchor: "center", align: "center" },
+          },
+          {
+            label: "Costo activo",
+            data: activo,
+            backgroundColor: "rgba(56,189,248,.75)",
+            borderColor: "#38bdf8",
+            borderWidth: 1,
+            stack: "costos",
+            datalabels: { ...lblStyle, anchor: "center", align: "center" },
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 8 } },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: "#e2e4ef", boxWidth: 14, padding: 18 } },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.raw).toLocaleString("es-AR")}`,
+            }
+          },
+          datalabels: lblStyle,
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: "#7b7f99" }, grid: { display: false } },
+          y: { stacked: true, ticks: { color: "#7b7f99", callback: fmtTick }, grid: { color: "#2a2d3e" } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+  }
+
+  function inmRenderTable() {
+    const wrap  = document.getElementById("inm-table-wrap");
+    const total = inmDetalleData.length;
+    if (!total) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin resultados</div>`;
+      document.getElementById("inm-pagination").innerHTML = "";
+      return;
+    }
+    const start = inmPage * INM_PAGE_SIZE;
+    const page  = inmDetalleData.slice(start, start + INM_PAGE_SIZE);
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        <th>Cód. Corto</th>
+        <th>Descripción</th>
+        <th>Rubro</th>
+        <th style="text-align:right">Obsoleto</th>
+        <th style="text-align:right">Costo Obsoleto</th>
+      </tr></thead>
+      <tbody>${page.map(r => `<tr>
+        <td>${r.cod_corto ?? ""}</td>
+        <td>${r.descripcion ?? ""}</td>
+        <td>${r.rubro ?? ""}</td>
+        <td style="text-align:right">${r.obsoleto != null ? Math.round(r.obsoleto).toLocaleString("es-AR") : ""}</td>
+        <td style="text-align:right">${r.costo_obsoleto != null ? Math.round(r.costo_obsoleto).toLocaleString("es-AR") : ""}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    renderPagination("inm-pagination", total, start, INM_PAGE_SIZE, "inmGoPage");
+  }
+
+  function inmGoPage(offset) {
+    inmPage = Math.floor(offset / INM_PAGE_SIZE);
+    inmRenderTable();
+  }
+
+  async function initInmovilizados() {
+    await inmInitRubros();
+    inmLoad();
   }
 
 </script>
