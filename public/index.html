@@ -1975,6 +1975,7 @@
         sel.appendChild(o);
       });
       if (current && rubros.includes(current)) sel.value = current;
+      else if (!current && rubros.includes("TETRA Envases")) sel.value = "TETRA Envases";
       status.textContent = "";
       rotRubrosLoaded = true;
     } catch (e) {
