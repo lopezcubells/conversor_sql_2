@@ -721,13 +721,27 @@
     </div>
   </div>
 
-  <!-- 2. Gráfico evolución -->
+  <!-- 2. Gráfico evolución + Top 10 -->
   <div class="section-heading"><h2>Evolución Costo Inmovilizados</h2></div>
   <div id="inm-chart-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
-  <div class="card">
-    <div style="position:relative;height:420px">
-      <canvas id="inm-chart"></canvas>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+
+    <div class="card" style="flex:2;min-width:320px">
+      <div style="position:relative;height:420px">
+        <canvas id="inm-chart"></canvas>
+      </div>
     </div>
+
+    <div class="card" style="flex:1;min-width:280px;padding:0;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="card-title" style="margin-bottom:0">Top 10 Artículos Obsoletos</div>
+        <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:2px 10px">por unidades</span>
+      </div>
+      <div id="inm-top10-wrap">
+        <div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>
+      </div>
+    </div>
+
   </div>
 
   <!-- 3. Tabla detalle -->
@@ -1718,6 +1732,7 @@
       inmDetalleData = rows;
       inmPage = 0;
       inmRenderTable();
+      inmRenderTop10();
       tableStatus.textContent = rows.length ? `${rows.length.toLocaleString()} registros` : "";
     } catch (e) { tableStatus.textContent = "⚠ " + e.message; }
   }
@@ -1841,6 +1856,47 @@
   function inmGoPage(offset) {
     inmPage = Math.floor(offset / INM_PAGE_SIZE);
     inmRenderTable();
+  }
+
+  function inmRenderTop10() {
+    const wrap = document.getElementById("inm-top10-wrap");
+    const top  = inmDetalleData.slice(0, 10);
+    if (!top.length) {
+      wrap.innerHTML = `<div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>`;
+      return;
+    }
+    const maxObs = Math.max(...top.map(r => parseFloat(r.obsoleto ?? 0)), 1);
+    const BADGE  = ["#f59e0b","#94a3b8","#cd7f32"];
+    wrap.innerHTML = top.map((r, i) => {
+      const obs     = parseFloat(r.obsoleto     ?? 0);
+      const costo   = parseFloat(r.costo_obsoleto ?? 0);
+      const pct     = Math.round((obs / maxObs) * 100);
+      const badge   = BADGE[i] ?? "#4f8ef7";
+      const isLast  = i === top.length - 1;
+      return `
+      <div style="display:flex;align-items:center;gap:14px;padding:11px 18px;
+                  ${isLast ? "" : "border-bottom:1px solid var(--border)"}">
+        <div style="width:26px;height:26px;border-radius:50%;background:${badge};
+                    color:#000;font-size:11px;font-weight:800;flex-shrink:0;
+                    display:flex;align-items:center;justify-content:center">${i + 1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:var(--text);
+                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="${(r.descripcion ?? "").replace(/"/g,"&quot;")}">${r.descripcion ?? "—"}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">COD ${r.cod_corto ?? ""}</div>
+          <div style="margin-top:6px;height:4px;border-radius:2px;background:var(--border)">
+            <div style="width:${pct}%;height:100%;border-radius:2px;
+                        background:${badge};transition:width .4s"></div>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;min-width:80px">
+          <div style="font-size:14px;font-weight:700;color:var(--text);
+                      font-family:var(--mono)">${Math.round(obs).toLocaleString("es-AR")}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">
+            $ ${Math.round(costo).toLocaleString("es-AR")}</div>
+        </div>
+      </div>`;
+    }).join("");
   }
 
   async function initInmovilizados() {
