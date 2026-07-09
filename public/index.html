@@ -794,31 +794,27 @@
   let rotRubrosLoaded = false;
   let rotAllRows     = [];   // cache de la última respuesta del API
 
-  async function initRotacion() {
-    const sel    = document.getElementById("rot-rubro-filter");
-    const status = document.getElementById("rot-pg-status");
+  const ROT_RUBROS = [
+    "Bandeja","BIB Bolsa","BIB Envase","BIB Manijas","BOTELLA Vidrio",
+    "Cajas","Cápsulas","ETIQUETA CT","ETIQUETA FR",
+    "FILM Termocontraible","Pallets","Plancha","Separador",
+    "Stretch","Tapa","Tapón","TETRA Envases",
+  ];
 
-    // Siempre recargar rubros al entrar para reflejar datos actuales
-    try {
-      const res = await fetch(`${API}/api/pg/rotacion/rubros`);
-      if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
-      const { rubros } = await res.json();
+  function initRotacion() {
+    const sel = document.getElementById("rot-rubro-filter");
+    if (!rotRubrosLoaded) {
       const current = sel.value;
       sel.innerHTML = "";
-      rubros.forEach(r => {
+      ROT_RUBROS.forEach(r => {
         const o = document.createElement("option");
         o.value = r; o.textContent = r;
         sel.appendChild(o);
       });
-      if (current && rubros.includes(current)) sel.value = current;
-      else if (!current && rubros.includes("TETRA Envases")) sel.value = "TETRA Envases";
-      status.textContent = "";
+      if (current && ROT_RUBROS.includes(current)) sel.value = current;
+      else sel.value = "TETRA Envases";
       rotRubrosLoaded = true;
-    } catch (e) {
-      status.textContent = "⚠ " + e.message;
-      return;
     }
-
     loadRotacionChart();
   }
 
