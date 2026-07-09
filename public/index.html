@@ -112,57 +112,6 @@
     .stat-num  { font-size: 32px; font-weight: 700; font-family: var(--mono); color: var(--accent); }
     .stat-lbl  { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
-    /* ── Upload zone ── */
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 18px 14px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-      position: relative;
-    }
-    .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: rgba(79,142,247,.05); }
-    .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-    .drop-zone .icon  { font-size: 22px; margin-bottom: 4px; }
-    .drop-zone p { color: var(--muted); font-size: 12px; }
-    .drop-zone .filename { margin-top: 6px; color: var(--accent); font-size: 12px; font-family: var(--mono); word-break: break-all; }
-
-    /* ── Import grid: tarjetas compactas, varias por fila ── */
-    .import-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 14px;
-    }
-    .import-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px;
-      transition: border-color .25s, background .25s;
-    }
-    .import-card .card-title {
-      font-size: 12px;
-      margin-bottom: 10px;
-    }
-    .import-card.done {
-      border-color: var(--accent2);
-      background: rgba(52,201,126,.07);
-    }
-    .import-card.done .drop-zone {
-      border-color: rgba(52,201,126,.4);
-    }
-    .import-card .done-badge {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--accent2);
-      margin-top: 8px;
-    }
-    .import-card.done .done-badge { display: flex; }
-
     /* ── Buttons ── */
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
@@ -533,7 +482,6 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="importar">Importar</div>
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
@@ -542,155 +490,13 @@
 
 <!-- ═══ DASHBOARD ═══ -->
 <div class="pane active" id="tab-dashboard">
-  <div class="stats" id="stats-grid">
-    <div class="stat"><div class="stat-num" id="cnt-articulos">—</div><div class="stat-lbl">Artículos</div></div>
-    <div class="stat"><div class="stat-num" id="cnt-stock">—</div><div class="stat-lbl">Registros de Stock</div></div>
-    <div class="stat"><div class="stat-num" id="cnt-pendiente">—</div><div class="stat-lbl">Órdenes Pendientes</div></div>
-    <div class="stat"><div class="stat-num" id="cnt-stock-arranque">—</div><div class="stat-lbl">Stock de Arranque</div></div>
-    <div class="stat"><div class="stat-num" id="cnt-recepciones">—</div><div class="stat-lbl">Recepciones</div></div>
-    <div class="stat"><div class="stat-num" id="cnt-pgm">—</div><div class="stat-lbl">Registros PGM x BOM</div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Últimas importaciones</div>
-    <div id="log-list"><div class="empty"><div class="big">📋</div>Sin importaciones aún</div></div>
+  <div class="card" style="text-align:center;padding:40px 24px;">
+    <div style="font-size:48px;margin-bottom:16px;">📊</div>
+    <div class="card-title" style="font-size:18px;">Reporte de Indicadores — Insumos</div>
+    <p style="color:var(--muted);margin-top:8px;">Seleccioná una pestaña para comenzar.</p>
   </div>
 </div>
 
-<!-- ═══ IMPORT ARTÍCULOS ═══ -->
-<div class="pane" id="tab-importar">
-  <div class="btn-row" style="margin-bottom:18px">
-    <button class="btn btn-outline" id="btn-quitar-todo" style="border-color:rgba(247,96,96,.4);color:#f76060">🗑 Quitar todo</button>
-  </div>
-
-  <div class="section-heading" style="margin-top:0">
-    <h2>Importación de archivos</h2>
-  </div>
-  <div class="import-grid">
-
-    <div class="card import-card" id="card-art" title="Se lee la hoja BD ART x RUBRO del archivo.">
-      <div class="card-title">Artículos por Rubro</div>
-      <div class="drop-zone" id="dz-art">
-        <input type="file" accept=".xlsx,.xls" id="file-art" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-art"></div>
-      </div>
-      <div class="progress" id="prog-art"><div class="progress-bar" id="pb-art"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-art" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-stk" title="Se lee la hoja Sheet1 del archivo.">
-      <div class="card-title">Stock por Sucursales</div>
-      <div class="drop-zone" id="dz-stk">
-        <input type="file" accept=".xlsx,.xls" id="file-stk" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-stk"></div>
-      </div>
-      <div class="progress" id="prog-stk"><div class="progress-bar" id="pb-stk"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-stk" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-pdt" title="Se lee la tabla Tabla_Pendiente_COMPLETO del archivo.">
-      <div class="card-title">Pendiente Completo</div>
-      <div class="drop-zone" id="dz-pdt">
-        <input type="file" accept=".xlsx,.xls" id="file-pdt" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-pdt"></div>
-      </div>
-      <div class="progress" id="prog-pdt"><div class="progress-bar" id="pb-pdt"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-pdt" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-sar" title="El nombre del archivo varía semana a semana (ej: BD Stock x Sucursales 2026 SEM 27). Se lee la hoja Sheet1 sin importar el nombre exacto.">
-      <div class="card-title">Stock de Arranque</div>
-      <div class="drop-zone" id="dz-sar">
-        <input type="file" accept=".xlsx,.xls" id="file-sar" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-sar"></div>
-      </div>
-      <div class="progress" id="prog-sar"><div class="progress-bar" id="pb-sar"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-sar" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-rec" title="El nombre del archivo varía según la época del año (ej: BD Recepciones 2026). Se lee la hoja Sheet1 sin importar el nombre exacto. Se calcula automáticamente la Semana ISO y la Hora de recepción.">
-      <div class="card-title">Recepciones</div>
-      <div class="drop-zone" id="dz-rec">
-        <input type="file" accept=".xlsx,.xls" id="file-rec" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-rec"></div>
-      </div>
-      <div class="progress" id="prog-rec"><div class="progress-bar" id="pb-rec"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-rec" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-pgm" title="Importa 4 tablas en un solo paso: PMP_x_BOM, PMP_y_COMEX, PGM y PGM_x_BOM. Se calcula automáticamente la Semana ISO a partir de la columna Día en cada una.">
-      <div class="card-title">PGM x BOM</div>
-      <div class="drop-zone" id="dz-pgm">
-        <input type="file" accept=".xlsx,.xls" id="file-pgm" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-pgm"></div>
-      </div>
-      <div class="progress" id="prog-pgm"><div class="progress-bar" id="pb-pgm"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-pgm" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-cti" title="Se lee la hoja Sheet1 del archivo BD Costos Insumos.">
-      <div class="card-title">Costo de Insumos</div>
-      <div class="drop-zone" id="dz-cti">
-        <input type="file" accept=".xlsx,.xls" id="file-cti" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-cti"></div>
-      </div>
-      <div class="progress" id="prog-cti"><div class="progress-bar" id="pb-cti"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-cti" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-    <div class="card import-card" id="card-pdtt" title="Se lee la tabla ov_x_mes_facturacion del archivo Envases Tetra - Pendientes. Se calcula automáticamente la Fecha Facturación a partir de MES FACTURACION TETRA.">
-      <div class="card-title">Pendientes Tetra</div>
-      <div class="drop-zone" id="dz-pdtt">
-        <input type="file" accept=".xlsx,.xls" id="file-pdtt" />
-        <div class="icon">📂</div>
-        <p>Arrastrá o hacé clic</p>
-        <div class="filename" id="fn-pdtt"></div>
-      </div>
-      <div class="progress" id="prog-pdtt"><div class="progress-bar" id="pb-pdtt"></div></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-pdtt" disabled>⬆ Importar</button>
-      </div>
-      <div class="done-badge">✓ Importado</div>
-    </div>
-
-  </div>
-
-</div>
 
 <!-- ═══ TABLAS SQL ═══ -->
 
@@ -900,7 +706,6 @@
       document.querySelectorAll(".tab, .pane").forEach(el => el.classList.remove("active"));
       tab.classList.add("active");
       document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
-      if (tab.dataset.tab === "dashboard") loadStats();
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "rotacion") initRotacion();
@@ -915,172 +720,6 @@
     el.className = "show " + type;
     clearTimeout(el._t);
     el._t = setTimeout(() => el.classList.remove("show"), 3500);
-  }
-
-  // ── Drop zones ──
-  function setupDrop(dzId, fileId, fnId, btnId) {
-    const dz = document.getElementById(dzId);
-    const fi = document.getElementById(fileId);
-    const fn = document.getElementById(fnId);
-    const bt = document.getElementById(btnId);
-
-    fi.addEventListener("change", () => {
-      if (fi.files[0]) { fn.textContent = fi.files[0].name; bt.disabled = false; }
-    });
-    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
-    dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
-    dz.addEventListener("drop", e => {
-      e.preventDefault(); dz.classList.remove("drag");
-      if (e.dataTransfer.files[0]) {
-        fi.files = e.dataTransfer.files;
-        fn.textContent = e.dataTransfer.files[0].name;
-        bt.disabled = false;
-      }
-    });
-  }
-  setupDrop("dz-art", "file-art", "fn-art", "btn-art");
-  setupDrop("dz-stk", "file-stk", "fn-stk", "btn-stk");
-  setupDrop("dz-pdt", "file-pdt", "fn-pdt", "btn-pdt");
-  setupDrop("dz-sar", "file-sar", "fn-sar", "btn-sar");
-  setupDrop("dz-rec", "file-rec", "fn-rec", "btn-rec");
-  setupDrop("dz-pgm", "file-pgm", "fn-pgm", "btn-pgm");
-  setupDrop("dz-cti", "file-cti", "fn-cti", "btn-cti");
-  setupDrop("dz-pdtt", "file-pdtt", "fn-pdtt", "btn-pdtt");
-
-  // ── Import ──
-  async function doImport(endpoint, fileId, cardId, progId, pbId, btnId) {
-    const file = document.getElementById(fileId).files[0];
-    if (!file) return toast("Seleccioná un archivo primero.", "err");
-
-    const prog = document.getElementById(progId);
-    const pb   = document.getElementById(pbId);
-    const btn  = document.getElementById(btnId);
-    const card = document.getElementById(cardId);
-
-    prog.style.display = "block";
-    pb.style.width = "30%";
-    btn.disabled = true;
-
-    const fd = new FormData();
-    fd.append("file", file);
-
-    try {
-      pb.style.width = "70%";
-      const res = await fetch(`${API}/api/import/${endpoint}?mode=replace`, { method: "POST", body: fd });
-      pb.style.width = "100%";
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || "Error desconocido");
-      let msg = `✅ ${data.rows.toLocaleString()} filas importadas`;
-      if (data.detalle) {
-        const partes = Object.entries(data.detalle).map(([k, v]) => `${k}: ${v.toLocaleString()}`).join(" · ");
-        msg += ` — ${partes}`;
-      }
-      toast(msg, "ok");
-      if (card) card.classList.add("done");
-      loadStats();
-    } catch (e) {
-      toast("❌ " + e.message, "err");
-    } finally {
-      setTimeout(() => { prog.style.display = "none"; pb.style.width = "0"; }, 600);
-      btn.disabled = false;
-    }
-  }
-
-  document.getElementById("btn-art").addEventListener("click", () =>
-    doImport("articulos", "file-art", "card-art", "prog-art", "pb-art", "btn-art"));
-  document.getElementById("btn-stk").addEventListener("click", () =>
-    doImport("stock", "file-stk", "card-stk", "prog-stk", "pb-stk", "btn-stk"));
-  document.getElementById("btn-pdt").addEventListener("click", () =>
-    doImport("pendiente", "file-pdt", "card-pdt", "prog-pdt", "pb-pdt", "btn-pdt"));
-  document.getElementById("btn-sar").addEventListener("click", () =>
-    doImport("stock-arranque", "file-sar", "card-sar", "prog-sar", "pb-sar", "btn-sar"));
-  document.getElementById("btn-rec").addEventListener("click", () =>
-    doImport("recepciones", "file-rec", "card-rec", "prog-rec", "pb-rec", "btn-rec"));
-  document.getElementById("btn-pgm").addEventListener("click", () =>
-    doImport("pgm-x-bom", "file-pgm", "card-pgm", "prog-pgm", "pb-pgm", "btn-pgm"));
-  document.getElementById("btn-cti").addEventListener("click", () =>
-    doImport("costo-insumos", "file-cti", "card-cti", "prog-cti", "pb-cti", "btn-cti"));
-  document.getElementById("btn-pdtt").addEventListener("click", () =>
-    doImport("pendientes-tetra", "file-pdtt", "card-pdtt", "prog-pdtt", "pb-pdtt", "btn-pdtt"));
-
-  // ── Quitar todo: borra todas las bases de datos y resetea los recuadros de importación ──
-  const IMPORT_MODULES = ["art", "stk", "pdt", "sar", "rec", "pgm", "cti", "pdtt"];
-
-  document.getElementById("btn-quitar-todo").addEventListener("click", async () => {
-    const confirmado = confirm(
-      "¿Seguro que querés quitar todos los datos importados?\n\nEsta acción borra todas las bases de datos cargadas y no se puede deshacer."
-    );
-    if (!confirmado) return;
-
-    const btn = document.getElementById("btn-quitar-todo");
-    btn.disabled = true;
-    try {
-      const res = await fetch(`${API}/api/reset-all`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error desconocido");
-
-      IMPORT_MODULES.forEach(mod => {
-        const fileInput = document.getElementById(`file-${mod}`);
-        const fn = document.getElementById(`fn-${mod}`);
-        const card = document.getElementById(`card-${mod}`);
-        const importBtn = document.getElementById(`btn-${mod}`);
-        if (fileInput) fileInput.value = "";
-        if (fn) fn.textContent = "";
-        if (card) card.classList.remove("done");
-        if (importBtn) importBtn.disabled = true;
-      });
-
-      toast("🗑 Se quitaron todos los datos importados", "ok");
-      loadStats();
-    } catch (e) {
-      toast("❌ " + e.message, "err");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-
-  // ── Stats ──
-  async function loadStats() {
-    try {
-      const data = await fetch(`${API}/api/stats`).then(r => r.json());
-      document.getElementById("cnt-articulos").textContent = data.articulos.toLocaleString();
-      document.getElementById("cnt-stock").textContent = data.stock.toLocaleString();
-      document.getElementById("cnt-pendiente").textContent = data.pendiente.toLocaleString();
-      document.getElementById("cnt-stock-arranque").textContent = data.stockArranque.toLocaleString();
-      document.getElementById("cnt-recepciones").textContent = data.recepciones.toLocaleString();
-      document.getElementById("cnt-pgm").textContent = data.pgmTotal.toLocaleString();
-
-      const cardCounts = {
-        "card-art": data.articulos,
-        "card-stk": data.stock,
-        "card-pdt": data.pendiente,
-        "card-sar": data.stockArranque,
-        "card-rec": data.recepciones,
-        "card-pgm": data.pgmTotal,
-        "card-cti": data.costoInsumos,
-        "card-pdtt": data.pendientesTetra,
-      };
-      Object.entries(cardCounts).forEach(([cardId, count]) => {
-        const card = document.getElementById(cardId);
-        if (card) card.classList.toggle("done", count > 0);
-      });
-
-      const ll = document.getElementById("log-list");
-      if (!data.logs.length) {
-        ll.innerHTML = `<div class="empty"><div class="big">📋</div>Sin importaciones aún</div>`;
-        return;
-      }
-      ll.innerHTML = data.logs.map(l => `
-        <div class="log-entry">
-          <span class="log-badge">${l.tabla}</span>
-          <div>
-            <div>${l.filename}</div>
-            <div class="log-meta">${l.filas.toLocaleString()} filas — ${new Date(l.fecha).toLocaleString("es-AR")}</div>
-          </div>
-        </div>`).join("");
-    } catch(e) { console.error(e); }
   }
 
   // ── Table helpers ──
@@ -1893,20 +1532,6 @@
     cobRestoreParams();
   }
 
-  // ── DB ready banner ──
-  const banner = document.createElement("div");
-  banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#1a1d27;border-bottom:2px solid #f7874f;padding:10px 24px;font-size:13px;color:#f7874f;z-index:1000;display:none;text-align:center;";
-  banner.textContent = "⏳ Base de datos iniciando… esto toma unos segundos la primera vez.";
-  document.body.prepend(banner);
-
-  async function waitForDb() {
-    try {
-      const r = await fetch(`${API}/api/status`).then(r => r.json());
-      if (r.ready) { banner.style.display = "none"; loadStats(); }
-      else { banner.style.display = "block"; setTimeout(waitForDb, 1500); }
-    } catch { setTimeout(waitForDb, 2000); }
-  }
-  waitForDb();
 </script>
 </body>
 </html>

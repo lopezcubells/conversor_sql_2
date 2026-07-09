@@ -1,23 +1,16 @@
-const express   = require("express");
-const multer    = require("multer");
-const XLSX      = require("xlsx");
-const cors      = require("cors");
-const path      = require("path");
-const fs        = require("fs");
-const { Pool }  = require("pg");
+const express  = require("express");
+const cors     = require("cors");
+const path     = require("path");
+const { Pool } = require("pg");
 
-const app     = express();
-const PORT    = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "database.db");
+const app  = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 app.get("/health", (req, res) => res.status(200).send("ok"));
 app.use(express.static(path.join(__dirname, "public")));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 150 * 1024 * 1024 } });
-
-// PostgreSQL (opcional)
 let pgPool = null;
 if (process.env.DATABASE_URL) {
   pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -31,575 +24,9 @@ server.on("error", err => { console.error("Error servidor:", err); process.exit(
 process.on("uncaughtException", err => console.error("Excepción:", err));
 process.on("unhandledRejection", err => console.error("Promesa:", err));
 
-let SQL = null, dbReady = false;
-
-function loadDb() {
-  if (!SQL) throw new Error("sql.js no inicializado");
-  if (fs.existsSync(DB_PATH)) return new SQL.Database(fs.readFileSync(DB_PATH));
-  return new SQL.Database();
-}
-function saveDb(db) {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
-}
-function withDb(fn) {
-  const db = loadDb();
-  try { const r = fn(db); saveDb(db); return r; } finally { db.close(); }
-}
-function readDb(fn) {
-  const db = loadDb();
-  try { return fn(db); } finally { db.close(); }
-}
-function query(db, sql, params = []) {
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) rows.push(stmt.getAsObject());
-  stmt.free();
-  return rows;
-}
-function requireDb(req, res, next) {
-  if (!dbReady) return res.status(503).json({ error: "Base de datos iniciando, esperá unos segundos." });
-  next();
-}
-
-function initSchema() {
-  const db = loadDb();
-  db.run(`PRAGMA journal_mode=WAL`);
-  db.run(`
-    CREATE TABLE IF NOT EXISTS articulos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, segundo_nro TEXT, descripcion TEXT, unidad_medida TEXT, rubro TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS stock_sucursales (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, unidad_negocio TEXT, existencias REAL,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS stock_detallado (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, unidad_negocio TEXT, existencias REAL, descripcion TEXT, rubro TEXT
-    );
-    CREATE TABLE IF NOT EXISTS pendiente_completo (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tp_ord TEXT, numero_orden INTEGER, nro_corto INTEGER, segundo_nro TEXT,
-      descripcion TEXT, unidad_negocio TEXT, cantidad_orden REAL, cantidad_recibida REAL,
-      cantidad_pendiente REAL, fecha_orden TEXT, fecha_solic TEXT, fecha_actz TEXT,
-      proveedor TEXT, nombre_proveedor TEXT, moneda TEXT, precio_unitario REAL,
-      importe_total REAL, estado TEXT, aprobador TEXT, nivel_aprobacion INTEGER,
-      cotizacion TEXT, fecha_vencimiento TEXT, rubro TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS stock_arranque (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, unidad_negocio TEXT, existencias REAL,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS recepciones (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tp_ord TEXT, numero_orden INTEGER, nro_corto INTEGER, segundo_nro TEXT,
-      observaciones TEXT, cantidad_orden REAL, cantidad_recibida REAL,
-      cantidad_pendiente REAL, fecha_orden TEXT, fecha_solic TEXT, fecha_actz TEXT,
-      fecha_recepcion TEXT, semana_iso INTEGER, unidad_negocio TEXT,
-      nro_drc INTEGER, tp_ctj TEXT, tp_doc TEXT, numero_documento INTEGER,
-      costo_unitario REAL, iniciador_transaccion TEXT, est_sig INTEGER, ult_est INTEGER,
-      hora_dia INTEGER, hora_recepcion TEXT, rubro TEXT,
-      archivo_origen TEXT, importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS pmp_x_bom (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      linea TEXT, codigo_corto_comp INTEGER, descripcion_comp TEXT, rubro_comp TEXT,
-      cantidad_articulo REAL, cod_corto INTEGER, v_fr TEXT, planta TEXT, ident TEXT,
-      producto TEXT, destino TEXT, dia TEXT, semana_iso INTEGER, bultos REAL,
-      rubro_fr_ves TEXT, factor REAL, cantidad_insumo REAL, sku_rubro TEXT, sku_insumo TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS pmp_y_comex (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      linea TEXT, codigo_corto_comp INTEGER, descripcion_comp TEXT, rubro_comp TEXT,
-      cantidad_articulo REAL, cod_corto INTEGER, v_fr TEXT, planta TEXT, ident TEXT,
-      producto TEXT, destino TEXT, dia TEXT, semana_iso INTEGER, bultos REAL,
-      rubro_fr_ves TEXT, factor REAL, cantidad_insumo REAL, sku_rubro TEXT, sku_insumo TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS pgm (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      linea TEXT, dia TEXT, semana_iso INTEGER, cod_corto INTEGER,
-      producto TEXT, destino TEXT, bultos REAL, v_fr TEXT, litros REAL, planta TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS pgm_x_bom (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      linea TEXT, codigo_corto_comp INTEGER, descripcion_comp TEXT, rubro_comp TEXT,
-      cantidad_articulo REAL, cod_corto INTEGER, v_fr TEXT, planta TEXT, ident TEXT,
-      producto TEXT, destino TEXT, dia TEXT, semana_iso INTEGER, bultos REAL,
-      rubro_fr_ves TEXT, factor REAL, cantidad_insumo REAL, sku_rubro TEXT, sku_insumo TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS costo_insumos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, segundo_nro TEXT, unidad_negocio TEXT, costo_uni REAL,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS pendientes_tetra (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tp_ord TEXT, numero_orden INTEGER, nro_corto INTEGER, observaciones TEXT,
-      cantidad_recibida REAL, fecha_recepcion TEXT, tp_doc TEXT, numero_documento INTEGER,
-      mes_facturacion_tetra TEXT, fecha_facturacion TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS stock_consolidado (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, segundo_nro TEXT, descripcion TEXT, unidad_negocio TEXT,
-      existencias REAL, ubicacion TEXT, nro_lote_serie TEXT,
-      anio INTEGER, semana_iso INTEGER, archivo_origen TEXT,
-      importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS consumo_consolidado (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, unidad_negocio TEXT, tp_doc TEXT, numero_documento INTEGER,
-      nro_art_ppal INTEGER, tp_ord TEXT, numero_orden INTEGER,
-      fecha_orden TEXT, hora_dia INTEGER, hora_orden TEXT,
-      cantidad_trns REAL, id_usuario TEXT, explicacion_transaccion TEXT,
-      archivo_origen TEXT, importado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS avance_x_articulo (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nro_corto INTEGER, descripcion TEXT, rubro TEXT,
-      arranque REAL, recepciones REAL, consumo REAL,
-      necesidad_inicial REAL, necesidad_actual REAL, avance_pct REAL,
-      costo_u REAL, costo_recepciones REAL, costo_necesidad_inicial REAL,
-      calculado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS avance_x_rubro (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      rubro TEXT, arranque REAL, recepciones REAL, consumo REAL,
-      necesidad_inicial REAL, necesidad_actual REAL, avance_pct REAL,
-      calculado_en TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS import_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tabla TEXT, filename TEXT, filas INTEGER, status TEXT,
-      fecha TEXT DEFAULT (datetime('now'))
-    );
-  `);
-  saveDb(db);
-  db.close();
-  console.log("Esquema creado");
-}
-
-function rebuildStockDetallado(db) {
-  db.run("DELETE FROM stock_detallado");
-  db.run(`INSERT INTO stock_detallado (nro_corto, unidad_negocio, existencias, descripcion, rubro)
-    SELECT s.nro_corto, s.unidad_negocio, s.existencias, a.descripcion, a.rubro
-    FROM stock_sucursales s LEFT JOIN articulos a ON a.nro_corto = s.nro_corto`);
-}
-
-function rebuildRecepcionesRubro(db) {
-  const artRows = query(db, `SELECT nro_corto, MAX(rubro) as rubro FROM articulos WHERE nro_corto IS NOT NULL GROUP BY nro_corto`);
-  const rubroMap = new Map(artRows.map(r => [r.nro_corto, r.rubro]));
-  const codigos = query(db, `SELECT DISTINCT nro_corto FROM recepciones WHERE nro_corto IS NOT NULL`);
-  const stmt = db.prepare("UPDATE recepciones SET rubro = ? WHERE nro_corto = ?");
-  for (const { nro_corto } of codigos) stmt.run([rubroMap.get(nro_corto) ?? null, nro_corto]);
-  stmt.free();
-}
-
-function getIsoWeek(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d)) return null;
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const startOfWeek1 = new Date(jan4);
-  startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-  const diff = d - startOfWeek1;
-  return Math.floor(diff / (7 * 86400000)) + 1;
-}
-
-function horaDiaToTimeString(v) {
-  if (v == null || v === "") return null;
-  const n = Math.trunc(Number(v));
-  if (isNaN(n) || n < 0) return null;
-  const s = String(n).padStart(6, "0");
-  return `${s.slice(0,2)}:${s.slice(2,4)}:${s.slice(4,6)}`;
-}
-
-function toDateString(v) {
-  if (v == null || v === "") return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "number") {
-    const EPOCH = Date.UTC(1899, 11, 30);
-    return new Date(EPOCH + v * 86400000).toISOString().slice(0, 10);
-  }
-  return String(v);
-}
-
-function mesFacturacionToDate(v) {
-  if (v == null) return null;
-  const m = String(v).match(/(\d{4})\s*-\s*(\d{1,2})/);
-  if (!m) return null;
-  return `${m[1]}-${m[2].padStart(2,"0")}-01`;
-}
-
-// ── Parsers ──
-
-function parseArticulos(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames.find(n => n === "BD ART x RUBRO") || wb.SheetNames[0];
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
-    .filter(r => r["Nº CORTO"] != null)
-    .map(r => [r["Nº CORTO"] ?? null, String(r["2º Nº ARTÍCULO"] ?? "").trim(),
-      String(r["DESCRIPCIÓN"] ?? "").trim(), String(r["UNIDAD DE MEDIDA"] ?? "").trim(),
-      String(r["RUBRO"] ?? "").trim()]);
-}
-
-function parseStock(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames.find(n => n === "Sheet1") || wb.SheetNames[0];
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
-    .filter(r => r["Nº corto artículo [F4101]"] != null)
-    .map(r => [r["Nº corto artículo [F4101]"] ?? null,
-      String(r["Unidad negocio [F41021]"] ?? "").trim(),
-      r["Existencias físicas [F41021]"] ?? 0]);
-}
-
-function parsePendiente(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = wb.SheetNames.find(n => n.includes("Tabla_Pendiente")) || wb.SheetNames[0];
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
-    .filter(r => r["Número orden"] != null)
-    .map(r => [
-      String(r["Tp ord"] ?? "").trim(), r["Número orden"] ?? null,
-      r["Nº corto artículo"] ?? null, String(r["2° Nº artículo"] ?? "").trim(),
-      String(r["Descripción"] ?? "").trim(), String(r["Unidad negocio"] ?? "").trim(),
-      r["Cantidad orden"] ?? null, r["Cantidad recibida"] ?? null, r["Cantidad pendiente"] ?? null,
-      toDateString(r["Fecha orden"]), toDateString(r["Fecha solic."]), toDateString(r["Fecha actz."]),
-      String(r["Proveedor"] ?? "").trim(), String(r["Nombre proveedor"] ?? "").trim(),
-      String(r["Moneda"] ?? "").trim(), r["Precio unitario"] ?? null, r["Importe total"] ?? null,
-      String(r["Estado"] ?? "").trim(), String(r["Aprobador"] ?? "").trim(),
-      r["Nivel aprobación"] ?? null, String(r["Cotización"] ?? "").trim(),
-      toDateString(r["Fecha vencimiento"]), String(r["Rubro"] ?? "").trim(),
-    ]);
-}
-
-function parseRecepciones(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = wb.SheetNames.find(n => n === "Sheet1") || wb.SheetNames[0];
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
-    .filter(r => r["Número orden"] != null)
-    .map(r => {
-      const fechaRec = toDateString(r["Fecha recepción"]);
-      const horaDia = r["Hora día"] ?? null;
-      return [
-        String(r["Tp ord"] ?? "").trim(), r["Número orden"] ?? null,
-        r["Nº corto artículo"] ?? null, String(r["2° Nº artículo"] ?? r["2º Nº artículo"] ?? "").trim(),
-        String(r["Observaciones"] ?? "").trim(),
-        r["Cantidad orden"] ?? null, r["Cantidad recibida"] ?? null, r["Cantidad pendiente"] ?? null,
-        toDateString(r["Fecha orden"]), toDateString(r["Fecha solic."]), toDateString(r["Fecha actz."]),
-        fechaRec, getIsoWeek(fechaRec),
-        String(r["Unidad negocio"] ?? "").trim(), r["Nº DRC"] ?? null,
-        String(r["Tp Ctj"] ?? "").trim(), String(r["Tp doc"] ?? "").trim(),
-        r["Número documento"] ?? null, r["Costo unitario"] ?? null,
-        String(r["Iniciador transacción"] ?? "").trim(),
-        r["Est. Sig."] ?? null, r["Ult. Est."] ?? null,
-        horaDia, horaDiaToTimeString(horaDia), null,
-      ];
-    });
-}
-
-function parsePgmXBom(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  function parseSheet(sheetName, mapFn) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) return [];
-    return XLSX.utils.sheet_to_json(ws, { defval: null }).filter(r => r["Cod corto"] != null || r["Código corto"] != null).map(mapFn);
-  }
-  const mapPmp = r => {
-    const dia = toDateString(r["Día"]); return [
-      String(r["Linea"] ?? "").trim(), r["Cód. Corto (comp)"] ?? r["Codigo corto comp"] ?? null,
-      String(r["Descripción (comp)"] ?? "").trim(), String(r["Rubro (comp)"] ?? "").trim(),
-      r["Cant. artículo"] ?? null, r["Cod corto"] ?? r["Código corto"] ?? null,
-      String(r["V/Fr"] ?? "").trim(), String(r["PLANTA"] ?? "").trim(),
-      String(r["Ident."] ?? "").trim(), String(r["Producto"] ?? "").trim(),
-      String(r["Destino"] ?? "").trim(), dia, getIsoWeek(dia), r["Bultos"] ?? null,
-      String(r["Rubro FR/VES"] ?? "").trim(), r["Factor"] ?? null,
-      r["CANT. INSUMO"] ?? r["Cant. Insumo"] ?? null,
-      String(r["SKU RUBRO"] ?? "").trim(), String(r["SKU INSUMO"] ?? "").trim(),
-    ];
-  };
-  const mapPgm = r => {
-    const dia = toDateString(r["Día"]); return [
-      String(r["Linea"] ?? "").trim(), dia, getIsoWeek(dia),
-      r["Cod corto"] ?? r["Código corto"] ?? null,
-      String(r["Producto"] ?? "").trim(), String(r["Destino"] ?? "").trim(),
-      r["Bultos"] ?? null, String(r["V/Fr"] ?? "").trim(),
-      r["Litros"] ?? null, String(r["PLANTA"] ?? "").trim(),
-    ];
-  };
-  return {
-    pmpXBom:  parseSheet("PMP_x_BOM",  mapPmp),
-    pmpYComex: parseSheet("PMP_y_COMEX", mapPmp),
-    pgm:      parseSheet("PGM",         mapPgm),
-    pgmXBom:  parseSheet("PGM_x_BOM",  mapPmp),
-  };
-}
-
-function parseCostoInsumos(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws, { defval: null })
-    .filter(r => r["Nº corto artículo"] != null)
-    .map(r => [r["Nº corto artículo"] ?? null, String(r["2º nº artículo"] ?? "").trim(),
-      String(r["Unidad negocio"] ?? "").trim(), r["Costo uni"] ?? null]);
-}
-
-function parsePendientesTetra(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = wb.SheetNames.find(n => n === "OV x Mes Facturacion Tetra");
-  if (!sheetName) throw new Error(`Hoja "OV x Mes Facturacion Tetra" no encontrada`);
-  function normalizeRow(r) { const o = {}; for (const k in r) o[k.trim()] = r[k]; return o; }
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })
-    .map(normalizeRow).filter(r => r["Número orden"] != null)
-    .map(r => {
-      const mes = r["MES FACTURACION TETRA"] ?? null;
-      return [String(r["Tp ord"] ?? "").trim(), r["Número orden"] ?? null,
-        r["Nº corto artículo"] ?? null, String(r["Observaciones"] ?? "").trim(),
-        r["Cantidad recibida"] ?? null, toDateString(r["Fecha recepción"]),
-        String(r["Tp doc"] ?? "").trim(), r["Número documento"] ?? null,
-        mes != null ? String(mes) : null, mesFacturacionToDate(mes)];
-    });
-}
-
-// ── Import endpoints ──
-
-app.post("/api/import/articulos", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parseArticulos(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") db.run("DELETE FROM articulos");
-      const stmt = db.prepare("INSERT INTO articulos (nro_corto, segundo_nro, descripcion, unidad_medida, rubro) VALUES (?,?,?,?,?)");
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["articulos", req.file.originalname, rows.length, "ok"]);
-      rebuildStockDetallado(db);
-      rebuildRecepcionesRubro(db);
-    });
-    res.json({ success: true, rows: rows.length, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/stock", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parseStock(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") db.run("DELETE FROM stock_sucursales");
-      const stmt = db.prepare("INSERT INTO stock_sucursales (nro_corto, unidad_negocio, existencias) VALUES (?,?,?)");
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["stock_sucursales", req.file.originalname, rows.length, "ok"]);
-      rebuildStockDetallado(db);
-    });
-    res.json({ success: true, rows: rows.length, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/pendiente", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parsePendiente(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") db.run("DELETE FROM pendiente_completo");
-      const stmt = db.prepare(`INSERT INTO pendiente_completo (tp_ord,numero_orden,nro_corto,segundo_nro,descripcion,unidad_negocio,cantidad_orden,cantidad_recibida,cantidad_pendiente,fecha_orden,fecha_solic,fecha_actz,proveedor,nombre_proveedor,moneda,precio_unitario,importe_total,estado,aprobador,nivel_aprobacion,cotizacion,fecha_vencimiento,rubro) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["pendiente_completo", req.file.originalname, rows.length, "ok"]);
-    });
-    res.json({ success: true, rows: rows.length, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/stock-arranque", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parseStock(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") db.run("DELETE FROM stock_arranque");
-      const stmt = db.prepare("INSERT INTO stock_arranque (nro_corto, unidad_negocio, existencias) VALUES (?,?,?)");
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["stock_arranque", req.file.originalname, rows.length, "ok"]);
-    });
-    res.json({ success: true, rows: rows.length, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/recepciones", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parseRecepciones(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") db.run("DELETE FROM recepciones");
-      const stmt = db.prepare(`INSERT INTO recepciones (tp_ord,numero_orden,nro_corto,segundo_nro,observaciones,cantidad_orden,cantidad_recibida,cantidad_pendiente,fecha_orden,fecha_solic,fecha_actz,fecha_recepcion,semana_iso,unidad_negocio,nro_drc,tp_ctj,tp_doc,numero_documento,costo_unitario,iniciador_transaccion,est_sig,ult_est,hora_dia,hora_recepcion,rubro) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["recepciones", req.file.originalname, rows.length, "ok"]);
-      rebuildRecepcionesRubro(db);
-    });
-    res.json({ success: true, rows: rows.length, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/pgm-x-bom", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const { pmpXBom, pmpYComex, pgm, pgmXBom } = parsePgmXBom(req.file.buffer);
-    const mode = req.query.mode || "replace";
-    withDb(db => {
-      if (mode === "replace") { db.run("DELETE FROM pmp_x_bom"); db.run("DELETE FROM pmp_y_comex"); db.run("DELETE FROM pgm"); db.run("DELETE FROM pgm_x_bom"); }
-      const insertPmp = db.prepare(`INSERT INTO pmp_x_bom (linea,codigo_corto_comp,descripcion_comp,rubro_comp,cantidad_articulo,cod_corto,v_fr,planta,ident,producto,destino,dia,semana_iso,bultos,rubro_fr_ves,factor,cantidad_insumo,sku_rubro,sku_insumo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      pmpXBom.forEach(r => insertPmp.run(r)); insertPmp.free();
-      const insertComex = db.prepare(`INSERT INTO pmp_y_comex (linea,codigo_corto_comp,descripcion_comp,rubro_comp,cantidad_articulo,cod_corto,v_fr,planta,ident,producto,destino,dia,semana_iso,bultos,rubro_fr_ves,factor,cantidad_insumo,sku_rubro,sku_insumo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      pmpYComex.forEach(r => insertComex.run(r)); insertComex.free();
-      const insertPgm = db.prepare(`INSERT INTO pgm (linea,dia,semana_iso,cod_corto,producto,destino,bultos,v_fr,litros,planta) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-      pgm.forEach(r => insertPgm.run(r)); insertPgm.free();
-      const insertPgmXBom = db.prepare(`INSERT INTO pgm_x_bom (linea,codigo_corto_comp,descripcion_comp,rubro_comp,cantidad_articulo,cod_corto,v_fr,planta,ident,producto,destino,dia,semana_iso,bultos,rubro_fr_ves,factor,cantidad_insumo,sku_rubro,sku_insumo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      pgmXBom.forEach(r => insertPgmXBom.run(r)); insertPgmXBom.free();
-      const totalRows = pmpXBom.length + pmpYComex.length + pgm.length + pgmXBom.length;
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["pgm_x_bom", req.file.originalname, totalRows, "ok"]);
-    });
-    const totalRows = pmpXBom.length + pmpYComex.length + pgm.length + pgmXBom.length;
-    res.json({ success: true, rows: totalRows, detalle: { pmp_x_bom: pmpXBom.length, pmp_y_comex: pmpYComex.length, pgm: pgm.length, pgm_x_bom: pgmXBom.length }, mode });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/costo-insumos", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parseCostoInsumos(req.file.buffer);
-    withDb(db => {
-      db.run("DELETE FROM costo_insumos");
-      const stmt = db.prepare("INSERT INTO costo_insumos (nro_corto, segundo_nro, unidad_negocio, costo_uni) VALUES (?,?,?,?)");
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["costo_insumos", req.file.originalname, rows.length, "ok"]);
-    });
-    res.json({ success: true, rows: rows.length, mode: "replace" });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-app.post("/api/import/pendientes-tetra", requireDb, upload.single("file"), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No se recibió archivo." });
-    const rows = parsePendientesTetra(req.file.buffer);
-    withDb(db => {
-      db.run("DELETE FROM pendientes_tetra");
-      const stmt = db.prepare(`INSERT INTO pendientes_tetra (tp_ord,numero_orden,nro_corto,observaciones,cantidad_recibida,fecha_recepcion,tp_doc,numero_documento,mes_facturacion_tetra,fecha_facturacion) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-      rows.forEach(r => stmt.run(r)); stmt.free();
-      db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["pendientes_tetra", req.file.originalname, rows.length, "ok"]);
-    });
-    res.json({ success: true, rows: rows.length, mode: "replace" });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-
-// Lotes consumo_consolidado (parseo en navegador)
-app.post("/api/import/consumo-consolidado/batch", requireDb, (req, res) => {
-  try {
-    const { rows, archivoOrigen, esPrimerLote } = req.body || {};
-    if (!Array.isArray(rows)) return res.status(400).json({ error: "Formato inválido." });
-    withDb(db => {
-      if (esPrimerLote) db.run("DELETE FROM consumo_consolidado WHERE archivo_origen = ?", [archivoOrigen]);
-      const stmt = db.prepare(`INSERT INTO consumo_consolidado (nro_corto,unidad_negocio,tp_doc,numero_documento,nro_art_ppal,tp_ord,numero_orden,fecha_orden,hora_dia,hora_orden,cantidad_trns,id_usuario,explicacion_transaccion,archivo_origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-      rows.forEach(r => stmt.run([...r, archivoOrigen])); stmt.free();
-    });
-    res.json({ success: true, inserted: rows.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
-});
-app.post("/api/import/consumo-consolidado/finalizar", requireDb, (req, res) => {
-  try {
-    const { archivos, totalFilas } = req.body || {};
-    withDb(db => db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["consumo_consolidado", `${(archivos||[]).length} archivos`, totalFilas || 0, "ok"]));
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.delete("/api/consumo-consolidado", requireDb, (req, res) => {
-  try { withDb(db => db.run("DELETE FROM consumo_consolidado")); res.json({ success: true }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Lotes stock_consolidado (parseo en navegador)
-app.post("/api/import/stock-consolidado/batch", requireDb, (req, res) => {
-  try {
-    const { rows, archivoOrigen, esPrimerLote } = req.body || {};
-    if (!Array.isArray(rows)) return res.status(400).json({ error: "Formato inválido." });
-    withDb(db => {
-      if (esPrimerLote) db.run("DELETE FROM stock_consolidado WHERE archivo_origen = ?", [archivoOrigen]);
-      const stmt = db.prepare(`INSERT INTO stock_consolidado (nro_corto,segundo_nro,descripcion,unidad_negocio,existencias,ubicacion,nro_lote_serie,anio,semana_iso,archivo_origen) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-      rows.forEach(r => stmt.run(r)); stmt.free();
-    });
-    res.json({ success: true, inserted: rows.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.post("/api/import/stock-consolidado/finalizar", requireDb, (req, res) => {
-  try {
-    const { totalFilas, archivoOrigen } = req.body || {};
-    withDb(db => db.run("INSERT INTO import_log (tabla,filename,filas,status) VALUES (?,?,?,?)", ["stock_consolidado", archivoOrigen || "csv", totalFilas || 0, "ok"]));
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Stats
-app.get("/api/stats", requireDb, (req, res) => {
-  try {
-    const data = readDb(db => ({
-      articulos:     query(db, "SELECT COUNT(*) as c FROM articulos")[0]?.c ?? 0,
-      stock:         query(db, "SELECT COUNT(*) as c FROM stock_sucursales")[0]?.c ?? 0,
-      pendiente:     query(db, "SELECT COUNT(*) as c FROM pendiente_completo")[0]?.c ?? 0,
-      stockArranque: query(db, "SELECT COUNT(*) as c FROM stock_arranque")[0]?.c ?? 0,
-      recepciones:   query(db, "SELECT COUNT(*) as c FROM recepciones")[0]?.c ?? 0,
-      pgmTotal:      (query(db,"SELECT COUNT(*) as c FROM pmp_x_bom")[0]?.c??0)+(query(db,"SELECT COUNT(*) as c FROM pmp_y_comex")[0]?.c??0)+(query(db,"SELECT COUNT(*) as c FROM pgm")[0]?.c??0)+(query(db,"SELECT COUNT(*) as c FROM pgm_x_bom")[0]?.c??0),
-      costoInsumos:  query(db, "SELECT COUNT(*) as c FROM costo_insumos")[0]?.c ?? 0,
-      pendientesTetra: query(db, "SELECT COUNT(*) as c FROM pendientes_tetra")[0]?.c ?? 0,
-      logs:          query(db, "SELECT * FROM import_log ORDER BY fecha DESC LIMIT 10"),
-    }));
-    res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-
-
-// Rubros detallado
-app.get("/api/rubros-detallado/kpis", requireDb, (req,res) => {
-  try {
-    const d = readDb(db => ({
-      articulosConStock: query(db,"SELECT COUNT(*) as c FROM stock_detallado WHERE existencias>0")[0]?.c??0,
-      unidadesTotales:   query(db,"SELECT SUM(existencias) as s FROM stock_detallado")[0]?.s??0,
-      totalRubros:       query(db,"SELECT COUNT(DISTINCT rubro) as c FROM stock_detallado WHERE rubro IS NOT NULL AND rubro!='' AND existencias>0")[0]?.c??0,
-      rubroLider:        query(db,"SELECT rubro, SUM(existencias) as s FROM stock_detallado WHERE rubro IS NOT NULL AND rubro!='' GROUP BY rubro ORDER BY s DESC LIMIT 1")[0]?.rubro??null,
-    }));
-    res.json(d);
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/rubros-detallado/resumen", requireDb, (req,res) => {
-  try {
-    const rows = readDb(db => query(db, "SELECT rubro, COUNT(*) as articulos, SUM(existencias) as total FROM stock_detallado WHERE rubro IS NOT NULL AND rubro!='' GROUP BY rubro ORDER BY total DESC"));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/rubros-detallado/top-articulos", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro;
-    if (!rubro) return res.status(400).json({error:"Indicá un rubro"});
-    const rows = readDb(db => query(db, "SELECT descripcion, SUM(existencias) as total FROM stock_detallado WHERE rubro=? GROUP BY descripcion ORDER BY total DESC LIMIT 20",[rubro]));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-
-
-
 // PostgreSQL endpoints
 
-// ── Avance desde funciones PostgreSQL ──
+// ── Avance ──
 
 app.post("/api/pg/avance/calcular", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
@@ -645,7 +72,6 @@ app.post("/api/pg/cobertura", async (req, res) => {
     if (!hora_arranque_stock || !fe_inicio_semana || !fe_final_semana)
       return res.status(400).json({ error: "Completá los 3 parámetros antes de aplicar." });
 
-    // Usar rubros seleccionados o todos los de la whitelist
     const rubros = (rubros_seleccionados && rubros_seleccionados.length)
       ? rubros_seleccionados.filter(r => COBERTURA_RUBROS.includes(r))
       : COBERTURA_RUBROS;
@@ -667,22 +93,23 @@ app.post("/api/pg/cobertura", async (req, res) => {
   }
 });
 
-// Rotación desde rotacion_2026
-app.get("/api/pg/rotacion/rubros", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+// ── Rotación ──
+
+app.get("/api/pg/rotacion/rubros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const result = await pgPool.query(
       "SELECT DISTINCT rubro FROM rotacion_2026 WHERE rubro IS NOT NULL ORDER BY rubro"
     );
     res.json({ rubros: result.rows.map(r => r.rubro) });
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/pg/rotacion/chart", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+app.get("/api/pg/rotacion/chart", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const rubro = req.query.rubro;
-    if (!rubro) return res.status(400).json({error:"Indicá un rubro."});
+    if (!rubro) return res.status(400).json({ error: "Indicá un rubro." });
     const result = await pgPool.query(
       `SELECT numero_mes, pr
        FROM rotacion_2026
@@ -691,27 +118,28 @@ app.get("/api/pg/rotacion/chart", async (req,res) => {
       [rubro]
     );
     res.json({ rows: result.rows });
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Rubros stock desde view_stock_x_rubro
-app.get("/api/pg/rubros-stock", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+// ── Rubros stock ──
+
+app.get("/api/pg/rubros-stock", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const result = await pgPool.query(
       "SELECT DISTINCT rubro FROM view_stock_x_rubro WHERE rubro IS NOT NULL ORDER BY rubro"
     );
     res.json({ rubros: result.rows.map(r => r.rubro) });
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/pg/rubros-stock/chart", async (req,res) => {
-  if (!pgPool) return res.status(503).json({error:"PostgreSQL no disponible."});
+app.get("/api/pg/rubros-stock/chart", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const rubros = Array.isArray(req.query.rubros) ? req.query.rubros : req.query.rubros ? [req.query.rubros] : [];
     if (!rubros.length) return res.json({ rows: [] });
 
-    const placeholders = rubros.map((_,i) => `$${i+1}`).join(",");
+    const placeholders = rubros.map((_, i) => `$${i + 1}`).join(",");
     const result = await pgPool.query(
       `SELECT rubro, SUM(existencias_fisicas) as existencias_fisicas
        FROM view_stock_x_rubro
@@ -721,31 +149,5 @@ app.get("/api/pg/rubros-stock/chart", async (req,res) => {
       rubros
     );
     res.json({ rows: result.rows });
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-
-// Reset
-app.post("/api/reset-all", requireDb, (req,res) => {
-  try {
-    withDb(db => {
-      ["articulos","stock_sucursales","pendiente_completo","stock_detallado","stock_arranque","recepciones","pmp_x_bom","pmp_y_comex","pgm","pgm_x_bom","costo_insumos","pendientes_tetra","avance_x_articulo","avance_x_rubro","stock_consolidado","consumo_consolidado","import_log"]
-        .forEach(t => db.run(`DELETE FROM ${t}`));
-    });
-    res.json({ success: true });
-  } catch(err){ console.error(err); res.status(500).json({error:err.message}); }
-});
-
-
-// Init sql.js
-async function initSql() {
-  const initSqlJs = require("sql.js");
-  SQL = await initSqlJs();
-  dbReady = true;
-  console.log("sql.js listo");
-  initSchema();
-  withDb(db => rebuildStockDetallado(db));
-  withDb(db => rebuildRecepcionesRubro(db));
-  console.log("DB lista");
-}
-initSql().catch(err => console.error("Error sql.js:", err));
