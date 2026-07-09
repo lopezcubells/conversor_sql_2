@@ -629,49 +629,6 @@ app.get("/api/rubros-detallado/top-articulos", requireDb, (req,res) => {
   } catch(err){ res.status(500).json({error:err.message}); }
 });
 
-// Pendientes
-app.get("/api/pendientes/rubros", requireDb, (req,res) => {
-  try {
-    const rubros = readDb(db => query(db,"SELECT DISTINCT rubro FROM pendiente_completo WHERE rubro IS NOT NULL AND rubro!='' ORDER BY rubro")).map(r=>r.rubro);
-    res.json({ rubros });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/pendientes/cuota-proveedor", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const where = rubro ? "WHERE rubro=?" : "";
-    const params = rubro ? [rubro] : [];
-    const rows = readDb(db => query(db, `SELECT tp_ord, COUNT(*) as cantidad, SUM(importe_total) as importe FROM pendiente_completo ${where} GROUP BY tp_ord ORDER BY importe DESC`, params));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/pendientes/vencidos", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const where = rubro ? "WHERE fecha_vencimiento < date('now') AND rubro=?" : "WHERE fecha_vencimiento < date('now')";
-    const params = rubro ? [rubro] : [];
-    const rows = readDb(db => query(db, `SELECT nro_corto, descripcion, cantidad_pendiente, fecha_vencimiento, proveedor FROM pendiente_completo ${where} ORDER BY fecha_vencimiento ASC LIMIT 100`, params));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/pendientes/cadena-aprobacion", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const where = rubro ? "WHERE nivel_aprobacion IS NOT NULL AND rubro=?" : "WHERE nivel_aprobacion IS NOT NULL";
-    const params = rubro ? [rubro] : [];
-    const rows = readDb(db => query(db, `SELECT nivel_aprobacion, COUNT(*) as cantidad FROM pendiente_completo ${where} GROUP BY nivel_aprobacion ORDER BY nivel_aprobacion`, params));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/pendientes/cotizacion", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro||null;
-    const where = rubro ? "WHERE cotizacion IS NOT NULL AND cotizacion!='' AND rubro=?" : "WHERE cotizacion IS NOT NULL AND cotizacion!=''";
-    const params = rubro ? [rubro] : [];
-    const rows = readDb(db => query(db, `SELECT cotizacion, COUNT(*) as cantidad, SUM(importe_total) as importe FROM pendiente_completo ${where} GROUP BY cotizacion ORDER BY importe DESC LIMIT 20`, params));
-    res.json({ rows });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
 
 
 // PostgreSQL endpoints
