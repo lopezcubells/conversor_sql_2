@@ -623,11 +623,22 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title" id="rot-chart-title">Rotación en días</div>
-    <div style="position:relative;height:420px">
-      <canvas id="rot-chart"></canvas>
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title" id="rot-chart-title">Rotación en días</div>
+      <div style="position:relative;height:420px">
+        <canvas id="rot-chart"></canvas>
+      </div>
     </div>
+
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Stock vs. Consumo</div>
+      <div style="position:relative;height:420px">
+        <canvas id="rot-stock-chart"></canvas>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -779,6 +790,7 @@
   };
 
   let rotBarChart    = null;
+  let rotStockChart  = null;
   let rotRubrosLoaded = false;
   let rotAllRows     = [];   // cache de la última respuesta del API
 
@@ -929,8 +941,11 @@
           },
           datalabels: {
             anchor: "start", align: "end", offset: 6,
-            color: "#0f1117",
-            font: { weight: "bold", size: 12 },
+            color: "#ffffff",
+            backgroundColor: "rgba(30,32,48,.65)",
+            borderRadius: 3,
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
+            font: { weight: "bold", size: 13 },
             formatter: v => v,
           },
         },
@@ -938,6 +953,81 @@
           x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
           y: { ticks: { color: "#7b7f99" }, grid: { color: "#2a2d3e" },
                title: { display: true, text: "Días", color: "#7b7f99" } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+
+    // ── Gráfico Stock vs. Consumo ──
+    const stockData   = rows.map(r => r.stock_promedio != null ? Math.round(parseFloat(r.stock_promedio)) : null);
+    const consumoData = rows.map(r => r.consumo        != null ? Math.round(parseFloat(r.consumo))        : null);
+
+    const lblStyle = {
+      color: "#ffffff",
+      backgroundColor: "rgba(30,32,48,.65)",
+      borderRadius: 3,
+      padding: { top: 2, bottom: 2, left: 5, right: 5 },
+      font: { weight: "bold", size: 13 },
+      formatter: v => v != null ? Math.round(v).toLocaleString("es-AR") : "",
+    };
+
+    const ctx2 = document.getElementById("rot-stock-chart").getContext("2d");
+    if (rotStockChart) rotStockChart.destroy();
+    rotStockChart = new Chart(ctx2, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Stock promedio",
+            data: stockData,
+            backgroundColor: "rgba(52,201,126,.45)",
+            borderColor: "rgba(52,201,126,.9)",
+            borderWidth: 1,
+            borderRadius: 4,
+            borderSkipped: false,
+            datalabels: { ...lblStyle, anchor: "start", align: "end", offset: 6 },
+          },
+          {
+            type: "line",
+            label: "Consumo",
+            data: consumoData,
+            borderColor: "#ffffff",
+            borderWidth: 2.5,
+            borderDash: [6, 4],
+            pointRadius: 4,
+            pointBackgroundColor: "#ffffff",
+            pointHoverRadius: 6,
+            fill: false,
+            tension: 0,
+            datalabels: { ...lblStyle, anchor: "center", align: "top", offset: 8 },
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 10 } },
+        plugins: {
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: { color: "#e2e4ef", boxWidth: 16, padding: 20 },
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.raw).toLocaleString("es-AR")}`,
+            }
+          },
+          datalabels: lblStyle,
+        },
+        scales: {
+          x: { ticks: { color: "#7b7f99" }, grid: { display: false } },
+          y: {
+            ticks: { color: "#7b7f99", callback: v => Math.round(v).toLocaleString("es-AR") },
+            grid: { color: "#2a2d3e" },
+          },
         },
       },
       plugins: [ChartDataLabels],
