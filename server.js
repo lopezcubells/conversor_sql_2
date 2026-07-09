@@ -673,41 +673,6 @@ app.get("/api/pendientes/cotizacion", requireDb, (req,res) => {
   } catch(err){ res.status(500).json({error:err.message}); }
 });
 
-// Recepciones
-app.get("/api/recepciones/rubros", requireDb, (req,res) => {
-  try {
-    const rubros = readDb(db => query(db,"SELECT DISTINCT rubro FROM recepciones WHERE rubro IS NOT NULL AND rubro!='' ORDER BY rubro")).map(r=>r.rubro);
-    res.json({ rubros });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/recepciones/total-anio-actual", requireDb, (req,res) => {
-  try {
-    const anio = String(new Date().getFullYear());
-    const rubro = req.query.rubro||null;
-    const whereClauses = ["substr(fecha_recepcion,1,4)=?","cantidad_recibida IS NOT NULL"];
-    const params = [anio];
-    if (rubro) { whereClauses.push("rubro=?"); params.push(rubro); }
-    const row = readDb(db => query(db, `SELECT SUM(cantidad_recibida) as total FROM recepciones WHERE ${whereClauses.join(" AND ")}`, params))[0];
-    res.json({ anio, total: row?.total??0 });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-app.get("/api/recepciones/por-mes", requireDb, (req,res) => {
-  try {
-    const rubro = req.query.rubro;
-    if (!rubro) return res.status(400).json({error:"Indicá un rubro."});
-    const data = readDb(db => {
-      const rows = query(db, `SELECT substr(fecha_recepcion,1,7) as mes, SUM(cantidad_recibida) as cantidad_recibida FROM recepciones WHERE rubro=? AND fecha_recepcion IS NOT NULL AND cantidad_recibida IS NOT NULL GROUP BY mes ORDER BY mes ASC`, [rubro]);
-      if (rubro === "TETRA Envases") {
-        const facturado = query(db, `SELECT substr(fecha_facturacion,1,7) as mes, SUM(cantidad_recibida) as cantidad_facturada FROM pendientes_tetra WHERE fecha_facturacion IS NOT NULL AND cantidad_recibida IS NOT NULL GROUP BY mes`);
-        const facMap = new Map(facturado.map(r=>[r.mes, r.cantidad_facturada]));
-        rows.forEach(r => { r.cantidad_facturada_tetrapak = facMap.get(r.mes)??0; });
-      }
-      return rows;
-    });
-    res.json({ rows: data });
-  } catch(err){ res.status(500).json({error:err.message}); }
-});
-
 
 // PostgreSQL endpoints
 app.get("/api/db/consumos/filtros", async (req,res) => {

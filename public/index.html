@@ -579,7 +579,6 @@
   <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="pendientes">Pendientes</div>
   <div class="tab" data-tab="avance">Avance</div>
-  <div class="tab" data-tab="recepciones-mes">Recepciones</div>
   <div class="tab" data-tab="base-datos">Base de datos</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
@@ -931,32 +930,6 @@
 
 </div>
 
-<!-- ═══ RECEPCIONES ═══ -->
-<div class="pane" id="tab-recepciones-mes">
-  <div class="card">
-    <div class="card-title">Filtro</div>
-    <div class="search-row" style="align-items:flex-end">
-      <select class="search-input" id="rec-mes-rubro-filter" style="flex:0 0 280px"></select>
-      <div class="indicador-card" style="flex:0 0 240px;margin-bottom:0;padding:12px 18px">
-        <div class="indicador-label">Recibido en <span id="rec-anio-actual-label">—</span></div>
-        <div class="indicador-value" style="font-size:24px" id="rec-anio-actual-value">—</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Cantidad recibida por mes</div>
-    <div style="position:relative;height:380px">
-      <canvas id="rec-mes-chart"></canvas>
-    </div>
-  </div>
-
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="rec-mes-table-wrap">
-      <div class="empty"><div class="big">📦</div>Cargando…</div>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ BASE DE DATOS ═══ -->
 <div class="pane" id="tab-base-datos">
@@ -1107,7 +1080,6 @@
       if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "pendientes") initPendientes();
       if (tab.dataset.tab === "avance") initAvance();
-      if (tab.dataset.tab === "recepciones-mes") initRecepcionesMes();
       if (tab.dataset.tab === "base-datos") initBaseDatos();
       if (tab.dataset.tab === "rotacion") initRotacion();
       if (tab.dataset.tab === "cobertura") initCobertura();
