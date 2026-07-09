@@ -482,7 +482,6 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="rubros-detallado">Rubros detallado</div>
   <div class="tab" data-tab="avance">Avance</div>
   <div class="tab" data-tab="rotacion">Rotación</div>
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
@@ -502,27 +501,6 @@
 
 
 <!-- ═══ RUBROS DETALLADO ═══ -->
-<div class="pane" id="tab-rubros-detallado">
-
-  <div class="card">
-    <div class="card-title">Filtro de rubros</div>
-    <div id="rd-pg-status" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
-    <div id="rd-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-    <div class="btn-row" style="margin-top:14px">
-      <button class="btn btn-primary" onclick="loadRubrosChart()">🔍 Aplicar</button>
-      <button class="btn btn-outline" onclick="rdSelectAll()">Seleccionar todos</button>
-      <button class="btn btn-outline" onclick="rdClearAll()">Limpiar</button>
-    </div>
-  </div>
-
-  <div class="section-heading"><h2>Existencias físicas por rubro</h2></div>
-  <div class="card">
-    <div style="position:relative;height:520px">
-      <canvas id="rd-chart-rubros"></canvas>
-    </div>
-  </div>
-
-</div>
 
 <!-- ═══ PENDIENTES ═══ -->
 
@@ -706,7 +684,6 @@
       document.querySelectorAll(".tab, .pane").forEach(el => el.classList.remove("active"));
       tab.classList.add("active");
       document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
-      if (tab.dataset.tab === "rubros-detallado") initRubrosDetallado();
       if (tab.dataset.tab === "avance") initAvance();
       if (tab.dataset.tab === "rotacion") initRotacion();
       if (tab.dataset.tab === "cobertura") initCobertura();
@@ -772,108 +749,6 @@
   function fmtNum(n) {
     return Math.round(n).toLocaleString("es-AR");
   }
-
-  let rdResumenCache = null;
-  let rdRubroChart = null;
-  // ── Rubros detallado: stock desde PostgreSQL view_stock_x_rubro ──
-
-  let rdBarChart = null;
-  let rdAllRubros = [];
-
-  async function initRubrosDetallado() {
-    const status = document.getElementById("rd-pg-status");
-    const checksDiv = document.getElementById("rd-rubro-checks");
-
-    if (!rdAllRubros.length) {
-      try {
-        const res = await fetch(`${API}/api/pg/rubros-stock`);
-        if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
-        const { rubros } = await res.json();
-        rdAllRubros = rubros;
-        checksDiv.innerHTML = "";
-        rubros.forEach(r => {
-          const label = document.createElement("label");
-          label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:6px;white-space:nowrap";
-          const cb = document.createElement("input");
-          cb.type = "checkbox"; cb.value = r; cb.checked = true;
-          label.appendChild(cb);
-          label.appendChild(document.createTextNode(r));
-          checksDiv.appendChild(label);
-        });
-        status.textContent = "";
-      } catch (e) {
-        status.textContent = "⚠ " + e.message;
-        return;
-      }
-    }
-    loadRubrosChart();
-  }
-
-  function rdGetSelected() {
-    return Array.from(document.querySelectorAll("#rd-rubro-checks input:checked")).map(cb => cb.value);
-  }
-  function rdSelectAll() {
-    document.querySelectorAll("#rd-rubro-checks input").forEach(cb => cb.checked = true);
-  }
-  function rdClearAll() {
-    document.querySelectorAll("#rd-rubro-checks input").forEach(cb => cb.checked = false);
-  }
-
-  async function loadRubrosChart() {
-    const selected = rdGetSelected();
-    if (!selected.length) {
-      if (rdBarChart) { rdBarChart.destroy(); rdBarChart = null; }
-      return;
-    }
-    try {
-      const params = new URLSearchParams();
-      selected.forEach(r => params.append("rubros", r));
-      const res = await fetch(`${API}/api/pg/rubros-stock/chart?${params}`);
-      if (!res.ok) throw new Error((await res.json()).error);
-      const { rows } = await res.json();
-
-      const labels = rows.map(r => r.rubro);
-      const data   = rows.map(r => parseFloat(r.existencias_fisicas));
-
-      const ctx = document.getElementById("rd-chart-rubros").getContext("2d");
-      if (rdBarChart) rdBarChart.destroy();
-      rdBarChart = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Existencias físicas",
-            data,
-            backgroundColor: "rgba(79,142,247,.75)",
-            borderColor: "#4f8ef7",
-            borderWidth: 1,
-            borderRadius: 4,
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${fmtNum(ctx.raw)}` } },
-            datalabels: {
-              anchor: "end", align: "end", offset: 4,
-              color: "#e2e4ef", font: { weight: "bold", size: 11 },
-              formatter: v => fmtNum(v),
-            }
-          },
-          layout: { padding: { right: 80 } },
-          scales: {
-            x: { ticks: { color: "#7b7f99", callback: v => fmtNum(v) }, grid: { color: "#2a2d3e" } },
-            y: { ticks: { color: "#7b7f99" }, grid: { display: false } },
-          }
-        },
-        plugins: [ChartDataLabels],
-      });
-    } catch (e) { document.getElementById("rd-pg-status").textContent = "⚠ " + e.message; }
-  }
-
 
   // ── Pestaña "Rotación": rotacion_2026 desde PostgreSQL ──
 
