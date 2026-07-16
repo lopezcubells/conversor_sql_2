@@ -2118,7 +2118,6 @@
     wrap.innerHTML = `<table>
       <thead><tr>
         ${recThSort("Fecha recepción", "fecha_recepcion")}
-        ${recThSort("Hora",            "hora_recepcion")}
         ${recThSort("COD",             "cod_corto")}
         ${recThSort("Descripción",     "descripcion")}
         ${recThSort("Rubro",           "rubro")}
@@ -2127,8 +2126,7 @@
         ${recThSort("Cant. recibida",  "cantidad_recibida")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
-        <td style="white-space:nowrap">${recFmtFecha(r.fecha_recepcion)}</td>
-        <td style="white-space:nowrap">${r.hora_recepcion ?? ""}</td>
+        <td style="white-space:nowrap">${recFmtFecha(r.fecha_recepcion)}${r.hora_recepcion ? " " + r.hora_recepcion : ""}</td>
         <td>${r.cod_corto ?? ""}</td>
         <td>${r.descripcion ?? ""}</td>
         <td>${r.rubro ?? ""}</td>
