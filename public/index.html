@@ -488,6 +488,7 @@
   <div class="tab" data-tab="rotacion">Rotación</div>
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
   <div class="tab" data-tab="inmovilizados">Inmovilizados</div>
+  <div class="tab" data-tab="recepciones">Recepciones</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -756,6 +757,65 @@
 
 </div>
 
+<!-- ═══ RECEPCIONES ═══ -->
+<div class="pane" id="tab-recepciones">
+
+  <!-- 1. Filtros -->
+  <div class="card">
+    <div class="card-title">Filtro</div>
+    <div id="rec-status" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-end">
+
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Rubro</label>
+        <select class="search-input" id="rec-rubro-filter">
+          <option value="">Todos</option>
+        </select>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Unidad de negocio</label>
+        <select class="search-input" id="rec-un-filter">
+          <option value="">Todas</option>
+        </select>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:280px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha recepción</label>
+        <div id="rec-fecha-label" style="font-size:13px;font-weight:600;color:var(--accent);min-height:18px"></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;color:var(--muted);min-width:36px">Desde</span>
+          <input type="range" id="rec-fecha-min" min="0" max="0" value="0" style="flex:1;accent-color:#4f8ef7">
+          <span id="rec-fecha-min-lbl" style="font-size:12px;color:var(--text);min-width:70px;text-align:right"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;color:var(--muted);min-width:36px">Hasta</span>
+          <input type="range" id="rec-fecha-max" min="0" max="0" value="0" style="flex:1;accent-color:#4f8ef7">
+          <span id="rec-fecha-max-lbl" style="font-size:12px;color:var(--text);min-width:70px;text-align:right"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 2. Tabla -->
+  <div class="section-heading"><h2>Recepciones</h2></div>
+
+  <div class="search-row" style="margin-bottom:8px">
+    <input class="search-input" id="rec-q-cod" placeholder="Filtrar COD…" style="max-width:180px" oninput="recFiltrar()" />
+    <input class="search-input" id="rec-q-desc" placeholder="Filtrar Descripción…" oninput="recFiltrar()" />
+    <span id="rec-count" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="rec-table-wrap">
+      <div class="empty"><div class="big">📋</div>Cargando recepciones…</div>
+    </div>
+  </div>
+  <div class="pagination" id="rec-pagination"></div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -774,6 +834,7 @@
       if (tab.dataset.tab === "rotacion") initRotacion();
       if (tab.dataset.tab === "cobertura") initCobertura();
       if (tab.dataset.tab === "inmovilizados") initInmovilizados();
+      if (tab.dataset.tab === "recepciones") initRecepciones();
     });
   });
 
@@ -1902,6 +1963,192 @@
   async function initInmovilizados() {
     await inmInitRubros();
     inmLoad();
+  }
+
+  // ── Recepciones ──
+
+  let recAllData      = [];   // todas las filas de la view
+  let recFilteredData = [];
+  let recFechas       = [];   // fechas distintas ordenadas (para los sliders)
+  let recSort         = { col: "fecha_recepcion", dir: "desc" };
+  let recPage         = 0;
+  let recLoaded       = false;
+  const REC_PAGE_SIZE = 50;
+
+  function recFmtFecha(str) {
+    if (!str) return "";
+    const s = String(str).slice(0, 10);
+    const [y, m, d] = s.split("-");
+    return (y && m && d) ? `${d}/${m}/${y}` : s;
+  }
+
+  function recUpdateSliderLabels() {
+    if (!recFechas.length) return;
+    const min = parseInt(document.getElementById("rec-fecha-min").value);
+    const max = parseInt(document.getElementById("rec-fecha-max").value);
+    document.getElementById("rec-fecha-min-lbl").textContent = recFmtFecha(recFechas[min]);
+    document.getElementById("rec-fecha-max-lbl").textContent = recFmtFecha(recFechas[max]);
+    document.getElementById("rec-fecha-label").textContent   =
+      `${recFmtFecha(recFechas[min])} — ${recFmtFecha(recFechas[max])}`;
+  }
+
+  document.getElementById("rec-fecha-min").addEventListener("input", () => {
+    const minEl = document.getElementById("rec-fecha-min");
+    const maxEl = document.getElementById("rec-fecha-max");
+    if (parseInt(minEl.value) > parseInt(maxEl.value)) maxEl.value = minEl.value;
+    recUpdateSliderLabels();
+    recFiltrar();
+  });
+  document.getElementById("rec-fecha-max").addEventListener("input", () => {
+    const minEl = document.getElementById("rec-fecha-min");
+    const maxEl = document.getElementById("rec-fecha-max");
+    if (parseInt(maxEl.value) < parseInt(minEl.value)) minEl.value = maxEl.value;
+    recUpdateSliderLabels();
+    recFiltrar();
+  });
+
+  document.getElementById("rec-rubro-filter").addEventListener("change", recFiltrar);
+  document.getElementById("rec-un-filter").addEventListener("change", recFiltrar);
+
+  function recBuildFilters() {
+    // Opciones de rubro y unidad de negocio a partir de los datos
+    const rubros   = [...new Set(recAllData.map(r => r.rubro).filter(Boolean))].sort();
+    const unidades = [...new Set(recAllData.map(r => r.unidad_negocio).filter(Boolean))].sort();
+
+    const selRubro = document.getElementById("rec-rubro-filter");
+    const selUn    = document.getElementById("rec-un-filter");
+    const curRubro = selRubro.value, curUn = selUn.value;
+
+    selRubro.innerHTML = `<option value="">Todos</option>` +
+      rubros.map(r => `<option value="${r.replace(/"/g,"&quot;")}">${r}</option>`).join("");
+    selUn.innerHTML = `<option value="">Todas</option>` +
+      unidades.map(u => `<option value="${u.replace(/"/g,"&quot;")}">${u}</option>`).join("");
+    if (curRubro && rubros.includes(curRubro)) selRubro.value = curRubro;
+    if (curUn && unidades.includes(curUn)) selUn.value = curUn;
+
+    // Fechas distintas ordenadas para los sliders
+    recFechas = [...new Set(recAllData.map(r => String(r.fecha_recepcion).slice(0, 10)).filter(Boolean))].sort();
+    const minEl = document.getElementById("rec-fecha-min");
+    const maxEl = document.getElementById("rec-fecha-max");
+    minEl.max = maxEl.max = Math.max(recFechas.length - 1, 0);
+    minEl.value = 0;
+    maxEl.value = Math.max(recFechas.length - 1, 0);
+    recUpdateSliderLabels();
+  }
+
+  function recFiltrar() {
+    if (!recFechas.length) { recFilteredData = []; recRender(); return; }
+    const rubro  = document.getElementById("rec-rubro-filter").value;
+    const un     = document.getElementById("rec-un-filter").value;
+    const qCod   = document.getElementById("rec-q-cod").value.trim().toLowerCase();
+    const qDesc  = document.getElementById("rec-q-desc").value.trim().toLowerCase();
+    const fMin   = recFechas[parseInt(document.getElementById("rec-fecha-min").value)];
+    const fMax   = recFechas[parseInt(document.getElementById("rec-fecha-max").value)];
+
+    recFilteredData = recAllData.filter(r => {
+      const f = String(r.fecha_recepcion).slice(0, 10);
+      if (f < fMin || f > fMax) return false;
+      if (rubro && r.rubro !== rubro) return false;
+      if (un && r.unidad_negocio !== un) return false;
+      if (qCod  && !String(r.cod_corto   ?? "").toLowerCase().includes(qCod))  return false;
+      if (qDesc && !String(r.descripcion ?? "").toLowerCase().includes(qDesc)) return false;
+      return true;
+    });
+    recApplySort();
+    recPage = 0;
+    recRender();
+  }
+
+  function recSortBy(col) {
+    if (recSort.col === col) recSort.dir = recSort.dir === "asc" ? "desc" : "asc";
+    else { recSort.col = col; recSort.dir = "desc"; }
+    recApplySort();
+    recPage = 0;
+    recRender();
+  }
+
+  function recApplySort() {
+    if (!recSort.col) return;
+    const col = recSort.col, dir = recSort.dir;
+    recFilteredData.sort((a, b) => {
+      const va = a[col] ?? "", vb = b[col] ?? "";
+      const na = parseFloat(va), nb = parseFloat(vb);
+      const cmp = (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
+        ? na - nb
+        : String(va).localeCompare(String(vb));
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  function recThSort(label, col) {
+    const active = recSort.col === col;
+    const arrow  = active ? (recSort.dir === "asc" ? "▲" : "▼") : "▾";
+    return `<th class="sortable${active?" sort-active":""}" onclick="recSortBy('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label} <span style="opacity:${active?1:.4}">${arrow}</span></th>`;
+  }
+
+  function recRender() {
+    const wrap  = document.getElementById("rec-table-wrap");
+    const total = recFilteredData.length;
+    document.getElementById("rec-count").textContent = total ? `${total.toLocaleString()} registros` : "";
+
+    if (!total) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin resultados para este filtro</div>`;
+      document.getElementById("rec-pagination").innerHTML = "";
+      return;
+    }
+
+    const start = recPage * REC_PAGE_SIZE;
+    const page  = recFilteredData.slice(start, start + REC_PAGE_SIZE);
+
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        ${recThSort("Fecha recepción", "fecha_recepcion")}
+        ${recThSort("Hora",            "hora_recepcion")}
+        ${recThSort("COD",             "cod_corto")}
+        ${recThSort("Descripción",     "descripcion")}
+        ${recThSort("Rubro",           "rubro")}
+        ${recThSort("Unidad negocio",  "unidad_negocio")}
+        ${recThSort("Observaciones",   "observaciones")}
+        ${recThSort("Cant. recibida",  "cantidad_recibida")}
+      </tr></thead>
+      <tbody>${page.map(r => `<tr>
+        <td style="white-space:nowrap">${recFmtFecha(r.fecha_recepcion)}</td>
+        <td style="white-space:nowrap">${r.hora_recepcion ?? ""}</td>
+        <td>${r.cod_corto ?? ""}</td>
+        <td>${r.descripcion ?? ""}</td>
+        <td>${r.rubro ?? ""}</td>
+        <td>${r.unidad_negocio ?? ""}</td>
+        <td>${r.observaciones ?? ""}</td>
+        <td style="text-align:right">${r.cantidad_recibida != null ? fmtNum(r.cantidad_recibida) : ""}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+
+    renderPagination("rec-pagination", total, start, REC_PAGE_SIZE, "recGoPage");
+  }
+
+  function recGoPage(offset) {
+    recPage = Math.floor(offset / REC_PAGE_SIZE);
+    recRender();
+  }
+
+  async function initRecepciones() {
+    if (recLoaded) return;
+    const status = document.getElementById("rec-status");
+    status.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/recepciones`);
+      if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
+      const { rows } = await res.json();
+      recAllData = rows;
+      recBuildFilters();
+      recFiltrar();
+      status.textContent = "";
+      recLoaded = true;
+    } catch (e) {
+      status.textContent = "⚠ " + e.message;
+      document.getElementById("rec-table-wrap").innerHTML =
+        `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
+    }
   }
 
 </script>

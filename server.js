@@ -121,6 +121,21 @@ app.get("/api/pg/rotacion/chart", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Recepciones ──
+
+app.get("/api/pg/recepciones", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const result = await pgPool.query(
+      `SELECT fecha_recepcion, hora_recepcion, cod_corto, descripcion,
+              rubro, unidad_negocio, observaciones, cantidad_recibida
+       FROM view_recepciones_2026
+       ORDER BY fecha_recepcion DESC, hora_recepcion DESC`
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Inmovilizados ──
 
 app.get("/api/pg/inmovilizados/rubros", async (req, res) => {
