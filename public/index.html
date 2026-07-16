@@ -2070,12 +2070,27 @@
   function recApplySort() {
     if (!recSort.col) return;
     const col = recSort.col, dir = recSort.dir;
+    // fecha (date) y hora (time) se comparan como texto: su formato ISO ordena bien lexicográficamente
+    const asText = col === "fecha_recepcion" || col === "hora_recepcion";
     recFilteredData.sort((a, b) => {
-      const va = a[col] ?? "", vb = b[col] ?? "";
-      const na = parseFloat(va), nb = parseFloat(vb);
-      const cmp = (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
-        ? na - nb
-        : String(va).localeCompare(String(vb));
+      let cmp;
+      if (asText) {
+        const va = col === "fecha_recepcion" ? String(a[col] ?? "").slice(0, 10) : String(a[col] ?? "");
+        const vb = col === "fecha_recepcion" ? String(b[col] ?? "").slice(0, 10) : String(b[col] ?? "");
+        cmp = va.localeCompare(vb);
+        // desempate: fecha igual → ordenar por hora; hora igual → por fecha
+        if (cmp === 0) {
+          const ta = col === "fecha_recepcion" ? String(a.hora_recepcion ?? "") : String(a.fecha_recepcion ?? "").slice(0, 10);
+          const tb = col === "fecha_recepcion" ? String(b.hora_recepcion ?? "") : String(b.fecha_recepcion ?? "").slice(0, 10);
+          cmp = ta.localeCompare(tb);
+        }
+      } else {
+        const va = a[col] ?? "", vb = b[col] ?? "";
+        const na = parseFloat(va), nb = parseFloat(vb);
+        cmp = (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
+          ? na - nb
+          : String(va).localeCompare(String(vb));
+      }
       return dir === "asc" ? cmp : -cmp;
     });
   }
