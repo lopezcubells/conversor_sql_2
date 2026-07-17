@@ -663,6 +663,14 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:12px;padding:12px 18px">
+    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="cob-sin-dup" style="accent-color:#4f8ef7" onchange="cobFiltrar()">
+      Sin duplicados
+      <span style="font-size:11px;color:var(--muted)">(único por COD + Planta)</span>
+    </label>
+  </div>
+
   <!-- 2. Tablero de cobertura -->
   <div class="section-heading"><h2>Tablero de cobertura</h2></div>
   <div id="cob-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
@@ -1551,6 +1559,17 @@
       if (qDesc    && !String(r.descripcion    ?? "").toLowerCase().includes(qDesc))    return false;
       return true;
     });
+
+    // Sin duplicados: conservar la primera fila por combinación cod_corto + planta
+    if (document.getElementById("cob-sin-dup").checked) {
+      const vistos = new Set();
+      cobFilteredData = cobFilteredData.filter(r => {
+        const clave = `${r.cod_corto ?? ""}&${r.planta ?? ""}`;
+        if (vistos.has(clave)) return false;
+        vistos.add(clave);
+        return true;
+      });
+    }
     cobApplySort();
     cobPage = 0;
     cobRender();
