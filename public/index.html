@@ -1611,6 +1611,7 @@
         <col style="width:80px">
         <col class="cob-col-desc" style="width:var(--cob-desc-w,200px);min-width:80px">
         <col class="cob-col-rub"  style="width:var(--cob-rub-w,130px);min-width:60px">
+        <col style="width:90px">
         <col style="width:88px">
         <col style="width:100px">
         <col style="width:96px">
@@ -1622,6 +1623,7 @@
         ${cobThSort("COD PPAL",    "cod_corto_ppal")}
         <th class="sortable cob-resizable${cobSort.col==="descripcion"?" sort-active":""}" onclick="cobSortBy('descripcion')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Descripción <span style="opacity:${cobSort.col==="descripcion"?1:.4}">${cobSort.col==="descripcion"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
         <th class="sortable cob-resizable${cobSort.col==="rubro"?" sort-active":""}" onclick="cobSortBy('rubro')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Rubro <span style="opacity:${cobSort.col==="rubro"?1:.4}">${cobSort.col==="rubro"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
+        ${cobThSort("Planta",      "planta")}
         ${cobThSort("Arranque",    "arranque")}
         ${cobThSort("Recepciones", "recepciones")}
         ${cobThSort("Programado",  "programado")}
@@ -1633,6 +1635,7 @@
         <td style="white-space:nowrap">${r.cod_corto_ppal ?? ""}</td>
         <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.descripcion ?? "").replace(/"/g,"&quot;")}">${r.descripcion ?? ""}</td>
         <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.rubro ?? "").replace(/"/g,"&quot;")}">${r.rubro ?? ""}</td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.planta ?? "").replace(/"/g,"&quot;")}">${r.planta ?? ""}</td>
         <td>${r.arranque != null ? fmtNum(r.arranque) : ""}</td>
         <td>${r.recepciones != null ? fmtNum(r.recepciones) : ""}</td>
         <td>${r.programado != null ? fmtNum(r.programado) : ""}</td>
