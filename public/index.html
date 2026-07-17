@@ -480,6 +480,10 @@
     <h1>Reporte de indicadores - Insumos</h1>
     <p>Abastecimiento de insumos</p>
   </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+    <span id="hdr-usuario" style="font-size:13px;color:var(--muted)"></span>
+    <button class="btn btn-outline" id="btn-logout" style="font-size:12px;display:none">Cerrar sesión</button>
+  </div>
 </header>
 
 <div class="tabs">
@@ -837,6 +841,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const API = "";  // same origin
+
+  // ── Sesión ──
+  fetch(`${API}/api/me`).then(async r => {
+    if (!r.ok) { window.location.href = "/login.html"; return; }
+    const { usuario } = await r.json();
+    document.getElementById("hdr-usuario").textContent = `👤 ${usuario}`;
+    document.getElementById("btn-logout").style.display = "";
+  }).catch(() => {});
+
+  document.getElementById("btn-logout").addEventListener("click", async () => {
+    await fetch(`${API}/api/logout`, { method: "POST" });
+    window.location.href = "/login.html";
+  });
 
   // ── Tabs ──
   document.querySelectorAll(".tab").forEach(tab => {

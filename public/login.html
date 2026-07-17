@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingresar — Reporte de Indicadores</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #171a23;
+    --border: #262a38;
+    --text: #e2e4ef;
+    --muted: #7b7f99;
+    --accent: #4f8ef7;
+    --radius: 12px;
+    --mono: "SFMono-Regular", Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+  }
+  .logo {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #34c97e, #4f8ef7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    margin: 0 auto 18px;
+  }
+  h1 { font-size: 18px; text-align: center; margin-bottom: 4px; }
+  .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+  label {
+    display: block;
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    padding: 11px 14px;
+    margin-bottom: 18px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+  }
+  button:hover { opacity: .9; }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .error {
+    display: none;
+    background: rgba(247,96,96,.1);
+    border: 1px solid rgba(247,96,96,.35);
+    color: #f76060;
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+
+<form class="login-card" id="login-form">
+  <div class="logo">📊</div>
+  <h1>Reporte de indicadores</h1>
+  <div class="sub">Abastecimiento de insumos</div>
+
+  <div class="error" id="login-error"></div>
+
+  <label for="usuario">Usuario</label>
+  <input type="text" id="usuario" autocomplete="username" autofocus required>
+
+  <label for="password">Contraseña</label>
+  <input type="password" id="password" autocomplete="current-password" required>
+
+  <button type="submit" id="btn-login">Ingresar</button>
+</form>
+
+<script>
+  // Si ya hay sesión, ir directo a la app
+  fetch("/api/me").then(r => { if (r.ok) window.location.href = "/"; });
+
+  document.getElementById("login-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = document.getElementById("btn-login");
+    const err = document.getElementById("login-error");
+    err.classList.remove("show");
+    btn.disabled = true;
+    btn.textContent = "Ingresando…";
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usuario:  document.getElementById("usuario").value.trim(),
+          password: document.getElementById("password").value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      window.location.href = "/";
+    } catch (e2) {
+      err.textContent = e2.message;
+      err.classList.add("show");
+      btn.disabled = false;
+      btn.textContent = "Ingresar";
+    }
+  });
+</script>
+</body>
+</html>

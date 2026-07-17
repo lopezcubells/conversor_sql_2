@@ -1,15 +1,19 @@
 const express  = require("express");
 const cors     = require("cors");
 const path     = require("path");
+const crypto   = require("crypto");
+const session  = require("express-session");
+const bcrypt   = require("bcryptjs");
 const { Pool } = require("pg");
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+app.set("trust proxy", 1); // Railway corre detrás de un proxy HTTPS
+
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 app.get("/health", (req, res) => res.status(200).send("ok"));
-app.use(express.static(path.join(__dirname, "public")));
 
 let pgPool = null;
 if (process.env.DATABASE_URL) {
@@ -18,6 +22,76 @@ if (process.env.DATABASE_URL) {
 } else {
   console.log("DATABASE_URL no definida");
 }
+
+// ── Autenticación ──
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: "auto",
+    maxAge: 8 * 60 * 60 * 1000, // 8 horas
+  },
+}));
+
+// Crear tabla de usuarios y sembrar el admin inicial (si la tabla está vacía)
+async function initAuth() {
+  if (!pgPool) return;
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS app_users (
+        id SERIAL PRIMARY KEY,
+        usuario TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        creado_en TIMESTAMPTZ DEFAULT now()
+      )`);
+    const { rows } = await pgPool.query("SELECT COUNT(*)::int AS c FROM app_users");
+    if (rows[0].c === 0) {
+      const usuario = process.env.ADMIN_USER || "admin";
+      const pass    = process.env.ADMIN_PASS || "admin";
+      const hash    = await bcrypt.hash(pass, 10);
+      await pgPool.query("INSERT INTO app_users (usuario, password_hash) VALUES ($1, $2)", [usuario, hash]);
+      console.log(`Usuario inicial creado: "${usuario}"${process.env.ADMIN_PASS ? "" : " (contraseña por defecto: admin — cambiala)"}`);
+    }
+  } catch (e) { console.error("Error init auth:", e.message); }
+}
+initAuth();
+
+app.post("/api/login", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { usuario, password } = req.body || {};
+    if (!usuario || !password) return res.status(400).json({ error: "Ingresá usuario y contraseña." });
+    const { rows } = await pgPool.query("SELECT * FROM app_users WHERE usuario = $1", [usuario]);
+    const user = rows[0];
+    if (!user || !(await bcrypt.compare(password, user.password_hash)))
+      return res.status(401).json({ error: "Usuario o contraseña incorrectos." });
+    req.session.user = { id: user.id, usuario: user.usuario };
+    res.json({ success: true, usuario: user.usuario });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/logout", (req, res) => {
+  req.session.destroy(() => res.json({ success: true }));
+});
+
+app.get("/api/me", (req, res) => {
+  if (req.session.user) res.json({ usuario: req.session.user.usuario });
+  else res.status(401).json({ error: "No autenticado." });
+});
+
+// Todo lo que sigue (páginas y APIs) requiere sesión iniciada
+const AUTH_EXENTOS = new Set(["/login.html", "/api/login", "/api/me", "/health"]);
+app.use((req, res, next) => {
+  if (req.session.user || AUTH_EXENTOS.has(req.path)) return next();
+  if (req.path.startsWith("/api/")) return res.status(401).json({ error: "No autenticado." });
+  return res.redirect("/login.html");
+});
+
+app.use(express.static(path.join(__dirname, "public")));
 
 const server = app.listen(PORT, "0.0.0.0", () => console.log(`Servidor escuchando en 0.0.0.0:${PORT}`));
 server.on("error", err => { console.error("Error servidor:", err); process.exit(1); });
