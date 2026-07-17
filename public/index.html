@@ -663,11 +663,16 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:12px;padding:12px 18px">
+  <div class="card" style="margin-top:12px;padding:12px 18px;display:flex;gap:28px;flex-wrap:wrap">
     <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
       <input type="checkbox" id="cob-sin-dup" style="accent-color:#4f8ef7" onchange="cobFiltrar()">
       Sin duplicados
       <span style="font-size:11px;color:var(--muted)">(único por COD + Planta)</span>
+    </label>
+    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="cob-solo-pgm" style="accent-color:#4f8ef7" onchange="cobFiltrar()">
+      Solo programado
+      <span style="font-size:11px;color:var(--muted)">(programado &gt; 0)</span>
     </label>
   </div>
 
@@ -677,9 +682,9 @@
 
   <!-- Filtros de columna inline -->
   <div class="search-row" style="margin-bottom:8px">
-    <input class="search-input" id="cob-q-cod" placeholder="Filtrar COD…" style="max-width:180px" oninput="cobFiltrar()" />
-    <input class="search-input" id="cob-q-cod-ppal" placeholder="Filtrar COD PPAL…" style="max-width:180px" oninput="cobFiltrar()" />
-    <input class="search-input" id="cob-q-desc" placeholder="Filtrar Descripción…" oninput="cobFiltrar()" />
+    <input class="search-input" id="cob-q-cod" placeholder="Codigo Insumo…" style="max-width:180px" oninput="cobFiltrar()" />
+    <input class="search-input" id="cob-q-cod-ppal" placeholder="SKU Producto…" style="max-width:180px" oninput="cobFiltrar()" />
+    <input class="search-input" id="cob-q-desc" placeholder="Descripción Insumo…" oninput="cobFiltrar()" />
     <span id="cob-count" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
   </div>
 
@@ -1552,8 +1557,10 @@
     const qCod     = document.getElementById("cob-q-cod").value.trim().toLowerCase();
     const qCodPpal = document.getElementById("cob-q-cod-ppal").value.trim().toLowerCase();
     const qDesc    = document.getElementById("cob-q-desc").value.trim().toLowerCase();
+    const soloPgm = document.getElementById("cob-solo-pgm").checked;
     cobFilteredData = cobAllData.filter(r => {
       if (!rubros.has(r.rubro)) return false;
+      if (soloPgm && !(parseFloat(r.programado) > 0)) return false;
       if (qCod     && !String(r.cod_corto      ?? "").toLowerCase().includes(qCod))     return false;
       if (qCodPpal && !String(r.cod_corto_ppal ?? "").toLowerCase().includes(qCodPpal)) return false;
       if (qDesc    && !String(r.descripcion    ?? "").toLowerCase().includes(qDesc))    return false;
@@ -1627,37 +1634,31 @@
     wrap.innerHTML = `<table style="table-layout:fixed;width:100%">
       <colgroup>
         <col style="width:70px">
-        <col style="width:80px">
         <col class="cob-col-desc" style="width:var(--cob-desc-w,200px);min-width:80px">
         <col class="cob-col-rub"  style="width:var(--cob-rub-w,130px);min-width:60px">
         <col style="width:90px">
         <col style="width:88px">
         <col style="width:100px">
-        <col style="width:96px">
         <col style="width:82px">
         ${DIA_COLS.map(() => `<col style="width:82px">`).join("")}
       </colgroup>
       <thead><tr>
         ${cobThSort("COD",         "cod_corto")}
-        ${cobThSort("COD PPAL",    "cod_corto_ppal")}
         <th class="sortable cob-resizable${cobSort.col==="descripcion"?" sort-active":""}" onclick="cobSortBy('descripcion')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Descripción <span style="opacity:${cobSort.col==="descripcion"?1:.4}">${cobSort.col==="descripcion"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
         <th class="sortable cob-resizable${cobSort.col==="rubro"?" sort-active":""}" onclick="cobSortBy('rubro')" style="cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;resize:horizontal">Rubro <span style="opacity:${cobSort.col==="rubro"?1:.4}">${cobSort.col==="rubro"?(cobSort.dir==="asc"?"▲":"▼"):"▾"}</span></th>
         ${cobThSort("Planta",      "planta")}
         ${cobThSort("Arranque",    "arranque")}
         ${cobThSort("Recepciones", "recepciones")}
-        ${cobThSort("Programado",  "programado")}
         ${cobThSort("Quiebres",    "quiebres")}
         ${DIA_COLS.map((col,i) => cobThSort(cobDiaLabels[i], col)).join("")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
         <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
-        <td style="white-space:nowrap">${r.cod_corto_ppal ?? ""}</td>
         <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.descripcion ?? "").replace(/"/g,"&quot;")}">${r.descripcion ?? ""}</td>
         <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.rubro ?? "").replace(/"/g,"&quot;")}">${r.rubro ?? ""}</td>
         <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.planta ?? "").replace(/"/g,"&quot;")}">${r.planta ?? ""}</td>
         <td>${r.arranque != null ? fmtNum(r.arranque) : ""}</td>
         <td>${r.recepciones != null ? fmtNum(r.recepciones) : ""}</td>
-        <td>${r.programado != null ? fmtNum(r.programado) : ""}</td>
         <td>${r.quiebres ?? ""}</td>
         ${DIA_COLS.map(col => cobDiaCell(r[col])).join("")}
       </tr>`).join("")}</tbody>
