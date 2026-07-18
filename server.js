@@ -84,7 +84,7 @@ app.get("/api/me", (req, res) => {
 });
 
 // Todo lo que sigue (páginas y APIs) requiere sesión iniciada
-const AUTH_EXENTOS = new Set(["/login.html", "/api/login", "/api/me", "/health"]);
+const AUTH_EXENTOS = new Set(["/login.html", "/api/login", "/api/me", "/health", "/favicon.png"]);
 app.use((req, res, next) => {
   if (req.session.user || AUTH_EXENTOS.has(req.path)) return next();
   if (req.path.startsWith("/api/")) return res.status(401).json({ error: "No autenticado." });
