@@ -48,13 +48,17 @@ async function initAuth() {
         password_hash TEXT NOT NULL,
         creado_en TIMESTAMPTZ DEFAULT now()
       )`);
+    await pgPool.query("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS es_admin BOOLEAN DEFAULT false");
     const { rows } = await pgPool.query("SELECT COUNT(*)::int AS c FROM app_users");
     if (rows[0].c === 0) {
       const usuario = process.env.ADMIN_USER || "admin";
       const pass    = process.env.ADMIN_PASS || "admin";
       const hash    = await bcrypt.hash(pass, 10);
-      await pgPool.query("INSERT INTO app_users (usuario, password_hash) VALUES ($1, $2)", [usuario, hash]);
+      await pgPool.query("INSERT INTO app_users (usuario, password_hash, es_admin) VALUES ($1, $2, true)", [usuario, hash]);
       console.log(`Usuario inicial creado: "${usuario}"${process.env.ADMIN_PASS ? "" : " (contraseña por defecto: admin — cambiala)"}`);
+    } else {
+      // Migración: asegurar que el usuario admin configurado tenga el flag
+      await pgPool.query("UPDATE app_users SET es_admin = true WHERE usuario = $1", [process.env.ADMIN_USER || "admin"]);
     }
   } catch (e) { console.error("Error init auth:", e.message); }
 }
@@ -69,7 +73,7 @@ app.post("/api/login", async (req, res) => {
     const user = rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash)))
       return res.status(401).json({ error: "Usuario o contraseña incorrectos." });
-    req.session.user = { id: user.id, usuario: user.usuario };
+    req.session.user = { id: user.id, usuario: user.usuario, es_admin: !!user.es_admin };
     res.json({ success: true, usuario: user.usuario });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -79,8 +83,63 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
-  if (req.session.user) res.json({ usuario: req.session.user.usuario });
+  if (req.session.user) res.json({ usuario: req.session.user.usuario, es_admin: !!req.session.user.es_admin });
   else res.status(401).json({ error: "No autenticado." });
+});
+
+// ── Administración de usuarios (solo admin) ──
+
+function requireAdmin(req, res, next) {
+  if (!req.session.user) return res.status(401).json({ error: "No autenticado." });
+  if (!req.session.user.es_admin) return res.status(403).json({ error: "Requiere permisos de administrador." });
+  next();
+}
+
+app.get("/api/users", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pgPool.query(
+      "SELECT id, usuario, es_admin, creado_en FROM app_users ORDER BY usuario"
+    );
+    res.json({ users: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/users", requireAdmin, async (req, res) => {
+  try {
+    const { usuario, password, es_admin } = req.body || {};
+    if (!usuario || !usuario.trim()) return res.status(400).json({ error: "Ingresá un nombre de usuario." });
+    if (!password || password.length < 4) return res.status(400).json({ error: "La contraseña debe tener al menos 4 caracteres." });
+    const hash = await bcrypt.hash(password, 10);
+    await pgPool.query(
+      "INSERT INTO app_users (usuario, password_hash, es_admin) VALUES ($1, $2, $3)",
+      [usuario.trim(), hash, !!es_admin]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    if (e.code === "23505") return res.status(409).json({ error: "Ese usuario ya existe." });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/api/users/:id/password", requireAdmin, async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    if (!password || password.length < 4) return res.status(400).json({ error: "La contraseña debe tener al menos 4 caracteres." });
+    const hash = await bcrypt.hash(password, 10);
+    const r = await pgPool.query("UPDATE app_users SET password_hash = $1 WHERE id = $2", [hash, req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: "Usuario no encontrado." });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/users/:id", requireAdmin, async (req, res) => {
+  try {
+    if (parseInt(req.params.id) === req.session.user.id)
+      return res.status(400).json({ error: "No podés eliminar tu propio usuario." });
+    const r = await pgPool.query("DELETE FROM app_users WHERE id = $1", [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: "Usuario no encontrado." });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Todo lo que sigue (páginas y APIs) requiere sesión iniciada

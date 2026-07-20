@@ -503,6 +503,30 @@
     <div class="card-title" style="font-size:18px;">Reporte de Indicadores — Insumos</div>
     <p style="color:var(--muted);margin-top:8px;">Seleccioná una pestaña para comenzar.</p>
   </div>
+
+  <!-- Administración de usuarios (solo visible para admin) -->
+  <div class="card" id="users-card" style="display:none;margin-top:24px">
+    <div class="card-title">Administración de usuarios</div>
+    <div id="users-status" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Usuario</label>
+        <input class="search-input" id="new-user-name" style="width:180px" autocomplete="off" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Contraseña</label>
+        <input class="search-input" type="password" id="new-user-pass" style="width:180px" autocomplete="new-password" />
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding-bottom:9px">
+        <input type="checkbox" id="new-user-admin" style="accent-color:#4f8ef7">
+        Administrador
+      </label>
+      <button class="btn btn-primary" id="btn-user-create">＋ Crear usuario</button>
+    </div>
+
+    <div class="table-wrap" id="users-table-wrap"></div>
+  </div>
 </div>
 
 
@@ -846,15 +870,97 @@
   // ── Sesión ──
   fetch(`${API}/api/me`).then(async r => {
     if (!r.ok) { window.location.href = "/login.html"; return; }
-    const { usuario } = await r.json();
+    const { usuario, es_admin } = await r.json();
     document.getElementById("hdr-usuario").textContent = `👤 ${usuario}`;
     document.getElementById("btn-logout").style.display = "";
+    if (es_admin) {
+      document.getElementById("users-card").style.display = "";
+      usersLoad();
+    }
   }).catch(() => {});
 
   document.getElementById("btn-logout").addEventListener("click", async () => {
     await fetch(`${API}/api/logout`, { method: "POST" });
     window.location.href = "/login.html";
   });
+
+  // ── Administración de usuarios ──
+
+  async function usersLoad() {
+    const wrap = document.getElementById("users-table-wrap");
+    try {
+      const res = await fetch(`${API}/api/users`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { users } = await res.json();
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>Usuario</th>
+          <th>Rol</th>
+          <th>Creado</th>
+          <th style="text-align:right">Acciones</th>
+        </tr></thead>
+        <tbody>${users.map(u => `<tr>
+          <td>${u.usuario}</td>
+          <td>${u.es_admin ? '<span style="color:var(--accent);font-weight:600">Admin</span>' : "Usuario"}</td>
+          <td style="white-space:nowrap">${u.creado_en ? new Date(u.creado_en).toLocaleDateString("es-AR") : ""}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="usersChangePass(${u.id}, '${u.usuario.replace(/'/g,"\\'")}')">🔑 Contraseña</button>
+            <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;border-color:rgba(247,96,96,.4);color:#f76060" onclick="usersDelete(${u.id}, '${u.usuario.replace(/'/g,"\\'")}')">🗑 Eliminar</button>
+          </td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    } catch (e) {
+      wrap.innerHTML = `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
+    }
+  }
+
+  document.getElementById("btn-user-create").addEventListener("click", async () => {
+    const usuario  = document.getElementById("new-user-name").value.trim();
+    const password = document.getElementById("new-user-pass").value;
+    const es_admin = document.getElementById("new-user-admin").checked;
+    if (!usuario || !password) return toast("Completá usuario y contraseña.", "err");
+    try {
+      const res = await fetch(`${API}/api/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, password, es_admin }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      toast(`✅ Usuario "${usuario}" creado`, "ok");
+      document.getElementById("new-user-name").value = "";
+      document.getElementById("new-user-pass").value = "";
+      document.getElementById("new-user-admin").checked = false;
+      usersLoad();
+    } catch (e) { toast("❌ " + e.message, "err"); }
+  });
+
+  async function usersChangePass(id, usuario) {
+    const password = prompt(`Nueva contraseña para "${usuario}":`);
+    if (password === null) return;
+    if (password.length < 4) return toast("La contraseña debe tener al menos 4 caracteres.", "err");
+    try {
+      const res = await fetch(`${API}/api/users/${id}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      toast(`✅ Contraseña de "${usuario}" actualizada`, "ok");
+    } catch (e) { toast("❌ " + e.message, "err"); }
+  }
+
+  async function usersDelete(id, usuario) {
+    if (!confirm(`¿Eliminar el usuario "${usuario}"?\n\nEsta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`${API}/api/users/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      toast(`🗑 Usuario "${usuario}" eliminado`, "ok");
+      usersLoad();
+    } catch (e) { toast("❌ " + e.message, "err"); }
+  }
 
   // ── Tabs ──
   document.querySelectorAll(".tab").forEach(tab => {
