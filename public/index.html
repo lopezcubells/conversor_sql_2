@@ -315,6 +315,22 @@
     .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
     .empty .big { font-size: 40px; margin-bottom: 8px; }
 
+    /* ── Tema claro: solo pestaña Recepciones ── */
+    #tab-recepciones {
+      --bg:      #ffffff;
+      --surface: #ffffff;
+      --border:  #d9dce3;
+      --text:    #1c1f2b;
+      --muted:   #5c6172;
+      --accent:  #2563eb;
+      --accent2: #15803d;
+      background: #eef0f4;
+      color: var(--text);
+    }
+    #tab-recepciones .card { box-shadow: 0 1px 3px rgba(16,20,35,.07); }
+    #tab-recepciones tr:hover td { background: rgba(37,99,235,.05); }
+    #tab-recepciones input[type="range"] { accent-color: #2563eb; }
+
     /* ── Rubros Detallado: KPI hero row ── */
     .kpi-row {
       display: grid;
@@ -831,12 +847,12 @@
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font-size:11px;color:var(--muted);min-width:36px">Desde</span>
             <input type="range" id="rec-fecha-min" min="0" max="0" value="0" style="flex:1;accent-color:#4f8ef7">
-            <input type="date" id="rec-fecha-min-date" class="search-input" style="width:140px;color-scheme:dark;padding:5px 8px;font-size:12px">
+            <input type="date" id="rec-fecha-min-date" class="search-input" style="width:140px;color-scheme:light;padding:5px 8px;font-size:12px">
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font-size:11px;color:var(--muted);min-width:36px">Hasta</span>
             <input type="range" id="rec-fecha-max" min="0" max="0" value="0" style="flex:1;accent-color:#4f8ef7">
-            <input type="date" id="rec-fecha-max-date" class="search-input" style="width:140px;color-scheme:dark;padding:5px 8px;font-size:12px">
+            <input type="date" id="rec-fecha-max-date" class="search-input" style="width:140px;color-scheme:light;padding:5px 8px;font-size:12px">
           </div>
         </div>
 
