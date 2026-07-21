@@ -2752,7 +2752,7 @@
       let gi = 0;
       const bloques = Object.entries(grupos).map(([rubro, items]) => {
         const gid = `${gidBase}g${gi++}`;
-        const minSaldo = Math.min(...items.map(r => parseFloat(r.saldo) || 0));
+        const sumaMinSaldo = items.reduce((a, r) => a + (parseFloat(r.saldo) || 0), 0);
         const hijos = items.map(r => `
           <tr class="${gid}" style="display:none">
             <td style="padding:6px 10px 6px 28px;color:var(--muted)">${r.descripcion_ppal ?? ""}</td>
@@ -2761,7 +2761,7 @@
         return `
           <tr id="${gid}-hdr" data-open="0" onclick="nsToggleGroup('${gid}')" style="cursor:pointer;border-top:1px solid var(--border)">
             <td style="padding:8px 10px;font-weight:600"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${rubro}</td>
-            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(minSaldo)}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(sumaMinSaldo)}</td>
           </tr>${hijos}`;
       }).join("");
       tablaHtml = `
