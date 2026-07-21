@@ -1009,6 +1009,15 @@
         </div>
       </div>
 
+      <div style="margin-top:22px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Rubros</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-outline" onclick="nsSelectAllRubros()" style="font-size:12px">Todos</button>
+          <button class="btn btn-outline" onclick="nsClearAllRubros()" style="font-size:12px">Ninguno</button>
+        </div>
+        <div id="ns-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+
       <div style="margin-top:24px">
         <button class="btn btn-success" id="ns-btn-calcular">💾 Guardar y calcular</button>
         <span id="ns-params-estado" style="margin-left:14px;font-size:13px;color:var(--muted)"></span>
@@ -2621,27 +2630,77 @@
     sig2_inicio:   "ns-sig2-inicio",
     sig2_final:    "ns-sig2-final",
   };
+  const NS_RUBROS_LISTA = [
+    "Bandeja","BIB Bolsa","BIB Envase","BIB Manijas","BOTELLA Vidrio",
+    "Cajas","Cápsulas","ETIQUETA CT","ETIQUETA FR","ETIQUETA Medallas y Stickers",
+    "ETIQUETA Rotulo","FILM Termocontraible","Pallets","Plancha","Separador",
+    "Stretch","Tapa","Tapón","TETRA Envases",
+  ];
   let nsLoaded = false;
+  let nsRubrosInit = false;
 
   document.getElementById("ns-params-toggle").addEventListener("click", () => {
     document.getElementById("ns-params-toggle").classList.toggle("collapsed");
     document.getElementById("ns-params-body").classList.toggle("collapsed");
   });
 
+  function nsInitRubros(seleccionados) {
+    const checks = document.getElementById("ns-rubro-checks");
+    if (nsRubrosInit) {
+      document.querySelectorAll("#ns-rubro-checks input").forEach(cb => {
+        cb.checked = seleccionados ? seleccionados.includes(cb.value) : true;
+        cb.closest("label").style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      });
+      return;
+    }
+    checks.innerHTML = "";
+    NS_RUBROS_LISTA.forEach(r => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 12px;border:1px solid var(--border);border-radius:99px;white-space:nowrap;transition:border-color .15s";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = r;
+      cb.checked = seleccionados ? seleccionados.includes(r) : true;
+      cb.style.accentColor = "#4f8ef7";
+      cb.addEventListener("change", () => {
+        label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      });
+      label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      label.appendChild(cb); label.appendChild(document.createTextNode(r));
+      checks.appendChild(label);
+    });
+    nsRubrosInit = true;
+  }
+
+  function nsGetRubros() {
+    return Array.from(document.querySelectorAll("#ns-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function nsSelectAllRubros() {
+    document.querySelectorAll("#ns-rubro-checks input").forEach(cb => {
+      cb.checked = true; cb.closest("label").style.borderColor = "var(--accent)";
+    });
+  }
+  function nsClearAllRubros() {
+    document.querySelectorAll("#ns-rubro-checks input").forEach(cb => {
+      cb.checked = false; cb.closest("label").style.borderColor = "var(--border)";
+    });
+  }
+
   function nsGetParams() {
     const p = {};
     for (const [key, id] of Object.entries(NS_FIELDS)) p[key] = document.getElementById(id).value;
+    p.rubros = nsGetRubros();
     return p;
   }
 
   function nsRestoreParams() {
     try {
       const s = JSON.parse(localStorage.getItem(NS_STORAGE_KEY) || "null");
+      nsInitRubros(s && s.rubros ? s.rubros : null);
       if (!s) return;
       for (const [key, id] of Object.entries(NS_FIELDS)) {
         if (s[key] != null) document.getElementById(id).value = s[key];
       }
-    } catch (e) {}
+    } catch (e) { nsInitRubros(null); }
   }
 
   document.getElementById("ns-btn-calcular").addEventListener("click", async () => {
