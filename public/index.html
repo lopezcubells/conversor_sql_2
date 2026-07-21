@@ -517,6 +517,7 @@
   <div class="tab" data-tab="cobertura">Cobertura y faltantes</div>
   <div class="tab" data-tab="inmovilizados">Inmovilizados</div>
   <div class="tab" data-tab="recepciones">Recepciones</div>
+  <div class="tab" data-tab="nivel-servicio">Nivel de servicio</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -898,6 +899,47 @@
     </div>
   </div>
   <div class="pagination" id="rec-pagination"></div>
+
+</div>
+
+<!-- ═══ NIVEL DE SERVICIO ═══ -->
+<div class="pane" id="tab-nivel-servicio">
+
+  <div class="section-heading"><h2>NS Semana en curso</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-actual-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-actual-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+  </div>
+
+  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (1ra mitad)</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-sig1-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-sig1-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+  </div>
+
+  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (2da mitad)</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-sig2-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-sig2-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+  </div>
 
 </div>
 
