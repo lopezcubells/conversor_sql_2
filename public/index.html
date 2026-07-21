@@ -941,6 +941,82 @@
     </div>
   </div>
 
+  <!-- Parámetros (colapsable, inicia oculto) -->
+  <div class="card" style="margin-top:40px">
+    <div class="collapsible-header collapsed" id="ns-params-toggle">
+      <div class="card-title" style="margin-bottom:0">Parámetros</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body collapsible-body-tall collapsed" id="ns-params-body">
+
+      <div style="margin-top:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Parámetros de cálculo de cobertura</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Fecha inicio semana</label>
+            <input type="date" class="search-input" id="ns-cob-fe-inicio" style="width:160px;color-scheme:dark" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Hora arranque semana</label>
+            <input type="time" class="search-input" id="ns-cob-hora" step="60" style="width:140px;color-scheme:dark" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Fecha final semana</label>
+            <input type="date" class="search-input" id="ns-cob-fe-final" style="width:160px;color-scheme:dark" />
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Semana en curso</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Inicio</label>
+            <input type="date" class="search-input" id="ns-actual-inicio" style="width:160px;color-scheme:dark" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Final</label>
+            <input type="date" class="search-input" id="ns-actual-final" style="width:160px;color-scheme:dark" />
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Semana siguiente (1ra mitad)</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Inicio</label>
+            <input type="date" class="search-input" id="ns-sig1-inicio" style="width:160px;color-scheme:dark" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Final</label>
+            <input type="date" class="search-input" id="ns-sig1-final" style="width:160px;color-scheme:dark" />
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Semana siguiente (2da mitad)</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Inicio</label>
+            <input type="date" class="search-input" id="ns-sig2-inicio" style="width:160px;color-scheme:dark" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:11px;color:var(--muted)">Final</label>
+            <input type="date" class="search-input" id="ns-sig2-final" style="width:160px;color-scheme:dark" />
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <button class="btn btn-success" id="ns-btn-calcular">💾 Guardar y calcular</button>
+        <span id="ns-params-estado" style="margin-left:14px;font-size:13px;color:var(--muted)"></span>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
@@ -1057,6 +1133,7 @@
       if (tab.dataset.tab === "cobertura") initCobertura();
       if (tab.dataset.tab === "inmovilizados") initInmovilizados();
       if (tab.dataset.tab === "recepciones") initRecepciones();
+      if (tab.dataset.tab === "nivel-servicio") initNivelServicio();
     });
   });
 
@@ -2527,6 +2604,69 @@
       document.getElementById("rec-table-wrap").innerHTML =
         `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
     }
+  }
+
+  // ── Nivel de servicio ──
+
+  const NS_STORAGE_KEY = "nivel-servicio-params";
+  // Mapa: clave de parámetro → id del input
+  const NS_FIELDS = {
+    cob_fe_inicio: "ns-cob-fe-inicio",
+    cob_hora:      "ns-cob-hora",
+    cob_fe_final:  "ns-cob-fe-final",
+    actual_inicio: "ns-actual-inicio",
+    actual_final:  "ns-actual-final",
+    sig1_inicio:   "ns-sig1-inicio",
+    sig1_final:    "ns-sig1-final",
+    sig2_inicio:   "ns-sig2-inicio",
+    sig2_final:    "ns-sig2-final",
+  };
+  let nsLoaded = false;
+
+  document.getElementById("ns-params-toggle").addEventListener("click", () => {
+    document.getElementById("ns-params-toggle").classList.toggle("collapsed");
+    document.getElementById("ns-params-body").classList.toggle("collapsed");
+  });
+
+  function nsGetParams() {
+    const p = {};
+    for (const [key, id] of Object.entries(NS_FIELDS)) p[key] = document.getElementById(id).value;
+    return p;
+  }
+
+  function nsRestoreParams() {
+    try {
+      const s = JSON.parse(localStorage.getItem(NS_STORAGE_KEY) || "null");
+      if (!s) return;
+      for (const [key, id] of Object.entries(NS_FIELDS)) {
+        if (s[key] != null) document.getElementById(id).value = s[key];
+      }
+    } catch (e) {}
+  }
+
+  document.getElementById("ns-btn-calcular").addEventListener("click", async () => {
+    const params = nsGetParams();
+    const faltantes = Object.values(params).some(v => !v);
+    if (faltantes) { toast("Completá todos los parámetros antes de calcular.", "err"); return; }
+
+    localStorage.setItem(NS_STORAGE_KEY, JSON.stringify(params));
+
+    const btn    = document.getElementById("ns-btn-calcular");
+    const estado = document.getElementById("ns-params-estado");
+    btn.disabled = true;
+    estado.textContent = "Guardando…";
+
+    // TODO: ejecutar la consulta SQL indicada por el usuario y poblar los bloques.
+    // Endpoint previsto: POST /api/pg/nivel-servicio con `params`.
+    estado.innerHTML = `✓ Parámetros guardados`;
+    toast("💾 Parámetros guardados", "ok");
+    btn.disabled = false;
+  });
+
+  function initNivelServicio() {
+    if (nsLoaded) return;
+    nsRestoreParams();
+    nsLoaded = true;
   }
 
 </script>
