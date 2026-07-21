@@ -316,7 +316,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
 
     // Detalle de faltantes (evaluacion = 'no cubre'), agrupado por planta + producto + rubro
     const sqlDetalle = `
-      SELECT planta, descripcion_ppal, rubro, SUM(saldo) AS saldo
+      SELECT planta, descripcion_ppal, rubro, SUM(consumo_insumo) AS consumo_insumo
       FROM indicador_cobertura($1::date, $2::date, $3::time)
       WHERE evaluacion = 'no cubre'
         AND rubro = ANY($4::text[])
