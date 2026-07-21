@@ -2752,16 +2752,16 @@
       let gi = 0;
       const bloques = Object.entries(grupos).map(([rubro, items]) => {
         const gid = `${gidBase}g${gi++}`;
-        const totalConsumo = items.reduce((a, r) => a + (parseFloat(r.consumo_insumo) || 0), 0);
+        const minSaldo = Math.min(...items.map(r => parseFloat(r.saldo) || 0));
         const hijos = items.map(r => `
           <tr class="${gid}" style="display:none">
             <td style="padding:6px 10px 6px 28px;color:var(--muted)">${r.descripcion_ppal ?? ""}</td>
-            <td style="padding:6px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.consumo_insumo)}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.saldo)}</td>
           </tr>`).join("");
         return `
           <tr id="${gid}-hdr" data-open="0" onclick="nsToggleGroup('${gid}')" style="cursor:pointer;border-top:1px solid var(--border)">
             <td style="padding:8px 10px;font-weight:600"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${rubro}</td>
-            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(totalConsumo)}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(minSaldo)}</td>
           </tr>${hijos}`;
       }).join("");
       tablaHtml = `
@@ -2771,7 +2771,7 @@
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead><tr>
                 <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:11px">Rubro · Producto</th>
-                <th style="text-align:right;padding:6px 10px;color:var(--muted);font-size:11px">Consumo insumo</th>
+                <th style="text-align:right;padding:6px 10px;color:var(--muted);font-size:11px">Saldo</th>
               </tr></thead>
               <tbody>${bloques}</tbody>
             </table>
