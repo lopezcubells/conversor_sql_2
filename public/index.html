@@ -866,6 +866,14 @@
       </div>
     </div>
 
+    <div class="card" style="flex:1;min-width:320px;margin-bottom:0;display:flex;flex-direction:column">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Cantidad recibida por mes</div>
+      <div id="rec-chart-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;min-height:160px">Seleccioná un rubro</div>
+      <div id="rec-chart-box" style="position:relative;height:200px;display:none">
+        <canvas id="rec-chart"></canvas>
+      </div>
+    </div>
+
     <div class="card" style="min-width:230px;margin-bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:6px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Total cantidad recibida</div>
       <div id="rec-total" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--accent2, #34c97e)">—</div>
@@ -2163,6 +2171,7 @@
   let recSort         = { col: "fecha_recepcion", dir: "desc" };
   let recPage         = 0;
   let recLoaded       = false;
+  let recBarChart     = null;
   const REC_PAGE_SIZE = 50;
 
   function recFmtFecha(str) {
@@ -2290,18 +2299,87 @@
     recUpdateTotal(rubro);
   }
 
-  // Tarjeta de total: solo suma cuando hay un rubro concreto seleccionado
+  // Tarjeta de total + gráfico: solo cuando hay un rubro concreto seleccionado
   function recUpdateTotal(rubro) {
     const totalEl = document.getElementById("rec-total");
     const subEl   = document.getElementById("rec-total-sub");
     if (!rubro) {
       totalEl.textContent = "—";
       subEl.textContent = "Seleccioná un rubro";
+      recRenderChart(null);
       return;
     }
     const suma = recFilteredData.reduce((acc, r) => acc + (parseFloat(r.cantidad_recibida) || 0), 0);
     totalEl.textContent = Math.round(suma).toLocaleString("es-AR");
     subEl.textContent = rubro;
+    recRenderChart(rubro);
+  }
+
+  // Gráfico de barras: cantidad recibida por mes de lo filtrado
+  function recRenderChart(rubro) {
+    const box   = document.getElementById("rec-chart-box");
+    const empty = document.getElementById("rec-chart-empty");
+    if (!rubro) {
+      if (recBarChart) { recBarChart.destroy(); recBarChart = null; }
+      box.style.display = "none";
+      empty.style.display = "flex";
+      return;
+    }
+    // Sumar cantidad_recibida por mes (1..12) sobre los datos ya filtrados
+    const porMes = {};
+    recFilteredData.forEach(r => {
+      const f = String(r.fecha_recepcion).slice(0, 10);
+      const mes = parseInt(f.slice(5, 7));
+      if (!mes) return;
+      porMes[mes] = (porMes[mes] || 0) + (parseFloat(r.cantidad_recibida) || 0);
+    });
+    const meses = Object.keys(porMes).map(Number).sort((a, b) => a - b);
+    const labels = meses.map(m => MES_NOMBRES[m] ?? m);
+    const data   = meses.map(m => Math.round(porMes[m]));
+
+    empty.style.display = "none";
+    box.style.display = "block";
+
+    const ctx = document.getElementById("rec-chart").getContext("2d");
+    if (recBarChart) recBarChart.destroy();
+    recBarChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Cantidad recibida",
+          data,
+          backgroundColor: "rgba(21,128,61,.75)",
+          borderColor: "#15803d",
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 22 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${Math.round(c.raw).toLocaleString("es-AR")}` } },
+          datalabels: {
+            anchor: "end", align: "end", offset: 2,
+            color: "#1c1f2b",
+            font: { weight: "bold", size: 11 },
+            formatter: v => Math.round(v).toLocaleString("es-AR"),
+          },
+        },
+        scales: {
+          x: { ticks: { color: "#5c6172" }, grid: { display: false } },
+          y: {
+            ticks: { color: "#5c6172", callback: v => Math.round(v).toLocaleString("es-AR") },
+            grid: { color: "#d9dce3" },
+          },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
   }
 
   function recSortBy(col) {
