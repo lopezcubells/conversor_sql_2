@@ -314,19 +314,38 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       GROUP BY l.planta
       ORDER BY l.planta`;
 
-    const run = (ini, fin) =>
-      pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
+    // Detalle de faltantes (evaluacion = 'no cubre'), agrupado por planta + producto + rubro
+    const sqlDetalle = `
+      SELECT planta, descripcion_ppal, rubro, SUM(saldo) AS saldo
+      FROM indicador_cobertura($1::date, $2::date, $3::time)
+      WHERE evaluacion = 'no cubre'
+        AND rubro = ANY($4::text[])
+        AND dia >= $5::date
+        AND dia <= $6::date
+      GROUP BY planta, descripcion_ppal, rubro
+      ORDER BY planta, descripcion_ppal, rubro`;
 
-    const [actual, sig1, sig2] = await Promise.all([
-      run(actual_inicio, actual_final),
-      run(sig1_inicio,   sig1_final),
-      run(sig2_inicio,   sig2_final),
+    const runResumen = (ini, fin) =>
+      pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
+    const runDetalle = (ini, fin) =>
+      pgPool.query(sqlDetalle, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
+
+    const [
+      actualR, sig1R, sig2R,
+      actualD, sig1D, sig2D,
+    ] = await Promise.all([
+      runResumen(actual_inicio, actual_final),
+      runResumen(sig1_inicio,   sig1_final),
+      runResumen(sig2_inicio,   sig2_final),
+      runDetalle(actual_inicio, actual_final),
+      runDetalle(sig1_inicio,   sig1_final),
+      runDetalle(sig2_inicio,   sig2_final),
     ]);
 
     res.json({
-      actual: actual.rows,
-      sig1:   sig1.rows,
-      sig2:   sig2.rows,
+      actual: { resumen: actualR.rows, detalle: actualD.rows },
+      sig1:   { resumen: sig1R.rows,   detalle: sig1D.rows },
+      sig2:   { resumen: sig2R.rows,   detalle: sig2D.rows },
     });
   } catch (e) {
     console.error("PG nivel-servicio error:", e.message);

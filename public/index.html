@@ -2703,27 +2703,84 @@
     } catch (e) { nsInitRubros(null); }
   }
 
-  // Renderiza la tarjeta de cobertura de un bloque a partir de las filas de una planta
-  function nsRenderBloque(elId, rows, planta) {
+  const nsFmt = n => Math.round(parseFloat(n) || 0).toLocaleString("es-AR");
+
+  function nsToggleGroup(gid) {
+    const parent = document.getElementById(`${gid}-hdr`);
+    const abierto = parent.dataset.open === "1";
+    parent.dataset.open = abierto ? "0" : "1";
+    parent.querySelector(".ns-arrow").textContent = abierto ? "▶" : "▼";
+    document.querySelectorAll(`.${gid}`).forEach(tr => tr.style.display = abierto ? "none" : "");
+  }
+
+  // Renderiza tarjeta de cobertura + tabla dinámica de faltantes de un bloque/planta
+  function nsRenderBloque(elId, resumen, detalle, planta) {
     const el = document.getElementById(elId);
-    const fila = (rows || []).find(r => (r.planta || "").toUpperCase() === planta);
+    const fila = (resumen || []).find(r => (r.planta || "").toUpperCase() === planta);
+
+    // ── Tarjeta % ──
+    let cardHtml;
     if (!fila) {
-      el.innerHTML = `<div class="empty" style="padding:24px 0"><div class="big">—</div>Sin datos</div>`;
-      return;
+      cardHtml = `<div class="empty" style="padding:24px 0"><div class="big">—</div>Sin datos</div>`;
+    } else {
+      const pct   = parseFloat(String(fila.cobertura).replace("%", "").replace(",", ".")) || 0;
+      const color = pct >= 95 ? "#34c97e" : pct >= 85 ? "#f7c948" : "#f76060";
+      cardHtml = `
+        <div style="text-align:center;padding:14px 8px 6px">
+          <div style="font-size:44px;font-weight:800;font-family:var(--mono);color:${color};line-height:1">${fila.cobertura}</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px">Cobertura</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px">
+          <div style="text-align:center"><div style="color:var(--muted)">Programado</div><div style="font-family:var(--mono);font-weight:600;margin-top:2px">${nsFmt(fila.total_programado)}</div></div>
+          <div style="text-align:center"><div style="color:var(--muted)">Cubre</div><div style="font-family:var(--mono);font-weight:600;color:#34c97e;margin-top:2px">${nsFmt(fila.cubre)}</div></div>
+          <div style="text-align:center"><div style="color:var(--muted)">No cubre</div><div style="font-family:var(--mono);font-weight:600;color:#f76060;margin-top:2px">${nsFmt(fila.no_cubre)}</div></div>
+        </div>`;
     }
-    const pct   = parseFloat(String(fila.cobertura).replace("%", "").replace(",", ".")) || 0;
-    const color = pct >= 95 ? "#34c97e" : pct >= 85 ? "#f7c948" : "#f76060";
-    const fmt   = n => Math.round(parseFloat(n) || 0).toLocaleString("es-AR");
-    el.innerHTML = `
-      <div style="text-align:center;padding:14px 8px 6px">
-        <div style="font-size:44px;font-weight:800;font-family:var(--mono);color:${color};line-height:1">${fila.cobertura}</div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px">Cobertura</div>
-      </div>
-      <div style="display:flex;justify-content:space-around;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px">
-        <div style="text-align:center"><div style="color:var(--muted)">Programado</div><div style="font-family:var(--mono);font-weight:600;margin-top:2px">${fmt(fila.total_programado)}</div></div>
-        <div style="text-align:center"><div style="color:var(--muted)">Cubre</div><div style="font-family:var(--mono);font-weight:600;color:#34c97e;margin-top:2px">${fmt(fila.cubre)}</div></div>
-        <div style="text-align:center"><div style="color:var(--muted)">No cubre</div><div style="font-family:var(--mono);font-weight:600;color:#f76060;margin-top:2px">${fmt(fila.no_cubre)}</div></div>
-      </div>`;
+
+    // ── Tabla dinámica de faltantes ──
+    const filasP = (detalle || []).filter(r => (r.planta || "").toUpperCase() === planta);
+    let tablaHtml;
+    if (!filasP.length) {
+      tablaHtml = `<div style="text-align:center;color:var(--muted);font-size:12px;padding:16px 0">✓ Sin faltantes</div>`;
+    } else {
+      // Agrupar por descripcion_ppal
+      const grupos = {};
+      filasP.forEach(r => {
+        const k = r.descripcion_ppal ?? "(sin producto)";
+        (grupos[k] = grupos[k] || []).push(r);
+      });
+      const gidBase = elId.replace(/[^a-z0-9]/gi, "");
+      let gi = 0;
+      const bloques = Object.entries(grupos).map(([prod, items]) => {
+        const gid = `${gidBase}g${gi++}`;
+        const totalSaldo = items.reduce((a, r) => a + (parseFloat(r.saldo) || 0), 0);
+        const hijos = items.map(r => `
+          <tr class="${gid}" style="display:none">
+            <td style="padding:6px 10px 6px 28px;color:var(--muted)">${r.rubro ?? ""}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.saldo)}</td>
+          </tr>`).join("");
+        return `
+          <tr id="${gid}-hdr" data-open="0" onclick="nsToggleGroup('${gid}')" style="cursor:pointer;border-top:1px solid var(--border)">
+            <td style="padding:8px 10px;font-weight:600"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${prod}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(totalSaldo)}</td>
+          </tr>${hijos}`;
+      }).join("");
+      tablaHtml = `
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Detalle de faltantes</div>
+          <div class="table-wrap">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr>
+                <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:11px">Producto · Rubro</th>
+                <th style="text-align:right;padding:6px 10px;color:var(--muted);font-size:11px">Saldo</th>
+              </tr></thead>
+              <tbody>${bloques}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    el.innerHTML = cardHtml + tablaHtml;
   }
 
   function nsSetLoading() {
@@ -2755,12 +2812,12 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error desconocido");
 
-      nsRenderBloque("ns-actual-cm",   data.actual, "CM");
-      nsRenderBloque("ns-actual-toro", data.actual, "TORO");
-      nsRenderBloque("ns-sig1-cm",     data.sig1,   "CM");
-      nsRenderBloque("ns-sig1-toro",   data.sig1,   "TORO");
-      nsRenderBloque("ns-sig2-cm",     data.sig2,   "CM");
-      nsRenderBloque("ns-sig2-toro",   data.sig2,   "TORO");
+      nsRenderBloque("ns-actual-cm",   data.actual.resumen, data.actual.detalle, "CM");
+      nsRenderBloque("ns-actual-toro", data.actual.resumen, data.actual.detalle, "TORO");
+      nsRenderBloque("ns-sig1-cm",     data.sig1.resumen,   data.sig1.detalle,   "CM");
+      nsRenderBloque("ns-sig1-toro",   data.sig1.resumen,   data.sig1.detalle,   "TORO");
+      nsRenderBloque("ns-sig2-cm",     data.sig2.resumen,   data.sig2.detalle,   "CM");
+      nsRenderBloque("ns-sig2-toro",   data.sig2.resumen,   data.sig2.detalle,   "TORO");
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
