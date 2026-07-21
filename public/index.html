@@ -2703,23 +2703,73 @@
     } catch (e) { nsInitRubros(null); }
   }
 
+  // Renderiza la tarjeta de cobertura de un bloque a partir de las filas de una planta
+  function nsRenderBloque(elId, rows, planta) {
+    const el = document.getElementById(elId);
+    const fila = (rows || []).find(r => (r.planta || "").toUpperCase() === planta);
+    if (!fila) {
+      el.innerHTML = `<div class="empty" style="padding:24px 0"><div class="big">—</div>Sin datos</div>`;
+      return;
+    }
+    const pct   = parseFloat(String(fila.cobertura).replace("%", "").replace(",", ".")) || 0;
+    const color = pct >= 95 ? "#34c97e" : pct >= 85 ? "#f7c948" : "#f76060";
+    const fmt   = n => Math.round(parseFloat(n) || 0).toLocaleString("es-AR");
+    el.innerHTML = `
+      <div style="text-align:center;padding:14px 8px 6px">
+        <div style="font-size:44px;font-weight:800;font-family:var(--mono);color:${color};line-height:1">${fila.cobertura}</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px">Cobertura</div>
+      </div>
+      <div style="display:flex;justify-content:space-around;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px">
+        <div style="text-align:center"><div style="color:var(--muted)">Programado</div><div style="font-family:var(--mono);font-weight:600;margin-top:2px">${fmt(fila.total_programado)}</div></div>
+        <div style="text-align:center"><div style="color:var(--muted)">Cubre</div><div style="font-family:var(--mono);font-weight:600;color:#34c97e;margin-top:2px">${fmt(fila.cubre)}</div></div>
+        <div style="text-align:center"><div style="color:var(--muted)">No cubre</div><div style="font-family:var(--mono);font-weight:600;color:#f76060;margin-top:2px">${fmt(fila.no_cubre)}</div></div>
+      </div>`;
+  }
+
+  function nsSetLoading() {
+    ["ns-actual-cm","ns-actual-toro","ns-sig1-cm","ns-sig1-toro","ns-sig2-cm","ns-sig2-toro"].forEach(id => {
+      document.getElementById(id).innerHTML = `<div class="empty" style="padding:24px 0"><div class="big">⏳</div>Calculando…</div>`;
+    });
+  }
+
   document.getElementById("ns-btn-calcular").addEventListener("click", async () => {
     const params = nsGetParams();
-    const faltantes = Object.values(params).some(v => !v);
-    if (faltantes) { toast("Completá todos los parámetros antes de calcular.", "err"); return; }
+    const fechasHora = Object.entries(params).filter(([k]) => k !== "rubros").map(([, v]) => v);
+    if (fechasHora.some(v => !v)) { toast("Completá todas las fechas y la hora antes de calcular.", "err"); return; }
+    if (!params.rubros.length) { toast("Seleccioná al menos un rubro.", "err"); return; }
 
     localStorage.setItem(NS_STORAGE_KEY, JSON.stringify(params));
 
     const btn    = document.getElementById("ns-btn-calcular");
     const estado = document.getElementById("ns-params-estado");
     btn.disabled = true;
-    estado.textContent = "Guardando…";
+    estado.textContent = "Consultando PostgreSQL…";
+    nsSetLoading();
 
-    // TODO: ejecutar la consulta SQL indicada por el usuario y poblar los bloques.
-    // Endpoint previsto: POST /api/pg/nivel-servicio con `params`.
-    estado.innerHTML = `✓ Parámetros guardados`;
-    toast("💾 Parámetros guardados", "ok");
-    btn.disabled = false;
+    try {
+      const res = await fetch(`${API}/api/pg/nivel-servicio`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      nsRenderBloque("ns-actual-cm",   data.actual, "CM");
+      nsRenderBloque("ns-actual-toro", data.actual, "TORO");
+      nsRenderBloque("ns-sig1-cm",     data.sig1,   "CM");
+      nsRenderBloque("ns-sig1-toro",   data.sig1,   "TORO");
+      nsRenderBloque("ns-sig2-cm",     data.sig2,   "CM");
+      nsRenderBloque("ns-sig2-toro",   data.sig2,   "TORO");
+
+      estado.innerHTML = `✓ Calculado`;
+      toast("✅ Nivel de servicio calculado", "ok");
+    } catch (e) {
+      estado.textContent = "⚠ " + e.message;
+      toast("❌ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   function initNivelServicio() {

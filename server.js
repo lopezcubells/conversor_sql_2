@@ -269,6 +269,71 @@ app.get("/api/pg/recepciones", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Nivel de servicio ──
+
+app.post("/api/pg/nivel-servicio", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const {
+      cob_fe_inicio, cob_hora, cob_fe_final, rubros,
+      actual_inicio, actual_final,
+      sig1_inicio, sig1_final,
+      sig2_inicio, sig2_final,
+    } = req.body || {};
+
+    if (!cob_fe_inicio || !cob_hora || !cob_fe_final)
+      return res.status(400).json({ error: "Faltan parámetros de cálculo de cobertura." });
+    if (!Array.isArray(rubros) || !rubros.length)
+      return res.status(400).json({ error: "Seleccioná al menos un rubro." });
+
+    // 1 consulta por rango de semana → devuelve CM y TORO juntos (GROUP BY planta)
+    const sql = `
+      WITH detalle AS (
+        SELECT *
+        FROM indicador_cobertura($1::date, $2::date, $3::time)
+        WHERE rubro = ANY($4::text[])
+          AND dia >= $5::date
+          AND dia <= $6::date
+      ),
+      lineas AS (
+        SELECT d.planta, d.cod_corto_ppal, d.dia,
+               MAX(d.bultos)                      AS bultos,
+               BOOL_OR(d.evaluacion = 'no cubre') AS tiene_faltante
+        FROM detalle d
+        GROUP BY d.planta, d.cod_corto_ppal, d.dia
+      )
+      SELECT l.planta,
+             SUM(l.bultos)                                                  AS total_programado,
+             COALESCE(SUM(l.bultos) FILTER (WHERE NOT l.tiene_faltante), 0) AS cubre,
+             COALESCE(SUM(l.bultos) FILTER (WHERE l.tiene_faltante), 0)     AS no_cubre,
+             ROUND(
+               100 * COALESCE(SUM(l.bultos) FILTER (WHERE NOT l.tiene_faltante), 0)
+                   / NULLIF(SUM(l.bultos), 0)
+             , 2) || '%'                                                    AS cobertura
+      FROM lineas l
+      GROUP BY l.planta
+      ORDER BY l.planta`;
+
+    const run = (ini, fin) =>
+      pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
+
+    const [actual, sig1, sig2] = await Promise.all([
+      run(actual_inicio, actual_final),
+      run(sig1_inicio,   sig1_final),
+      run(sig2_inicio,   sig2_final),
+    ]);
+
+    res.json({
+      actual: actual.rows,
+      sig1:   sig1.rows,
+      sig2:   sig2.rows,
+    });
+  } catch (e) {
+    console.error("PG nivel-servicio error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Inmovilizados ──
 
 app.get("/api/pg/inmovilizados/rubros", async (req, res) => {
