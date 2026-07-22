@@ -1026,6 +1026,18 @@
     </div>
   </div>
 
+  <!-- Reporte (5to apartado) -->
+  <div class="section-heading" style="margin-top:40px"><h2>Reporte</h2></div>
+  <div class="card">
+    <div class="btn-row" style="margin-top:0;margin-bottom:18px">
+      <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
+    </div>
+    <div class="card-title">Reporte de faltantes</div>
+    <div class="table-wrap" id="ns-reporte-wrap">
+      <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el reporte</div>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
@@ -1033,6 +1045,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
   const API = "";  // same origin
 
@@ -2788,6 +2802,110 @@
     });
   }
 
+  // ── Reporte de faltantes ──
+
+  // Costura de datos: cambiar solo esto cuando llegue el SELECT definitivo.
+  function nsBuildReporteRows(data) {
+    const rows = [];
+    ["actual", "sig1", "sig2"].forEach(periodo => {
+      const det = (data[periodo] && data[periodo].detalle) || [];
+      det.forEach(r => rows.push({
+        insumo:   r.rubro ?? "",
+        producto: r.descripcion_ppal ?? "",
+        planta:   r.planta ?? "",
+        cantidad: r.saldo,
+      }));
+    });
+    return rows;
+  }
+
+  function nsEsc(s) {
+    return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function nsRenderReporte(rows) {
+    const wrap = document.getElementById("ns-reporte-wrap");
+    if (!rows || !rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">✓</div>Sin faltantes para reportar</div>`;
+      return;
+    }
+    const cuerpo = rows.map((r, i) => `
+      <tr data-idx="${i}">
+        <td style="padding:8px 10px">${nsEsc(r.insumo)}</td>
+        <td style="padding:8px 10px">${nsEsc(r.producto)}</td>
+        <td style="padding:8px 10px">${nsEsc(r.planta)}</td>
+        <td style="padding:8px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.cantidad)}</td>
+        <td style="padding:6px 8px">
+          <select class="search-input ns-rep-real" style="min-width:70px;padding:6px 8px;font-size:12px">
+            <option value=""></option>
+            <option value="SI">SI</option>
+            <option value="NO">NO</option>
+          </select>
+        </td>
+        <td style="padding:6px 8px"><input type="text" class="search-input ns-rep-causa" style="min-width:160px;padding:6px 8px;font-size:12px" /></td>
+        <td style="padding:6px 8px"><input type="text" class="search-input ns-rep-resp" style="min-width:160px;padding:6px 8px;font-size:12px" /></td>
+      </tr>`).join("");
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Insumo</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Producto afectado</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Planta</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--muted);font-size:11px">Cantidad faltante</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">¿Faltante Real?</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Causa estándar</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Sector/Proveedor responsable</th>
+        </tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table>`;
+  }
+
+  document.getElementById("ns-btn-pdf").addEventListener("click", () => {
+    const filas = document.querySelectorAll("#ns-reporte-wrap tbody tr[data-idx]");
+    if (!filas.length) { toast("Generá el cálculo antes de crear el PDF.", "err"); return; }
+    if (!window.jspdf || !window.jspdf.jsPDF) { toast("La librería PDF no cargó. Reintentá.", "err"); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+    const now = new Date();
+    const p2  = n => String(n).padStart(2, "0");
+    const dd = p2(now.getDate()), mm = p2(now.getMonth() + 1), yyyy = now.getFullYear();
+    const hh = p2(now.getHours()), mi = p2(now.getMinutes()), ss = p2(now.getSeconds());
+
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Reporte NS Abastecimiento", 14, 14);
+    doc.setFontSize(10);
+    doc.text(`Generado: ${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`, 14, 20);
+
+    const body = Array.from(filas).map(tr => {
+      const celdas = tr.querySelectorAll("td");
+      return [
+        celdas[0].textContent.trim(),
+        celdas[1].textContent.trim(),
+        celdas[2].textContent.trim(),
+        celdas[3].textContent.trim(),
+        tr.querySelector(".ns-rep-real").value,
+        tr.querySelector(".ns-rep-causa").value,
+        tr.querySelector(".ns-rep-resp").value,
+      ];
+    });
+
+    doc.autoTable({
+      startY: 25,
+      head: [["Insumo", "Producto afectado", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
+      body,
+      theme: "grid",
+      styles: { textColor: 0, fontSize: 8, cellPadding: 2, lineColor: [180, 180, 180], lineWidth: 0.1 },
+      headStyles: { fillColor: [235, 235, 235], textColor: 0, fontStyle: "bold" },
+      columnStyles: { 3: { halign: "right" } },
+      margin: { left: 14, right: 14 },
+    });
+
+    doc.save(`Reporte NS Abastecimiento - ${dd}-${mm}-${yyyy} - ${hh}-${mi}-${ss}.pdf`);
+  });
+
   document.getElementById("ns-btn-calcular").addEventListener("click", async () => {
     const params = nsGetParams();
     const fechasHora = Object.entries(params).filter(([k]) => k !== "rubros").map(([, v]) => v);
@@ -2817,6 +2935,8 @@
       nsRenderBloque("ns-sig1-toro",   data.sig1.resumen,   data.sig1.detalle,   "TORO");
       nsRenderBloque("ns-sig2-cm",     data.sig2.resumen,   data.sig2.detalle,   "CM");
       nsRenderBloque("ns-sig2-toro",   data.sig2.resumen,   data.sig2.detalle,   "TORO");
+
+      nsRenderReporte(nsBuildReporteRows(data));
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
