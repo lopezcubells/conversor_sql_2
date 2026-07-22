@@ -2804,19 +2804,17 @@
 
   // ── Reporte de faltantes ──
 
-  // Costura de datos: cambiar solo esto cuando llegue el SELECT definitivo.
+  // El reporte usa el detalle de SEMANA EN CURSO (período "actual"): indicador_cobertura
+  // con los parámetros de cobertura, evaluacion='no cubre', rubros seleccionados, rango de
+  // semana en curso y MIN(saldo) por (rubro, descripcion_ppal, planta).
   function nsBuildReporteRows(data) {
-    const rows = [];
-    ["actual", "sig1", "sig2"].forEach(periodo => {
-      const det = (data[periodo] && data[periodo].detalle) || [];
-      det.forEach(r => rows.push({
-        insumo:   r.rubro ?? "",
-        producto: r.descripcion_ppal ?? "",
-        planta:   r.planta ?? "",
-        cantidad: r.saldo,
-      }));
-    });
-    return rows;
+    const det = (data.actual && data.actual.detalle) || [];
+    return det.map(r => ({
+      insumo:   r.rubro ?? "",
+      producto: r.descripcion_ppal ?? "",
+      planta:   r.planta ?? "",
+      cantidad: r.saldo,
+    }));
   }
 
   function nsEsc(s) {
