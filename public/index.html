@@ -1028,36 +1028,53 @@
 
   <!-- Reporte (5to apartado) -->
   <div class="section-heading" style="margin-top:40px"><h2>Reporte</h2></div>
-  <div class="card">
-    <div class="btn-row" style="margin-top:0;margin-bottom:18px">
-      <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
-    </div>
-    <div id="ns-donuts" style="display:none;align-items:flex-end;justify-content:center;gap:44px;flex-wrap:wrap;margin:4px 0 26px">
-      <div style="text-align:center">
-        <div style="position:relative;width:150px;height:150px"><canvas id="ns-donut-total"></canvas></div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.05em">Nivel de servicio</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.7">
+  <div class="btn-row" style="margin-top:0;margin-bottom:18px">
+    <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
+  </div>
+
+  <!-- Bloques de anillos (ocultos hasta calcular) -->
+  <div id="ns-donuts" style="display:none">
+
+    <!-- BLOQUE 1: Nivel de servicio -->
+    <div class="card" style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
+      <div style="position:relative;width:150px;height:150px"><canvas id="ns-donut-total"></canvas></div>
+      <div style="min-width:180px">
+        <div style="font-size:15px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Nivel de servicio</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:12px;line-height:1.9">
           <div>Afectados: <strong id="ns-af-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
           <div>Programados: <strong id="ns-pg-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
         </div>
       </div>
-      <div style="text-align:center">
-        <div style="position:relative;width:96px;height:96px"><canvas id="ns-donut-cm"></canvas></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Planta CM</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.7">
-          <div>Afectados: <strong id="ns-af-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-          <div>Programados: <strong id="ns-pg-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+    </div>
+
+    <!-- BLOQUE 2: Nivel de servicio CM y TORO -->
+    <div class="card" style="display:flex;align-items:center;justify-content:space-around;gap:40px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:22px">
+        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-cm"></canvas></div>
+        <div>
+          <div style="font-weight:600">Planta CM</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
+            <div>Afectados: <strong id="ns-af-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+            <div>Programados: <strong id="ns-pg-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+          </div>
         </div>
       </div>
-      <div style="text-align:center">
-        <div style="position:relative;width:96px;height:96px"><canvas id="ns-donut-toro"></canvas></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Planta TORO</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.7">
-          <div>Afectados: <strong id="ns-af-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-          <div>Programados: <strong id="ns-pg-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+      <div style="display:flex;align-items:center;gap:22px">
+        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-toro"></canvas></div>
+        <div>
+          <div style="font-weight:600">Planta TORO</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
+            <div>Afectados: <strong id="ns-af-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+            <div>Programados: <strong id="ns-pg-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+          </div>
         </div>
       </div>
     </div>
+
+  </div>
+
+  <!-- BLOQUE 3: Tabla -->
+  <div class="card">
     <div class="card-title">Reporte de faltantes</div>
     <div class="table-wrap" id="ns-reporte-wrap">
       <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el reporte</div>
@@ -2981,7 +2998,7 @@
       pgCM, pgToro, pgTotal: pgCM + pgToro,
     };
 
-    document.getElementById("ns-donuts").style.display = "flex";
+    document.getElementById("ns-donuts").style.display = "block";
     nsDonutTotal = nsMakeDonut(nsDonutTotal, "ns-donut-total", total, 34);
     nsDonutCM    = nsMakeDonut(nsDonutCM,    "ns-donut-cm",    cm,    22);
     nsDonutToro  = nsMakeDonut(nsDonutToro,  "ns-donut-toro",  toro,  22);
@@ -3037,39 +3054,50 @@
     doc.setFontSize(10);
     doc.text(`Generado: ${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`, 14, 20);
 
-    // ── Anillos de Nivel de servicio + bultos afectados/programados debajo de cada uno ──
-    const bigMM = 30, smallMM = 20, gapMM = 24;
-    const grpW  = bigMM + gapMM + smallMM + gapMM + smallMM;
+    // ── 3 bloques enmarcados: (1) Nivel de servicio, (2) CM/TORO, (3) tabla ──
     const pageW = doc.internal.pageSize.getWidth();
-    const gyTop = 24;
-    const smallY = gyTop + (bigMM - smallMM) / 2;
-    // Texto alineado en fila para las 3 columnas (bajo el anillo grande)
-    const labelY = gyTop + bigMM + 4;
-    const afY    = labelY + 3.8;
-    const pgY    = afY + 3.8;
-    const nfmt   = n => Math.round(n || 0).toLocaleString("es-AR");
+    const nfmt  = n => Math.round(n || 0).toLocaleString("es-AR");
+    const mgn   = 14;
+    const blkW  = pageW - mgn * 2;
 
-    const drawStats = (cx, label, af, pg) => {
-      doc.setFontSize(8);  doc.setTextColor(0, 0, 0);
-      doc.text(label, cx, labelY, { align: "center" });
-      doc.setFontSize(7);
-      doc.text(`Afectados: ${nfmt(af)}`, cx, afY, { align: "center" });
-      doc.text(`Programados: ${nfmt(pg)}`, cx, pgY, { align: "center" });
+    // "donut + texto (label / afectados / programados)" centrado en una región
+    const drawGroup = (regionX, regionW, centerY, dia, pngUrl, label, af, pg, labelSize) => {
+      const afStr = `Afectados: ${nfmt(af)}`;
+      const pgStr = `Programados: ${nfmt(pg)}`;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(labelSize);
+      const wLabel = doc.getTextWidth(label);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      const wStats = Math.max(doc.getTextWidth(afStr), doc.getTextWidth(pgStr));
+      const gap    = 8;
+      const gx     = regionX + (regionW - (dia + gap + Math.max(wLabel, wStats))) / 2;
+      doc.addImage(pngUrl, "PNG", gx, centerY - dia / 2, dia, dia);
+      const tx = gx + dia + gap;
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(labelSize);
+      doc.text(label, tx, centerY - 3);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text(afStr, tx, centerY + 1.8);
+      doc.text(pgStr, tx, centerY + 6.3);
     };
 
-    let gx = (pageW - grpW) / 2;
-    doc.addImage(nsDonutPng(nsDonutValues.total, 300, 60), "PNG", gx, gyTop, bigMM, bigMM);
-    drawStats(gx + bigMM / 2, "Nivel de servicio", nsDonutValues.afTotal, nsDonutValues.pgTotal);
-    gx += bigMM + gapMM;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
 
-    doc.addImage(nsDonutPng(nsDonutValues.cm, 190, 44), "PNG", gx, smallY, smallMM, smallMM);
-    drawStats(gx + smallMM / 2, "CM", nsDonutValues.afCM, nsDonutValues.pgCM);
-    gx += smallMM + gapMM;
+    // BLOQUE 1: Nivel de servicio
+    const b1Y = 24, b1H = 26;
+    doc.roundedRect(mgn, b1Y, blkW, b1H, 2, 2);
+    drawGroup(mgn, blkW, b1Y + b1H / 2, 20, nsDonutPng(nsDonutValues.total, 300, 60),
+              "NIVEL DE SERVICIO", nsDonutValues.afTotal, nsDonutValues.pgTotal, 11);
 
-    doc.addImage(nsDonutPng(nsDonutValues.toro, 190, 44), "PNG", gx, smallY, smallMM, smallMM);
-    drawStats(gx + smallMM / 2, "TORO", nsDonutValues.afToro, nsDonutValues.pgToro);
+    // BLOQUE 2: Nivel de servicio CM y TORO
+    const b2Y = b1Y + b1H + 4, b2H = 24;
+    doc.roundedRect(mgn, b2Y, blkW, b2H, 2, 2);
+    drawGroup(mgn,             blkW / 2, b2Y + b2H / 2, 18, nsDonutPng(nsDonutValues.cm, 200, 44),
+              "Planta CM",   nsDonutValues.afCM,   nsDonutValues.pgCM,   9);
+    drawGroup(mgn + blkW / 2, blkW / 2, b2Y + b2H / 2, 18, nsDonutPng(nsDonutValues.toro, 200, 44),
+              "Planta TORO", nsDonutValues.afToro, nsDonutValues.pgToro, 9);
 
-    const tableStartY = pgY + 7; // deja lugar a los anillos + etiquetas + cifras
+    const tableStartY = b2Y + b2H + 6; // BLOQUE 3: tabla debajo
 
     // Agrupar por Producto afectado: el producto pasa a ser encabezado de grupo (fila con colSpan)
     const grupos = new Map();
