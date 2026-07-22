@@ -1071,6 +1071,21 @@
       </div>
     </div>
 
+    <!-- BLOQUE 2b: Bultos afectados por causa estándar -->
+    <div class="card">
+      <div class="card-title" style="text-align:center">Bultos afectados por causa estándar</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-around;gap:40px;flex-wrap:wrap">
+        <div style="text-align:center">
+          <div style="font-weight:600;margin-bottom:8px">Planta CM</div>
+          <div style="position:relative;width:240px;height:210px"><canvas id="ns-pie-cm"></canvas></div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-weight:600;margin-bottom:8px">Planta TORO</div>
+          <div style="position:relative;width:240px;height:210px"><canvas id="ns-pie-toro"></canvas></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- BLOQUE 3: Tabla -->
@@ -2875,6 +2890,7 @@
   }
 
   function nsRenderReporte(rows) {
+    nsReporteRows = rows || [];
     const wrap = document.getElementById("ns-reporte-wrap");
     if (!rows || !rows.length) {
       wrap.innerHTML = `<div class="empty"><div class="big">✓</div>Sin faltantes para reportar</div>`;
@@ -2918,6 +2934,8 @@
   // ── Gráficos de anillo (Nivel de servicio, semana en curso) ──
   let nsDonutTotal = null, nsDonutCM = null, nsDonutToro = null;
   let nsDonutValues = { cm: 0, toro: 0, total: 0, afCM: 0, afToro: 0, afTotal: 0, pgCM: 0, pgToro: 0, pgTotal: 0 };
+  let nsPieCM = null, nsPieToro = null;
+  let nsReporteRows = [];
 
   // Plugin que dibuja el % en el centro del anillo
   const nsCenterText = {
@@ -3034,6 +3052,91 @@
     return url;
   }
 
+  // ── Tortas: bultos afectados por causa estándar (por planta) ──
+
+  function nsFmtFechaDMY(iso) {
+    if (!iso) return "";
+    const [y, m, d] = String(iso).split("-");
+    return (y && m && d) ? `${d}/${m}/${y}` : iso;
+  }
+
+  // Suma de bultos afectados agrupada por causa estándar (leída del tablero), para una planta
+  function nsAggCausa(planta) {
+    const agg = new Map();
+    document.querySelectorAll("#ns-reporte-wrap tbody tr[data-idx]").forEach(tr => {
+      const row = nsReporteRows[+tr.dataset.idx];
+      if (!row || (row.planta || "").toUpperCase() !== planta) return;
+      const causa = (tr.querySelector(".ns-rep-causa").value || "").trim() || "(sin causa)";
+      agg.set(causa, (agg.get(causa) || 0) + (row.bultos || 0));
+    });
+    return agg;
+  }
+
+  // Torta en pantalla (tema oscuro)
+  function nsMakePie(existing, canvasId, agg) {
+    if (existing) existing.destroy();
+    const ctx = document.getElementById(canvasId).getContext("2d");
+    const labels = [...agg.keys()];
+    const data   = [...agg.values()];
+    const hasData = labels.length && data.some(v => v > 0);
+    if (!hasData) {
+      return new Chart(ctx, {
+        type: "pie",
+        data: { labels: ["Sin datos"], datasets: [{ data: [1], backgroundColor: ["#3a3f4d"], borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } } },
+      });
+    }
+    return new Chart(ctx, {
+      type: "pie",
+      data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => RUBRO_PALETTE[i % RUBRO_PALETTE.length]), borderColor: "#171a23", borderWidth: 1 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#e2e4ef", boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          datalabels: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.label}: ${Math.round(c.raw).toLocaleString("es-AR")}` } },
+        },
+      },
+    });
+  }
+
+  function nsRenderPies() {
+    nsPieCM   = nsMakePie(nsPieCM,   "ns-pie-cm",   nsAggCausa("CM"));
+    nsPieToro = nsMakePie(nsPieToro, "ns-pie-toro", nsAggCausa("TORO"));
+  }
+
+  // Torta para el PDF (fondo blanco, texto negro) → PNG
+  function nsPiePng(agg, w, h) {
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const labels = [...agg.keys()];
+    const data   = [...agg.values()];
+    const hasData = labels.length && data.some(v => v > 0);
+    const chart = new Chart(canvas.getContext("2d"), {
+      type: "pie",
+      data: hasData
+        ? { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => RUBRO_PALETTE[i % RUBRO_PALETTE.length]), borderColor: "#ffffff", borderWidth: 1 }] }
+        : { labels: ["Sin datos"], datasets: [{ data: [1], backgroundColor: ["#d1d5db"], borderWidth: 0 }] },
+      options: {
+        responsive: false, animation: false,
+        plugins: {
+          legend: hasData ? { position: "bottom", labels: { color: "#111111", boxWidth: 10, font: { size: 11 }, padding: 6 } } : { display: false },
+          datalabels: { display: false },
+          tooltip: { enabled: false },
+        },
+      },
+    });
+    const url = chart.toBase64Image("image/png", 1);
+    chart.destroy();
+    return url;
+  }
+
+  // Actualización en vivo de las tortas al escribir la causa estándar en el tablero
+  document.getElementById("ns-reporte-wrap").addEventListener("input", e => {
+    if (e.target && e.target.classList && e.target.classList.contains("ns-rep-causa")) nsRenderPies();
+  });
+
   document.getElementById("ns-btn-pdf").addEventListener("click", () => {
     const filas = document.querySelectorAll("#ns-reporte-wrap tbody tr[data-idx]");
     if (!filas.length) { toast("Generá el cálculo antes de crear el PDF.", "err"); return; }
@@ -3050,9 +3153,12 @@
 
     doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
-    doc.text("Reporte NS Abastecimiento", 14, 14);
+    doc.text("Reporte Indicador Abastecimiento: Nivel de Servicio", 14, 14);
     doc.setFontSize(10);
     doc.text(`Generado: ${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`, 14, 20);
+    const rIni = nsFmtFechaDMY(document.getElementById("ns-actual-inicio").value);
+    const rFin = nsFmtFechaDMY(document.getElementById("ns-actual-final").value);
+    doc.text(`Rango analizado: ${rIni} hasta ${rFin}`, 14, 26);
 
     // ── 3 bloques enmarcados: (1) Nivel de servicio, (2) CM/TORO, (3) tabla ──
     const pageW = doc.internal.pageSize.getWidth();
@@ -3084,7 +3190,7 @@
     doc.setLineWidth(0.3);
 
     // BLOQUE 1: Nivel de servicio
-    const b1Y = 24, b1H = 26;
+    const b1Y = 32, b1H = 26;
     doc.roundedRect(mgn, b1Y, blkW, b1H, 2, 2);
     drawGroup(mgn, blkW, b1Y + b1H / 2, 20, nsDonutPng(nsDonutValues.total, 300, 60),
               "NIVEL DE SERVICIO", nsDonutValues.afTotal, nsDonutValues.pgTotal, 11);
@@ -3097,7 +3203,20 @@
     drawGroup(mgn + blkW / 2, blkW / 2, b2Y + b2H / 2, 18, nsDonutPng(nsDonutValues.toro, 200, 44),
               "Planta TORO", nsDonutValues.afToro, nsDonutValues.pgToro, 9);
 
-    const tableStartY = b2Y + b2H + 6; // BLOQUE 3: tabla debajo
+    // BLOQUE 2b: Bultos afectados por causa estándar (tortas CM / TORO)
+    const b3Y = b2Y + b2H + 4, b3H = 54;
+    doc.roundedRect(mgn, b3Y, blkW, b3H, 2, 2);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text("Bultos afectados por causa estándar", pageW / 2, b3Y + 6, { align: "center" });
+    doc.setFontSize(8);
+    doc.text("Planta CM",   mgn + blkW / 4,       b3Y + 12, { align: "center" });
+    doc.text("Planta TORO", mgn + blkW * 3 / 4,   b3Y + 12, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    const pieW = 50, pieH = 40, pieY = b3Y + 13;
+    doc.addImage(nsPiePng(nsAggCausa("CM"),   560, 470), "PNG", mgn + blkW / 4     - pieW / 2, pieY, pieW, pieH);
+    doc.addImage(nsPiePng(nsAggCausa("TORO"), 560, 470), "PNG", mgn + blkW * 3 / 4 - pieW / 2, pieY, pieW, pieH);
+
+    const tableStartY = b3Y + b3H + 6; // BLOQUE 3: tabla debajo
 
     // Agrupar por Producto afectado: el producto pasa a ser encabezado de grupo (fila con colSpan)
     const grupos = new Map();
@@ -3171,6 +3290,7 @@
       const reporteRows = nsBuildReporteRows(data);
       nsRenderReporte(reporteRows);
       nsRenderDonuts(data, reporteRows);
+      nsRenderPies();
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
