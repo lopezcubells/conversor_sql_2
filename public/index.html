@@ -2964,14 +2964,16 @@
   }
 
   function nsRenderDonuts(data, reporteRows) {
-    const cm    = nsCoberturaPct(data.actual.resumen, "CM");
-    const toro  = nsCoberturaPct(data.actual.resumen, "TORO");
-    const total = (cm + toro) / 2;
-
     const afCM   = nsBultosAfectados(reporteRows, "CM");
     const afToro = nsBultosAfectados(reporteRows, "TORO");
     const pgCM   = nsBultosProgramados(data.actual.resumen, "CM");
     const pgToro = nsBultosProgramados(data.actual.resumen, "TORO");
+
+    // NS por planta = (programados - afectados) / programados ; total = promedio(CM, TORO)
+    const nsPct = (pg, af) => pg > 0 ? ((pg - af) / pg) * 100 : 0;
+    const cm    = nsPct(pgCM, afCM);
+    const toro  = nsPct(pgToro, afToro);
+    const total = (cm + toro) / 2;
 
     nsDonutValues = {
       cm, toro, total,
