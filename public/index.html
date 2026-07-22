@@ -2889,28 +2889,38 @@
     doc.setFontSize(10);
     doc.text(`Generado: ${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`, 14, 20);
 
-    const body = Array.from(filas).map(tr => {
+    // Agrupar por Producto afectado: el producto pasa a ser encabezado de grupo (fila con colSpan)
+    const grupos = new Map();
+    Array.from(filas).forEach(tr => {
       const celdas = tr.querySelectorAll("td");
-      return [
-        celdas[0].textContent.trim(),
-        celdas[1].textContent.trim(),
-        celdas[2].textContent.trim(),
-        celdas[3].textContent.trim(),
-        celdas[4].textContent.trim(),
+      const producto = celdas[2].textContent.trim() || "(sin producto)";
+      const fila = [
+        celdas[0].textContent.trim(),  // Rubro
+        celdas[1].textContent.trim(),  // Insumo
+        celdas[3].textContent.trim(),  // Planta
+        celdas[4].textContent.trim(),  // Cantidad faltante
         tr.querySelector(".ns-rep-real").value,
         tr.querySelector(".ns-rep-causa").value,
         tr.querySelector(".ns-rep-resp").value,
       ];
+      if (!grupos.has(producto)) grupos.set(producto, []);
+      grupos.get(producto).push(fila);
+    });
+
+    const body = [];
+    grupos.forEach((items, producto) => {
+      body.push([{ content: producto, colSpan: 7, styles: { fontStyle: "bold", fillColor: [225, 225, 225], textColor: 0, halign: "left" } }]);
+      items.forEach(f => body.push(f));
     });
 
     doc.autoTable({
       startY: 25,
-      head: [["Rubro", "Insumo", "Producto afectado", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
+      head: [["Rubro", "Insumo", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
       body,
       theme: "grid",
       styles: { textColor: 0, fontSize: 8, cellPadding: 2, lineColor: [180, 180, 180], lineWidth: 0.1 },
       headStyles: { fillColor: [235, 235, 235], textColor: 0, fontStyle: "bold" },
-      columnStyles: { 4: { halign: "right" } },
+      columnStyles: { 3: { halign: "right" } },
       margin: { left: 14, right: 14 },
     });
 
