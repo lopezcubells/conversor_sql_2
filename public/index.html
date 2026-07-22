@@ -1032,6 +1032,20 @@
     <div class="btn-row" style="margin-top:0;margin-bottom:18px">
       <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
     </div>
+    <div id="ns-donuts" style="display:none;align-items:center;justify-content:center;gap:36px;flex-wrap:wrap;margin:4px 0 26px">
+      <div style="text-align:center">
+        <div style="position:relative;width:150px;height:150px"><canvas id="ns-donut-total"></canvas></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.05em">Nivel de servicio</div>
+      </div>
+      <div style="text-align:center">
+        <div style="position:relative;width:96px;height:96px"><canvas id="ns-donut-cm"></canvas></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Planta CM</div>
+      </div>
+      <div style="text-align:center">
+        <div style="position:relative;width:96px;height:96px"><canvas id="ns-donut-toro"></canvas></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Planta TORO</div>
+      </div>
+    </div>
     <div class="card-title">Reporte de faltantes</div>
     <div class="table-wrap" id="ns-reporte-wrap">
       <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el reporte</div>
@@ -2869,6 +2883,83 @@
       </table>`;
   }
 
+  // ── Gráficos de anillo (Nivel de servicio, semana en curso) ──
+  let nsDonutTotal = null, nsDonutCM = null, nsDonutToro = null;
+  let nsDonutValues = { cm: 0, toro: 0, total: 0 };
+
+  // Plugin que dibuja el % en el centro del anillo
+  const nsCenterText = {
+    id: "nsCenterText",
+    afterDraw(chart) {
+      const t = chart.config.options.plugins && chart.config.options.plugins.centerText;
+      if (!t) return;
+      const { ctx, chartArea: { left, right, top, bottom } } = chart;
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = t.color;
+      ctx.font = `700 ${t.size}px sans-serif`;
+      ctx.fillText(t.text, (left + right) / 2, (top + bottom) / 2);
+      ctx.restore();
+    }
+  };
+
+  function nsCoberturaPct(resumen, planta) {
+    const fila = (resumen || []).find(r => (r.planta || "").toUpperCase() === planta);
+    if (!fila || fila.cobertura == null) return 0;
+    return parseFloat(String(fila.cobertura).replace("%", "").replace(",", ".")) || 0;
+  }
+
+  // Anillo en pantalla (tema oscuro)
+  function nsMakeDonut(existing, canvasId, value, valueSize) {
+    const v = Math.max(0, Math.min(100, value));
+    if (existing) existing.destroy();
+    const ctx = document.getElementById(canvasId).getContext("2d");
+    return new Chart(ctx, {
+      type: "doughnut",
+      data: { datasets: [{ data: [v, 100 - v], backgroundColor: ["#34c97e", "rgba(255,255,255,.08)"], borderWidth: 0 }] },
+      options: {
+        cutout: "72%", responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false },
+          centerText: { text: `${Math.round(v)}%`, color: "#e2e4ef", size: valueSize },
+        },
+      },
+      plugins: [nsCenterText],
+    });
+  }
+
+  function nsRenderDonuts(cm, toro) {
+    const total = (cm + toro) / 2;
+    nsDonutValues = { cm, toro, total };
+    document.getElementById("ns-donuts").style.display = "flex";
+    nsDonutTotal = nsMakeDonut(nsDonutTotal, "ns-donut-total", total, 34);
+    nsDonutCM    = nsMakeDonut(nsDonutCM,    "ns-donut-cm",    cm,    22);
+    nsDonutToro  = nsMakeDonut(nsDonutToro,  "ns-donut-toro",  toro,  22);
+  }
+
+  // Anillo para el PDF (fondo blanco, texto negro) → PNG
+  function nsDonutPng(value, sizePx, valueSizePx) {
+    const v = Math.max(0, Math.min(100, value));
+    const canvas = document.createElement("canvas");
+    canvas.width = sizePx; canvas.height = sizePx;
+    const chart = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: { datasets: [{ data: [v, 100 - v], backgroundColor: ["#15803d", "#e5e7eb"], borderWidth: 0 }] },
+      options: {
+        cutout: "70%", responsive: false, animation: false,
+        plugins: {
+          legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false },
+          centerText: { text: `${Math.round(v)}%`, color: "#111111", size: valueSizePx },
+        },
+      },
+      plugins: [nsCenterText],
+    });
+    const url = chart.toBase64Image("image/png", 1);
+    chart.destroy();
+    return url;
+  }
+
   document.getElementById("ns-btn-pdf").addEventListener("click", () => {
     const filas = document.querySelectorAll("#ns-reporte-wrap tbody tr[data-idx]");
     if (!filas.length) { toast("Generá el cálculo antes de crear el PDF.", "err"); return; }
@@ -2888,6 +2979,28 @@
     doc.text("Reporte NS Abastecimiento", 14, 14);
     doc.setFontSize(10);
     doc.text(`Generado: ${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`, 14, 20);
+
+    // ── Anillos de Nivel de servicio (jerarquía de tamaños; conjunto ≤ ~20% de la hoja) ──
+    const bigMM = 32, smallMM = 20, gapMM = 16;
+    const grpW  = bigMM + gapMM + smallMM + gapMM + smallMM;
+    const pageW = doc.internal.pageSize.getWidth();
+    const gyTop = 26;
+    const smallY = gyTop + (bigMM - smallMM) / 2;
+    let gx = (pageW - grpW) / 2;
+
+    doc.addImage(nsDonutPng(nsDonutValues.total, 320, 64), "PNG", gx, gyTop, bigMM, bigMM);
+    doc.setFontSize(8);
+    doc.text("Nivel de servicio", gx + bigMM / 2, gyTop + bigMM + 4, { align: "center" });
+    gx += bigMM + gapMM;
+
+    doc.addImage(nsDonutPng(nsDonutValues.cm, 200, 46), "PNG", gx, smallY, smallMM, smallMM);
+    doc.text("CM", gx + smallMM / 2, smallY + smallMM + 4, { align: "center" });
+    gx += smallMM + gapMM;
+
+    doc.addImage(nsDonutPng(nsDonutValues.toro, 200, 46), "PNG", gx, smallY, smallMM, smallMM);
+    doc.text("TORO", gx + smallMM / 2, smallY + smallMM + 4, { align: "center" });
+
+    const tableStartY = gyTop + bigMM + 12; // deja lugar a los anillos + su etiqueta
 
     // Agrupar por Producto afectado: el producto pasa a ser encabezado de grupo (fila con colSpan)
     const grupos = new Map();
@@ -2914,7 +3027,7 @@
     });
 
     doc.autoTable({
-      startY: 25,
+      startY: tableStartY,
       head: [["Rubro", "Insumo", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
       body,
       theme: "grid",
@@ -2958,6 +3071,10 @@
       nsRenderBloque("ns-sig2-toro",   data.sig2.resumen,   data.sig2.detalle,   "TORO");
 
       nsRenderReporte(nsBuildReporteRows(data));
+      nsRenderDonuts(
+        nsCoberturaPct(data.actual.resumen, "CM"),
+        nsCoberturaPct(data.actual.resumen, "TORO"),
+      );
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
