@@ -2804,14 +2804,23 @@
 
   // ── Reporte de faltantes ──
 
-  // El reporte usa el detalle de SEMANA EN CURSO (período "actual"): indicador_cobertura
-  // con los parámetros de cobertura, evaluacion='no cubre', rubros seleccionados, rango de
-  // semana en curso y MIN(saldo) por (rubro, descripcion_ppal, planta).
+  // Concatenación "código - descripción" (espacio guion espacio)
+  function nsConcat(cod, desc) {
+    const c = (cod ?? "").toString().trim();
+    const d = (desc ?? "").toString().trim();
+    if (c && d) return `${c} - ${d}`;
+    return c || d;
+  }
+
+  // El reporte usa la consulta de SEMANA EN CURSO a nivel insumo (data.reporte):
+  // indicador_cobertura con los parámetros de cobertura, evaluacion='no cubre',
+  // rubros seleccionados, rango de semana en curso y MIN(saldo) por combinación.
   function nsBuildReporteRows(data) {
-    const det = (data.actual && data.actual.detalle) || [];
-    return det.map(r => ({
-      insumo:   r.rubro ?? "",
-      producto: r.descripcion_ppal ?? "",
+    const rows = data.reporte || [];
+    return rows.map(r => ({
+      rubro:    r.rubro ?? "",
+      insumo:   nsConcat(r.cod_corto_comp, r.descripcion_comp),
+      producto: nsConcat(r.cod_corto_ppal, r.descripcion_ppal),
       planta:   r.planta ?? "",
       cantidad: r.saldo,
     }));
@@ -2829,6 +2838,7 @@
     }
     const cuerpo = rows.map((r, i) => `
       <tr data-idx="${i}">
+        <td style="padding:8px 10px">${nsEsc(r.rubro)}</td>
         <td style="padding:8px 10px">${nsEsc(r.insumo)}</td>
         <td style="padding:8px 10px">${nsEsc(r.producto)}</td>
         <td style="padding:8px 10px">${nsEsc(r.planta)}</td>
@@ -2846,6 +2856,7 @@
     wrap.innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr>
+          <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Rubro</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Insumo</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Producto afectado</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Planta</th>
@@ -2884,6 +2895,7 @@
         celdas[1].textContent.trim(),
         celdas[2].textContent.trim(),
         celdas[3].textContent.trim(),
+        celdas[4].textContent.trim(),
         tr.querySelector(".ns-rep-real").value,
         tr.querySelector(".ns-rep-causa").value,
         tr.querySelector(".ns-rep-resp").value,
@@ -2892,12 +2904,12 @@
 
     doc.autoTable({
       startY: 25,
-      head: [["Insumo", "Producto afectado", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
+      head: [["Rubro", "Insumo", "Producto afectado", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
       body,
       theme: "grid",
       styles: { textColor: 0, fontSize: 8, cellPadding: 2, lineColor: [180, 180, 180], lineWidth: 0.1 },
       headStyles: { fillColor: [235, 235, 235], textColor: 0, fontStyle: "bold" },
-      columnStyles: { 3: { halign: "right" } },
+      columnStyles: { 4: { halign: "right" } },
       margin: { left: 14, right: 14 },
     });
 
