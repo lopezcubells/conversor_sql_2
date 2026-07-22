@@ -2837,6 +2837,7 @@
       producto: nsConcat(r.cod_corto_ppal, r.descripcion_ppal),
       planta:   r.planta ?? "",
       cantidad: r.saldo,
+      bultos:   Math.abs(parseFloat(r.bultos_afectados) || 0),
     }));
   }
 
@@ -2857,6 +2858,7 @@
         <td style="padding:8px 10px">${nsEsc(r.producto)}</td>
         <td style="padding:8px 10px">${nsEsc(r.planta)}</td>
         <td style="padding:8px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.cantidad)}</td>
+        <td style="padding:8px 10px;text-align:right;font-family:var(--mono)">${nsFmt(r.bultos)}</td>
         <td style="padding:6px 8px">
           <select class="search-input ns-rep-real" style="min-width:70px;padding:6px 8px;font-size:12px">
             <option value=""></option>
@@ -2875,6 +2877,7 @@
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Producto afectado</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Planta</th>
           <th style="text-align:right;padding:8px 10px;color:var(--muted);font-size:11px">Cantidad faltante</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--muted);font-size:11px">Bultos afectados</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">¿Faltante Real?</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Causa estándar</th>
           <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Sector/Proveedor responsable</th>
@@ -3012,6 +3015,7 @@
         celdas[1].textContent.trim(),  // Insumo
         celdas[3].textContent.trim(),  // Planta
         celdas[4].textContent.trim(),  // Cantidad faltante
+        celdas[5].textContent.trim(),  // Bultos afectados
         tr.querySelector(".ns-rep-real").value,
         tr.querySelector(".ns-rep-causa").value,
         tr.querySelector(".ns-rep-resp").value,
@@ -3022,18 +3026,18 @@
 
     const body = [];
     grupos.forEach((items, producto) => {
-      body.push([{ content: producto, colSpan: 7, styles: { fontStyle: "bold", fillColor: [225, 225, 225], textColor: 0, halign: "left" } }]);
+      body.push([{ content: producto, colSpan: 8, styles: { fontStyle: "bold", fillColor: [225, 225, 225], textColor: 0, halign: "left" } }]);
       items.forEach(f => body.push(f));
     });
 
     doc.autoTable({
       startY: tableStartY,
-      head: [["Rubro", "Insumo", "Planta", "Cantidad faltante", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
+      head: [["Rubro", "Insumo", "Planta", "Cantidad faltante", "Bultos afectados", "¿Faltante Real?", "Causa estándar", "Sector/Proveedor responsable"]],
       body,
       theme: "grid",
       styles: { textColor: 0, fontSize: 8, cellPadding: 2, lineColor: [180, 180, 180], lineWidth: 0.1 },
       headStyles: { fillColor: [235, 235, 235], textColor: 0, fontStyle: "bold" },
-      columnStyles: { 3: { halign: "right" } },
+      columnStyles: { 3: { halign: "right" }, 4: { halign: "right" } },
       margin: { left: 14, right: 14 },
     });
 
