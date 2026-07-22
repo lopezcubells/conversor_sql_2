@@ -3106,10 +3106,10 @@
     nsPieToro = nsMakePie(nsPieToro, "ns-pie-toro", nsAggCausa("TORO"));
   }
 
-  // Torta para el PDF (fondo blanco, texto negro) → PNG
-  function nsPiePng(agg, w, h) {
+  // Torta (solo el círculo, sin leyenda) para el PDF → PNG; las leyendas se dibujan con líneas guía
+  function nsPieCircleImg(agg, size) {
     const canvas = document.createElement("canvas");
-    canvas.width = w; canvas.height = h;
+    canvas.width = size; canvas.height = size;
     const labels = [...agg.keys()];
     const data   = [...agg.values()];
     const hasData = labels.length && data.some(v => v > 0);
@@ -3119,9 +3119,9 @@
         ? { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => RUBRO_PALETTE[i % RUBRO_PALETTE.length]), borderColor: "#ffffff", borderWidth: 1 }] }
         : { labels: ["Sin datos"], datasets: [{ data: [1], backgroundColor: ["#d1d5db"], borderWidth: 0 }] },
       options: {
-        responsive: false, animation: false,
+        responsive: false, animation: false, layout: { padding: 0 },
         plugins: {
-          legend: hasData ? { position: "bottom", labels: { color: "#111111", boxWidth: 10, font: { size: 11 }, padding: 6 } } : { display: false },
+          legend: { display: false },
           datalabels: { display: false },
           tooltip: { enabled: false },
         },
@@ -3167,12 +3167,12 @@
     const blkW  = pageW - mgn * 2;
 
     // "donut + texto (label / afectados / programados)" centrado en una región
-    const drawGroup = (regionX, regionW, centerY, dia, pngUrl, label, af, pg, labelSize) => {
+    const drawGroup = (regionX, regionW, centerY, dia, pngUrl, label, af, pg, labelSize, statsSize = 8) => {
       const afStr = `Afectados: ${nfmt(af)}`;
       const pgStr = `Programados: ${nfmt(pg)}`;
       doc.setFont("helvetica", "bold"); doc.setFontSize(labelSize);
       const wLabel = doc.getTextWidth(label);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(statsSize);
       const wStats = Math.max(doc.getTextWidth(afStr), doc.getTextWidth(pgStr));
       const gap    = 8;
       const gx     = regionX + (regionW - (dia + gap + Math.max(wLabel, wStats))) / 2;
@@ -3180,43 +3180,75 @@
       const tx = gx + dia + gap;
       doc.setTextColor(0, 0, 0);
       doc.setFont("helvetica", "bold"); doc.setFontSize(labelSize);
-      doc.text(label, tx, centerY - 3);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-      doc.text(afStr, tx, centerY + 1.8);
-      doc.text(pgStr, tx, centerY + 6.3);
+      doc.text(label, tx, centerY - statsSize * 0.45);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(statsSize);
+      doc.text(afStr, tx, centerY + statsSize * 0.28);
+      doc.text(pgStr, tx, centerY + statsSize * 0.85);
     };
 
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
 
-    // BLOQUE 1: Nivel de servicio
-    const b1Y = 32, b1H = 26;
+    // ── PÁGINA 1: los 3 bloques aprovechando todo el alto (210 mm) ──
+    const pageH = doc.internal.pageSize.getHeight();
+
+    // BLOQUE 1: Nivel de servicio (KPI principal, agrandado)
+    const b1Y = 32, b1H = 58;
     doc.roundedRect(mgn, b1Y, blkW, b1H, 2, 2);
-    drawGroup(mgn, blkW, b1Y + b1H / 2, 20, nsDonutPng(nsDonutValues.total, 300, 60),
-              "NIVEL DE SERVICIO", nsDonutValues.afTotal, nsDonutValues.pgTotal, 11);
+    drawGroup(mgn, blkW, b1Y + b1H / 2, 44, nsDonutPng(nsDonutValues.total, 440, 88),
+              "NIVEL DE SERVICIO", nsDonutValues.afTotal, nsDonutValues.pgTotal, 17, 12);
 
     // BLOQUE 2: Nivel de servicio CM y TORO
-    const b2Y = b1Y + b1H + 4, b2H = 24;
+    const b2Y = b1Y + b1H + 4, b2H = 44;
     doc.roundedRect(mgn, b2Y, blkW, b2H, 2, 2);
-    drawGroup(mgn,             blkW / 2, b2Y + b2H / 2, 18, nsDonutPng(nsDonutValues.cm, 200, 44),
-              "Planta CM",   nsDonutValues.afCM,   nsDonutValues.pgCM,   9);
-    drawGroup(mgn + blkW / 2, blkW / 2, b2Y + b2H / 2, 18, nsDonutPng(nsDonutValues.toro, 200, 44),
-              "Planta TORO", nsDonutValues.afToro, nsDonutValues.pgToro, 9);
+    drawGroup(mgn,             blkW / 2, b2Y + b2H / 2, 32, nsDonutPng(nsDonutValues.cm, 320, 66),
+              "Planta CM",   nsDonutValues.afCM,   nsDonutValues.pgCM,   12, 10);
+    drawGroup(mgn + blkW / 2, blkW / 2, b2Y + b2H / 2, 32, nsDonutPng(nsDonutValues.toro, 320, 66),
+              "Planta TORO", nsDonutValues.afToro, nsDonutValues.pgToro, 12, 10);
 
-    // BLOQUE 2b: Bultos afectados por causa estándar (tortas CM / TORO)
-    const b3Y = b2Y + b2H + 4, b3H = 54;
+    // BLOQUE 2b: Bultos afectados por causa estándar (tortas con etiquetas guiadas)
+    const b3Y = b2Y + b2H + 4;
+    const b3H = pageH - b3Y - 8; // aprovechar el resto de la página
     doc.roundedRect(mgn, b3Y, blkW, b3H, 2, 2);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    doc.text("Bultos afectados por causa estándar", pageW / 2, b3Y + 6, { align: "center" });
-    doc.setFontSize(8);
-    doc.text("Planta CM",   mgn + blkW / 4,       b3Y + 12, { align: "center" });
-    doc.text("Planta TORO", mgn + blkW * 3 / 4,   b3Y + 12, { align: "center" });
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(0, 0, 0);
+    doc.text("Bultos afectados por causa estándar", pageW / 2, b3Y + 7, { align: "center" });
+    doc.setFontSize(10);
+    doc.text("Planta CM",   mgn + blkW / 4,       b3Y + 14, { align: "center" });
+    doc.text("Planta TORO", mgn + blkW * 3 / 4,   b3Y + 14, { align: "center" });
     doc.setFont("helvetica", "normal");
-    const pieW = 50, pieH = 40, pieY = b3Y + 13;
-    doc.addImage(nsPiePng(nsAggCausa("CM"),   560, 470), "PNG", mgn + blkW / 4     - pieW / 2, pieY, pieW, pieH);
-    doc.addImage(nsPiePng(nsAggCausa("TORO"), 560, 470), "PNG", mgn + blkW * 3 / 4 - pieW / 2, pieY, pieW, pieH);
 
-    const tableStartY = b3Y + b3H + 6; // BLOQUE 3: tabla debajo
+    // Torta = imagen del círculo + etiquetas con línea guía dibujadas en vectorial (jsPDF)
+    const drawPieCallouts = (agg, cx, cy, r) => {
+      doc.addImage(nsPieCircleImg(agg, 480), "PNG", cx - r, cy - r, r * 2, r * 2);
+      const entries = [...agg.entries()].filter(([, v]) => v > 0);
+      const total = entries.reduce((a, [, v]) => a + v, 0);
+      if (!total) return;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+      doc.setDrawColor(90, 90, 90); doc.setLineWidth(0.25);
+      let acc = -Math.PI / 2; // Chart.js arranca arriba, sentido horario
+      entries.forEach(([label, val]) => {
+        const frac = val / total;
+        const mid  = acc + frac * Math.PI;
+        acc += frac * 2 * Math.PI;
+        const x1 = cx + Math.cos(mid) * r,       y1 = cy + Math.sin(mid) * r;
+        const x2 = cx + Math.cos(mid) * (r + 5), y2 = cy + Math.sin(mid) * (r + 5);
+        const der = Math.cos(mid) >= 0;
+        const x3 = x2 + (der ? 6 : -6);
+        doc.line(x1, y1, x2, y2);
+        doc.line(x2, y2, x3, y2);
+        doc.text(`${label}: ${nfmt(val)}`, x3 + (der ? 1.5 : -1.5), y2 + 1, { align: der ? "left" : "right" });
+      });
+      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
+    };
+
+    const pieR  = (b3H - 26) / 2;
+    const pieCY = b3Y + 16 + (b3H - 18) / 2 - 2;
+    drawPieCallouts(nsAggCausa("CM"),   mgn + blkW / 4,     pieCY, pieR);
+    drawPieCallouts(nsAggCausa("TORO"), mgn + blkW * 3 / 4, pieCY, pieR);
+
+    // ── PÁGINA 2: tablero de faltantes ──
+    doc.addPage();
+    const tableStartY = 14;
 
     // Agrupar por Producto afectado: el producto pasa a ser encabezado de grupo (fila con colSpan)
     const grupos = new Map();
