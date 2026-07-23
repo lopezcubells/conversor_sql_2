@@ -905,43 +905,68 @@
 <!-- ═══ NIVEL DE SERVICIO ═══ -->
 <div class="pane" id="tab-nivel-servicio">
 
-  <div class="section-heading"><h2>NS Semana en curso</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-actual-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+  <!-- Reporte (1er apartado) -->
+  <div class="section-heading"><h2>Reporte</h2></div>
+  <div class="btn-row" style="margin-top:0;margin-bottom:18px">
+    <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
+  </div>
+
+  <!-- Bloques de anillos (ocultos hasta calcular) -->
+  <div id="ns-donuts" style="display:none">
+
+    <!-- BLOQUE 1: Nivel de servicio -->
+    <div class="card" style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
+      <div style="position:relative;width:150px;height:150px"><canvas id="ns-donut-total"></canvas></div>
+      <div style="min-width:180px">
+        <div style="font-size:15px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Nivel de servicio</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:12px;line-height:1.9">
+          <div>Afectados: <strong id="ns-af-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+          <div>Programados: <strong id="ns-pg-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+        </div>
+      </div>
     </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-actual-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+
+    <!-- BLOQUE 2: Nivel de servicio CM y TORO -->
+    <div class="card" style="display:flex;align-items:center;justify-content:space-around;gap:40px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:22px">
+        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-cm"></canvas></div>
+        <div>
+          <div style="font-weight:600">Planta CM</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
+            <div>Afectados: <strong id="ns-af-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+            <div>Programados: <strong id="ns-pg-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:22px">
+        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-toro"></canvas></div>
+        <div>
+          <div style="font-weight:600">Planta TORO</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
+            <div>Afectados: <strong id="ns-af-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+            <div>Programados: <strong id="ns-pg-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 2b: Bultos afectados por causa estándar -->
+    <div class="card">
+      <div class="card-title" style="text-align:center">Bultos afectados por causa estándar</div>
+      <div style="position:relative;height:250px;max-width:900px;margin:0 auto"><canvas id="ns-bar-causa"></canvas></div>
+    </div>
+
+  </div>
+
+  <!-- BLOQUE 3: Tabla -->
+  <div class="card">
+    <div class="card-title">Reporte de faltantes</div>
+    <div class="table-wrap" id="ns-reporte-wrap">
+      <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el reporte</div>
     </div>
   </div>
 
-  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (1ra mitad)</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-sig1-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-sig1-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-  </div>
-
-  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (2da mitad)</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-sig2-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-sig2-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-  </div>
-
-  <!-- Parámetros (colapsable, inicia oculto) -->
+  <!-- Parámetros (2do apartado, colapsable, inicia oculto) -->
   <div class="card" style="margin-top:40px">
     <div class="collapsible-header collapsed" id="ns-params-toggle">
       <div class="card-title" style="margin-bottom:0">Parámetros</div>
@@ -1026,64 +1051,42 @@
     </div>
   </div>
 
-  <!-- Reporte (5to apartado) -->
-  <div class="section-heading" style="margin-top:40px"><h2>Reporte</h2></div>
-  <div class="btn-row" style="margin-top:0;margin-bottom:18px">
-    <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
+  <!-- NS Semana en curso (3er apartado) -->
+  <div class="section-heading" style="margin-top:40px"><h2>NS Semana en curso</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-actual-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-actual-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
   </div>
 
-  <!-- Bloques de anillos (ocultos hasta calcular) -->
-  <div id="ns-donuts" style="display:none">
-
-    <!-- BLOQUE 1: Nivel de servicio -->
-    <div class="card" style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
-      <div style="position:relative;width:150px;height:150px"><canvas id="ns-donut-total"></canvas></div>
-      <div style="min-width:180px">
-        <div style="font-size:15px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Nivel de servicio</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:12px;line-height:1.9">
-          <div>Afectados: <strong id="ns-af-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-          <div>Programados: <strong id="ns-pg-total" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-        </div>
-      </div>
+  <!-- NS Semana siguiente 1ra mitad (4to apartado) -->
+  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (1ra mitad)</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-sig1-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
     </div>
-
-    <!-- BLOQUE 2: Nivel de servicio CM y TORO -->
-    <div class="card" style="display:flex;align-items:center;justify-content:space-around;gap:40px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:22px">
-        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-cm"></canvas></div>
-        <div>
-          <div style="font-weight:600">Planta CM</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
-            <div>Afectados: <strong id="ns-af-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-            <div>Programados: <strong id="ns-pg-cm" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:22px">
-        <div style="position:relative;width:100px;height:100px"><canvas id="ns-donut-toro"></canvas></div>
-        <div>
-          <div style="font-weight:600">Planta TORO</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
-            <div>Afectados: <strong id="ns-af-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-            <div>Programados: <strong id="ns-pg-toro" style="color:var(--text);font-family:var(--mono)">—</strong></div>
-          </div>
-        </div>
-      </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-sig1-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
     </div>
-
-    <!-- BLOQUE 2b: Bultos afectados por causa estándar -->
-    <div class="card">
-      <div class="card-title" style="text-align:center">Bultos afectados por causa estándar</div>
-      <div style="position:relative;height:250px;max-width:900px;margin:0 auto"><canvas id="ns-bar-causa"></canvas></div>
-    </div>
-
   </div>
 
-  <!-- BLOQUE 3: Tabla -->
-  <div class="card">
-    <div class="card-title">Reporte de faltantes</div>
-    <div class="table-wrap" id="ns-reporte-wrap">
-      <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el reporte</div>
+  <!-- NS Semana siguiente 2da mitad (5to apartado) -->
+  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (2da mitad)</h2></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta CM</div>
+      <div id="ns-sig2-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <div class="card-title">Planta Toro</div>
+      <div id="ns-sig2-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
     </div>
   </div>
 
