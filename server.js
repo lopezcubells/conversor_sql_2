@@ -374,6 +374,42 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
   }
 });
 
+// Registro histórico: se inserta cada vez que el usuario genera el PDF del reporte
+app.post("/api/pg/nivel-servicio/registro", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { fe_inicial, fe_final, filas } = req.body || {};
+    if (!fe_inicial || !fe_final) return res.status(400).json({ error: "Faltan fe_inicial/fe_final." });
+    if (!Array.isArray(filas) || !filas.length) return res.status(400).json({ error: "No hay filas para registrar." });
+
+    const cols = [
+      "fe_reporte", "fe_inicial", "fe_final", "rubro", "insumo", "producto_afectado",
+      "planta", "cantidad_faltante", "bultos_afectados", "faltante_real",
+      "causa_estandar", "sector_proveedor_responsable",
+    ];
+    const values = [];
+    const placeholders = filas.map((f, i) => {
+      const base = i * cols.length;
+      values.push(
+        new Date(), fe_inicial, fe_final,
+        f.rubro ?? null, f.insumo ?? null, f.producto_afectado ?? null, f.planta ?? null,
+        f.cantidad_faltante ?? null, f.bultos_afectados ?? null,
+        f.faltante_real ?? null, f.causa_estandar ?? null, f.sector_proveedor_responsable ?? null,
+      );
+      return `(${cols.map((_, j) => `$${base + j + 1}`).join(",")})`;
+    });
+
+    await pgPool.query(
+      `INSERT INTO registro_nivel_servicio (${cols.join(",")}) VALUES ${placeholders.join(",")}`,
+      values
+    );
+    res.json({ success: true, inserted: filas.length });
+  } catch (e) {
+    console.error("PG registro nivel-servicio error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Inmovilizados ──
 
 app.get("/api/pg/inmovilizados/rubros", async (req, res) => {

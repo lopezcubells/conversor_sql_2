@@ -3169,10 +3169,43 @@
     if (e.target && e.target.classList && e.target.classList.contains("ns-rep-causa")) nsRenderCausaBar();
   });
 
-  document.getElementById("ns-btn-pdf").addEventListener("click", () => {
+  // Inserta las filas del tablero en registro_nivel_servicio (histórico); no bloquea el PDF si falla.
+  async function nsGuardarRegistro(filas) {
+    const fe_inicial = document.getElementById("ns-actual-inicio").value;
+    const fe_final   = document.getElementById("ns-actual-final").value;
+    const payload = Array.from(filas).map(tr => {
+      const row = nsReporteRows[+tr.dataset.idx] || {};
+      return {
+        rubro:                        row.rubro ?? "",
+        insumo:                       row.insumo ?? "",
+        producto_afectado:            row.producto ?? "",
+        planta:                       row.planta ?? "",
+        cantidad_faltante:            row.cantidad ?? null,
+        bultos_afectados:             row.bultos ?? null,
+        faltante_real:                tr.querySelector(".ns-rep-real").value,
+        causa_estandar:               tr.querySelector(".ns-rep-causa").value,
+        sector_proveedor_responsable: tr.querySelector(".ns-rep-resp").value,
+      };
+    });
+    try {
+      const res = await fetch(`${API}/api/pg/nivel-servicio/registro`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fe_inicial, fe_final, filas: payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+    } catch (e) {
+      toast("⚠ No se pudo registrar el histórico: " + e.message, "err");
+    }
+  }
+
+  document.getElementById("ns-btn-pdf").addEventListener("click", async () => {
     const filas = document.querySelectorAll("#ns-reporte-wrap tbody tr[data-idx]");
     if (!filas.length) { toast("Generá el cálculo antes de crear el PDF.", "err"); return; }
     if (!window.jspdf || !window.jspdf.jsPDF) { toast("La librería PDF no cargó. Reintentá.", "err"); return; }
+
+    await nsGuardarRegistro(filas);
 
     const { jsPDF } = window.jspdf;
     // A4 apaisado (297 mm de ancho) + 30% extra → 386 mm; alto A4 (210 mm)
