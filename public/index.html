@@ -908,7 +908,12 @@
   <!-- Reporte (1er apartado) -->
   <div class="section-heading"><h2>Reporte</h2></div>
   <div class="btn-row" style="margin-top:0;margin-bottom:18px">
+    <button class="btn btn-success" id="ns-btn-calcular-top">💾 Guardar y calcular</button>
     <button class="btn btn-primary" id="ns-btn-pdf">📄 Genera PDF</button>
+    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="ns-chk-guardar-bd" style="accent-color:#4f8ef7">
+      Cargar en BD
+    </label>
   </div>
 
   <!-- Bloques de anillos (ocultos hasta calcular) -->
@@ -3208,7 +3213,9 @@
     if (!filas.length) { toast("Generá el cálculo antes de crear el PDF.", "err"); return; }
     if (!window.jspdf || !window.jspdf.jsPDF) { toast("La librería PDF no cargó. Reintentá.", "err"); return; }
 
-    await nsGuardarRegistro(filas);
+    if (document.getElementById("ns-chk-guardar-bd").checked) {
+      await nsGuardarRegistro(filas);
+    }
 
     const { jsPDF } = window.jspdf;
     // A4 apaisado (297 mm de ancho) + 30% extra → 386 mm; alto A4 (210 mm)
@@ -3329,7 +3336,7 @@
     doc.save(`Reporte NS Abastecimiento - ${dd}-${mm}-${yyyy} - ${hh}-${mi}-${ss}.pdf`);
   });
 
-  document.getElementById("ns-btn-calcular").addEventListener("click", async () => {
+  async function nsCalcular() {
     const params = nsGetParams();
     const fechasHora = Object.entries(params).filter(([k]) => k !== "rubros").map(([, v]) => v);
     if (fechasHora.some(v => !v)) { toast("Completá todas las fechas y la hora antes de calcular.", "err"); return; }
@@ -3337,9 +3344,10 @@
 
     localStorage.setItem(NS_STORAGE_KEY, JSON.stringify(params));
 
-    const btn    = document.getElementById("ns-btn-calcular");
+    const btn1   = document.getElementById("ns-btn-calcular");
+    const btn2   = document.getElementById("ns-btn-calcular-top");
     const estado = document.getElementById("ns-params-estado");
-    btn.disabled = true;
+    btn1.disabled = true; btn2.disabled = true;
     estado.textContent = "Consultando PostgreSQL…";
     nsSetLoading();
 
@@ -3370,9 +3378,12 @@
       estado.textContent = "⚠ " + e.message;
       toast("❌ " + e.message, "err");
     } finally {
-      btn.disabled = false;
+      btn1.disabled = false; btn2.disabled = false;
     }
-  });
+  }
+
+  document.getElementById("ns-btn-calcular").addEventListener("click", nsCalcular);
+  document.getElementById("ns-btn-calcular-top").addEventListener("click", nsCalcular);
 
   function initNivelServicio() {
     if (nsLoaded) return;
