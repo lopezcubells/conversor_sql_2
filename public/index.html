@@ -955,10 +955,18 @@
       </div>
     </div>
 
-    <!-- BLOQUE 2b: Bultos afectados por causa estándar -->
+    <!-- BLOQUE 2b: Bultos afectados por causa estándar y por rubro -->
     <div class="card">
-      <div class="card-title" style="text-align:center">Bultos afectados por causa estándar</div>
-      <div style="position:relative;height:250px;max-width:900px;margin:0 auto"><canvas id="ns-bar-causa"></canvas></div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div style="flex:1;min-width:320px">
+          <div class="card-title" style="text-align:center">Bultos afectados por causa estándar</div>
+          <div style="position:relative;height:250px"><canvas id="ns-bar-causa"></canvas></div>
+        </div>
+        <div style="flex:1;min-width:320px">
+          <div class="card-title" style="text-align:center">Bultos afectados por rubro</div>
+          <div style="position:relative;height:250px"><canvas id="ns-bar-rubro"></canvas></div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -2962,6 +2970,7 @@
   let nsDonutTotal = null, nsDonutCM = null, nsDonutToro = null;
   let nsDonutValues = { cm: 0, toro: 0, total: 0, afCM: 0, afToro: 0, afTotal: 0, pgCM: 0, pgToro: 0, pgTotal: 0 };
   let nsCausaBar = null;
+  let nsRubroBar = null;
   let nsReporteRows = [];
 
   // Plugin que dibuja el % en el centro del anillo
@@ -3201,6 +3210,108 @@
     return url;
   }
 
+  // Suma de bultos afectados por rubro (dato fijo de cada línea, no depende de lo tipeado)
+  function nsRubrosOrdenados() {
+    const agg = new Map();
+    (nsReporteRows || []).forEach(r => {
+      const rubro = r.rubro || "(sin rubro)";
+      agg.set(rubro, (agg.get(rubro) || 0) + (r.bultos || 0));
+    });
+    return [...agg.entries()].filter(([, v]) => v > 0).sort((a, b) => a[1] - b[1]);
+  }
+
+  // Barras horizontales minimalistas en pantalla: sin ejes, sin grilla, solo etiqueta "rubro: valor"
+  function nsRenderRubroBar() {
+    if (nsRubroBar) { nsRubroBar.destroy(); nsRubroBar = null; }
+    const ctx = document.getElementById("ns-bar-rubro").getContext("2d");
+    const entries = nsRubrosOrdenados();
+    const labels = entries.map(([k]) => k);
+    const data   = entries.map(([, v]) => Math.round(v));
+    const maxV   = Math.max(...data, 1);
+    nsRubroBar = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: "rgba(52,201,126,.75)",
+          borderColor: "#34c97e",
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+          datalabels: {
+            anchor: "end", align: "end", offset: 6,
+            color: "#e2e4ef",
+            backgroundColor: "rgba(30,32,48,.65)",
+            borderRadius: 3,
+            padding: { top: 2, bottom: 2, left: 5, right: 5 },
+            font: { weight: "bold", size: 12 },
+            formatter: (v, c) => `${c.chart.data.labels[c.dataIndex]}: ${Math.round(v).toLocaleString("es-AR")}`,
+          },
+        },
+        scales: {
+          x: { suggestedMax: maxV * 1.45, display: false, grid: { display: false } },
+          y: { display: false, grid: { display: false } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+  }
+
+  // Barras minimalistas para el PDF (fondo blanco, texto negro) → PNG
+  function nsBarRubroPng(w, h) {
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const entries = nsRubrosOrdenados();
+    const labels = entries.map(([k]) => k);
+    const data   = entries.map(([, v]) => Math.round(v));
+    const maxV   = Math.max(...data, 1);
+    const chart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: "rgba(21,128,61,.75)",
+          borderColor: "#15803d",
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+          datalabels: {
+            anchor: "end", align: "end", offset: 8,
+            color: "#111111",
+            font: { weight: "bold", size: 20 },
+            formatter: (v, c) => `${c.chart.data.labels[c.dataIndex]}: ${Math.round(v).toLocaleString("es-AR")}`,
+          },
+        },
+        scales: {
+          x: { suggestedMax: maxV * 1.5, display: false, grid: { display: false } },
+          y: { display: false, grid: { display: false } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+    const url = chart.toBase64Image("image/png", 1);
+    chart.destroy();
+    return url;
+  }
+
   // Actualización en vivo del gráfico al escribir la causa estándar en el tablero
   document.getElementById("ns-reporte-wrap").addEventListener("input", e => {
     if (e.target && e.target.classList && e.target.classList.contains("ns-rep-causa")) nsRenderCausaBar();
@@ -3311,17 +3422,21 @@
     drawGroup(mgn + blkW / 2, blkW / 2, b2Y + b2H / 2, 32, nsDonutPng(nsDonutValues.toro, 320, 66),
               "Planta TORO", nsDonutValues.afToro, nsDonutValues.pgToro, 12, 10);
 
-    // BLOQUE 2b: Bultos afectados por causa estándar (barras horizontales)
+    // BLOQUE 2b: Bultos afectados por causa estándar y por rubro (barras horizontales, lado a lado)
     const b3Y = b2Y + b2H + 4;
     const b3H = pageH - b3Y - 8; // aprovechar el resto de la página
     doc.roundedRect(mgn, b3Y, blkW, b3H, 2, 2);
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(0, 0, 0);
-    doc.text("Bultos afectados por causa estándar", pageW / 2, b3Y + 7, { align: "center" });
+    const halfW = blkW / 2;
+    doc.text("Bultos afectados por causa estándar", mgn + halfW / 2,       b3Y + 7, { align: "center" });
+    doc.text("Bultos afectados por rubro",           mgn + halfW * 1.5,    b3Y + 7, { align: "center" });
     doc.setFont("helvetica", "normal");
 
-    const barW = blkW - 60, barH = b3H - 14, barY = b3Y + 10;
+    const barW = halfW - 22, barH = b3H - 14, barY = b3Y + 10;
     doc.addImage(nsBarCausaPng(Math.round(barW * 8), Math.round(barH * 8)), "PNG",
-                 mgn + (blkW - barW) / 2, barY, barW, barH);
+                 mgn + (halfW - barW) / 2, barY, barW, barH);
+    doc.addImage(nsBarRubroPng(Math.round(barW * 8), Math.round(barH * 8)), "PNG",
+                 mgn + halfW + (halfW - barW) / 2, barY, barW, barH);
 
     // ── PÁGINA 2: tablero de faltantes ──
     doc.addPage();
@@ -3406,6 +3521,7 @@
       nsRenderReporte(reporteRows);
       nsRenderDonuts(data, reporteRows);
       nsRenderCausaBar();
+      nsRenderRubroBar();
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
