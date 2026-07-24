@@ -326,11 +326,9 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       ORDER BY planta, descripcion_ppal, rubro`;
 
     // Reporte de faltantes (SEMANA EN CURSO): a nivel insumo (componente) + producto.
-    // Cuando hay varias líneas para la misma combinación, se toma la del saldo mínimo
-    // (DISTINCT ON + ORDER BY saldo) y se trae bultos_afectados y faltante_puntual de esa misma fila.
+    // Trae todas las filas, sin deduplicar por combinación.
     const sqlReporte = `
-      SELECT DISTINCT ON (rubro, cod_corto_comp, descripcion_comp, cod_corto_ppal, descripcion_ppal, planta)
-             rubro,
+      SELECT rubro,
              cod_corto_comp, descripcion_comp,
              cod_corto_ppal, descripcion_ppal,
              planta,
@@ -342,7 +340,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
         AND rubro = ANY($4::text[])
         AND dia >= $5::date
         AND dia <= $6::date
-      ORDER BY rubro, cod_corto_comp, descripcion_comp, cod_corto_ppal, descripcion_ppal, planta, saldo ASC`;
+      ORDER BY rubro, cod_corto_comp, descripcion_comp, cod_corto_ppal, descripcion_ppal, planta`;
 
     const runResumen = (ini, fin) =>
       pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
