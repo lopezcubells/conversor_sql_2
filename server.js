@@ -354,8 +354,8 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
           d.descripcion_ppal,
           d.rubro,
           CASE
-            WHEN d.faltante_puntual > 0 THEN 1
-            WHEN d.faltante_puntual < 0 THEN -1
+            WHEN d.saldo > 0 THEN 1
+            WHEN d.saldo < 0 THEN -1
             ELSE 0
           END AS estado
         FROM datos d
