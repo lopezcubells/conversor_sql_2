@@ -360,6 +360,9 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
           END AS estado
         FROM datos d
         WHERE d.rubro IS NOT NULL
+          AND d.rubro = ANY($4::text[])
+          AND d.dia >= $5::date
+          AND d.dia <= $6::date
       )
       SELECT
         e.dia              AS fecha,
@@ -392,7 +395,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       runDetalle(sig1_inicio,   sig1_final),
       runDetalle(sig2_inicio,   sig2_final),
       pgPool.query(sqlReporte, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final]),
-      pgPool.query(sqlTablero, [cob_fe_inicio, cob_fe_final, cob_hora]),
+      pgPool.query(sqlTablero, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final]),
     ]);
 
     res.json({
