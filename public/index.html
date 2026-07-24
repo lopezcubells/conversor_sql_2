@@ -2879,7 +2879,7 @@
       insumo:   nsConcat(r.cod_corto_comp, r.descripcion_comp),
       producto: nsConcat(r.cod_corto_ppal, r.descripcion_ppal),
       planta:   r.planta ?? "",
-      cantidad: r.saldo,
+      cantidad: r.faltante_puntual,
       bultos:   Math.abs(parseFloat(r.bultos_afectados) || 0),
     }));
   }

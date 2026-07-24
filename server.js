@@ -327,7 +327,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
 
     // Reporte de faltantes (SEMANA EN CURSO): a nivel insumo (componente) + producto.
     // Cuando hay varias líneas para la misma combinación, se toma la del saldo mínimo
-    // (DISTINCT ON + ORDER BY saldo) y se trae bultos_afectados de esa misma fila.
+    // (DISTINCT ON + ORDER BY saldo) y se trae bultos_afectados y faltante_puntual de esa misma fila.
     const sqlReporte = `
       SELECT DISTINCT ON (rubro, cod_corto_comp, descripcion_comp, cod_corto_ppal, descripcion_ppal, planta)
              rubro,
@@ -335,6 +335,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
              cod_corto_ppal, descripcion_ppal,
              planta,
              saldo,
+             faltante_puntual,
              bultos_afectados
       FROM indicador_cobertura($1::date, $2::date, $3::time)
       WHERE evaluacion = 'no cubre'
