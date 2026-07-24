@@ -971,6 +971,14 @@
 
   </div>
 
+  <!-- BLOQUE 2c: Tablero de faltantes por producto/día/rubro -->
+  <div class="card">
+    <div class="card-title">Tablero de faltantes por producto</div>
+    <div class="table-wrap" id="ns-tablero-wrap">
+      <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el tablero</div>
+    </div>
+  </div>
+
   <!-- BLOQUE 3: Tabla -->
   <div class="card">
     <div class="card-title">Reporte de faltantes</div>
@@ -3312,6 +3320,71 @@
     return url;
   }
 
+  // ── Tablero de faltantes por producto/día/rubro (pivot) ──
+
+  // estado: 1 = falta ese insumo, 0 = no falta / no aplica, -1 = sobra
+  const NS_TABLERO_ESTADO_STYLE = {
+    "1":  { bg: "#1a4731", fg: "#6ee7a8" },
+    "0":  { bg: "#4a1515", fg: "#fca5a5" },
+    "-1": { bg: "#4a3a15", fg: "#fcd34d" },
+  };
+
+  function nsRenderTablero(rows) {
+    const wrap = document.getElementById("ns-tablero-wrap");
+    if (!rows || !rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin datos para el tablero</div>`;
+      return;
+    }
+
+    // Columnas: rubros distintos presentes en los datos, orden alfabético
+    const rubros = [...new Set(rows.map(r => r.rubro).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+
+    // Filas: combinaciones (fecha, producto), agrupadas por fecha en orden de aparición
+    const fechasMap = new Map();  // fecha -> [productos en orden]
+    const estadoMap = new Map();  // "fecha||producto||rubro" -> estado
+    rows.forEach(r => {
+      const fecha    = String(r.fecha).slice(0, 10);
+      const producto = r.producto ?? "";
+      if (!fechasMap.has(fecha)) fechasMap.set(fecha, []);
+      const productos = fechasMap.get(fecha);
+      if (!productos.includes(producto)) productos.push(producto);
+      estadoMap.set(`${fecha}||${producto}||${r.rubro}`, r.estado);
+    });
+    const fechas = [...fechasMap.keys()].sort();
+
+    function celda(estado) {
+      const s = NS_TABLERO_ESTADO_STYLE[String(estado ?? 0)] || NS_TABLERO_ESTADO_STYLE["0"];
+      return `<td style="text-align:center;background:${s.bg};color:${s.fg};font-weight:700;padding:6px 4px;border-bottom:2px solid var(--bg)">${estado ?? 0}</td>`;
+    }
+
+    const filasHtml = [];
+    fechas.forEach(fecha => {
+      const productos = fechasMap.get(fecha);
+      productos.forEach((producto, i) => {
+        const celdas = rubros.map(r => celda(estadoMap.get(`${fecha}||${producto}||${r}`) ?? 0)).join("");
+        filasHtml.push(`<tr>
+          ${i === 0 ? `<td rowspan="${productos.length}" style="font-weight:700;vertical-align:top;padding:8px 10px;border-right:1px solid var(--border);white-space:nowrap">${nsFmtFechaDMY(fecha)}</td>` : ""}
+          <td style="padding:6px 10px;white-space:nowrap">${nsEsc(producto)}</td>
+          ${celdas}
+        </tr>`);
+      });
+    });
+
+    const headRubros = rubros.map(r =>
+      `<th style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;padding:6px 4px;font-size:11px;color:var(--muted);text-align:left;height:150px">${nsEsc(r)}</th>`
+    ).join("");
+
+    wrap.innerHTML = `
+      <table style="border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Fecha</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Producto</th>
+          ${headRubros}
+        </tr></thead>
+        <tbody>${filasHtml.join("")}</tbody>
+      </table>`;
+  }
+
   // Actualización en vivo del gráfico al escribir la causa estándar en el tablero
   document.getElementById("ns-reporte-wrap").addEventListener("input", e => {
     if (e.target && e.target.classList && e.target.classList.contains("ns-rep-causa")) nsRenderCausaBar();
@@ -3522,6 +3595,7 @@
       nsRenderDonuts(data, reporteRows);
       nsRenderCausaBar();
       nsRenderRubroBar();
+      nsRenderTablero(data.tablero);
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");

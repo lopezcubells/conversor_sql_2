@@ -342,6 +342,38 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
         AND dia <= $6::date
       ORDER BY rubro, cod_corto_comp, descripcion_comp, cod_corto_ppal, descripcion_ppal, planta`;
 
+    // Tablero de faltantes por día/producto/rubro: estado 1 (falta), -1 (sobra), 0 (no falta / no aplica)
+    const sqlTablero = `
+      WITH datos AS (
+        SELECT *
+        FROM indicador_cobertura($1::date, $2::date, $3::time)
+      ),
+      estado_calc AS (
+        SELECT
+          d.dia,
+          d.descripcion_ppal,
+          d.rubro,
+          CASE
+            WHEN d.faltante_puntual > 0 THEN 1
+            WHEN d.faltante_puntual < 0 THEN -1
+            ELSE 0
+          END AS estado
+        FROM datos d
+        WHERE d.rubro IS NOT NULL
+      )
+      SELECT
+        e.dia              AS fecha,
+        e.descripcion_ppal AS producto,
+        e.rubro,
+        CASE
+          WHEN bool_or(e.estado = -1) THEN -1
+          WHEN bool_or(e.estado = 1)  THEN 1
+          ELSE 0
+        END AS estado
+      FROM estado_calc e
+      GROUP BY e.dia, e.descripcion_ppal, e.rubro
+      ORDER BY e.dia, e.descripcion_ppal, e.rubro`;
+
     const runResumen = (ini, fin) =>
       pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
     const runDetalle = (ini, fin) =>
@@ -351,6 +383,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       actualR, sig1R, sig2R,
       actualD, sig1D, sig2D,
       reporte,
+      tablero,
     ] = await Promise.all([
       runResumen(actual_inicio, actual_final),
       runResumen(sig1_inicio,   sig1_final),
@@ -359,6 +392,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       runDetalle(sig1_inicio,   sig1_final),
       runDetalle(sig2_inicio,   sig2_final),
       pgPool.query(sqlReporte, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final]),
+      pgPool.query(sqlTablero, [cob_fe_inicio, cob_fe_final, cob_hora]),
     ]);
 
     res.json({
@@ -366,6 +400,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       sig1:   { resumen: sig1R.rows,   detalle: sig1D.rows },
       sig2:   { resumen: sig2R.rows,   detalle: sig2D.rows },
       reporte: reporte.rows,
+      tablero: tablero.rows,
     });
   } catch (e) {
     console.error("PG nivel-servicio error:", e.message);
