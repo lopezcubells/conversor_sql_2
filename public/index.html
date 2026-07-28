@@ -877,9 +877,9 @@
 
     <div class="card" style="flex:1;min-width:320px;margin-bottom:0;display:flex;flex-direction:column">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Cantidad recibida por proveedor</div>
-      <div id="rec-pie-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;min-height:160px">Seleccioná un rubro</div>
-      <div id="rec-pie-box" style="position:relative;height:200px;display:none">
-        <canvas id="rec-pie"></canvas>
+      <div id="rec-prov-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;min-height:160px">Seleccioná un rubro</div>
+      <div id="rec-prov-box" style="position:relative;height:200px;display:none">
+        <canvas id="rec-prov"></canvas>
       </div>
     </div>
 
@@ -2334,7 +2334,7 @@
   let recPage         = 0;
   let recLoaded       = false;
   let recBarChart     = null;
-  let recPieChart     = null;
+  let recProvChart    = null;
   const REC_PAGE_SIZE = 50;
 
   // Únicos rubros que se muestran en la pestaña; el resto se descarta al cargar.
@@ -2483,23 +2483,24 @@
       totalEl.textContent = "—";
       subEl.textContent = "Seleccioná un rubro";
       recRenderChart(null);
-      recRenderPie(null);
+      recRenderProv(null);
       return;
     }
     const suma = recFilteredData.reduce((acc, r) => acc + (parseFloat(r.cantidad_recibida) || 0), 0);
     totalEl.textContent = Math.round(suma).toLocaleString("es-AR");
     subEl.textContent = rubro;
     recRenderChart(rubro);
-    recRenderPie(rubro);
+    recRenderProv(rubro);
   }
 
-  // Torta: cantidad recibida por proveedor. Igual que la tarjeta y el gráfico de barras,
-  // solo se dibuja cuando hay un rubro concreto seleccionado (con "Todos" no muestra nada).
-  function recRenderPie(rubro) {
-    const box   = document.getElementById("rec-pie-box");
-    const empty = document.getElementById("rec-pie-empty");
+  // Barras horizontales: cantidad recibida por proveedor, la más larga arriba.
+  // Igual que la tarjeta de total y el gráfico por mes, solo se dibuja cuando hay
+  // un rubro concreto seleccionado (con "Todos" no muestra nada).
+  function recRenderProv(rubro) {
+    const box   = document.getElementById("rec-prov-box");
+    const empty = document.getElementById("rec-prov-empty");
     if (!rubro) {
-      if (recPieChart) { recPieChart.destroy(); recPieChart = null; }
+      if (recProvChart) { recProvChart.destroy(); recProvChart = null; }
       box.style.display = "none";
       empty.style.display = "flex";
       empty.textContent = "Seleccioná un rubro";
@@ -2512,10 +2513,11 @@
       const prov = (r.proveedor ?? "").toString().trim() || "(sin proveedor)";
       porProv.set(prov, (porProv.get(prov) || 0) + (parseFloat(r.cantidad_recibida) || 0));
     });
+    // Descendente: Chart.js dibuja el primer label arriba, así la barra más larga queda arriba
     const entries = [...porProv.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
 
     if (!entries.length) {
-      if (recPieChart) { recPieChart.destroy(); recPieChart = null; }
+      if (recProvChart) { recProvChart.destroy(); recProvChart = null; }
       box.style.display = "none";
       empty.style.display = "flex";
       empty.textContent = "Sin datos de proveedor";
@@ -2527,42 +2529,41 @@
 
     const labels = entries.map(([k]) => k);
     const data   = entries.map(([, v]) => Math.round(v));
+    const maxV   = Math.max(...data, 1);
 
-    const ctx = document.getElementById("rec-pie").getContext("2d");
-    if (recPieChart) recPieChart.destroy();
-    recPieChart = new Chart(ctx, {
-      type: "pie",
+    const ctx = document.getElementById("rec-prov").getContext("2d");
+    if (recProvChart) recProvChart.destroy();
+    recProvChart = new Chart(ctx, {
+      type: "bar",
       data: {
         labels,
         datasets: [{
           data,
-          backgroundColor: labels.map((_, i) => RUBRO_PALETTE[i % RUBRO_PALETTE.length]),
-          borderColor: "#ffffff",
+          backgroundColor: "rgba(127,29,29,.85)",
+          borderColor: "#7f1d1d",
           borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
         }],
       },
       options: {
+        indexAxis: "y",
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: 6 },
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: c => ` ${c.label}: ${Math.round(c.raw).toLocaleString("es-AR")}` } },
+          tooltip: { enabled: false },
           datalabels: {
+            anchor: "end", align: "end", offset: 6,
             color: "#1c1f2b",
-            backgroundColor: "rgba(255,255,255,.78)",
-            borderRadius: 3,
-            padding: { top: 2, bottom: 2, left: 4, right: 4 },
-            font: { weight: "bold", size: 10 },
-            textAlign: "center",
-            // Solo proveedor + cantidad. Las porciones muy chicas quedan sin etiqueta
-            // para que no se superpongan (el valor sigue visible en el tooltip).
-            formatter: (v, c) => {
-              const total = c.dataset.data.reduce((a, b) => a + b, 0);
-              if (!total || v / total < 0.04) return null;
-              return [c.chart.data.labels[c.dataIndex], Math.round(v).toLocaleString("es-AR")];
-            },
+            font: { weight: "bold", size: 11 },
+            formatter: (v, c) => `${c.chart.data.labels[c.dataIndex]}: ${Math.round(v).toLocaleString("es-AR")}`,
           },
+        },
+        scales: {
+          // Minimalista: sin ejes ni grilla, el dato vive en la etiqueta
+          x: { suggestedMax: maxV * 1.45, display: false, grid: { display: false } },
+          y: { display: false, grid: { display: false } },
         },
       },
       plugins: [ChartDataLabels],
@@ -2626,10 +2627,8 @@
         },
         scales: {
           x: { ticks: { color: "#5c6172" }, grid: { display: false } },
-          y: {
-            ticks: { color: "#5c6172", callback: v => Math.round(v).toLocaleString("es-AR") },
-            grid: { color: "#d9dce3" },
-          },
+          // Sin números en el eje vertical: el valor ya va en la etiqueta de cada barra
+          y: { ticks: { display: false }, grid: { color: "#d9dce3" } },
         },
       },
       plugins: [ChartDataLabels],
