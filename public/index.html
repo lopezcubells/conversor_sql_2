@@ -955,7 +955,7 @@
       </div>
     </div>
 
-    <!-- BLOQUE 2b: Bultos afectados por causa estándar y por rubro -->
+    <!-- BLOQUE 3: Bultos afectados por causa estándar y por rubro -->
     <div class="card">
       <div style="display:flex;gap:24px;flex-wrap:wrap">
         <div style="flex:1;min-width:320px">
@@ -971,7 +971,7 @@
 
   </div>
 
-  <!-- BLOQUE 2c: Tablero de faltantes por producto/día/rubro -->
+  <!-- BLOQUE 4: Tablero de faltantes por producto/día/rubro -->
   <div class="card">
     <div class="card-title">Tablero de faltantes por producto</div>
     <div class="table-wrap" id="ns-tablero-wrap">
@@ -979,7 +979,7 @@
     </div>
   </div>
 
-  <!-- BLOQUE 3: Tabla -->
+  <!-- BLOQUE 5: Reporte de faltantes -->
   <div class="card">
     <div class="card-title">Reporte de faltantes</div>
     <div class="table-wrap" id="ns-reporte-wrap">
@@ -987,7 +987,7 @@
     </div>
   </div>
 
-  <!-- Parámetros (2do apartado, colapsable, inicia oculto) -->
+  <!-- BLOQUE 6: Parámetros (colapsable, inicia oculto) -->
   <div class="card" style="margin-top:40px">
     <div class="collapsible-header collapsed" id="ns-params-toggle">
       <div class="card-title" style="margin-bottom:0">Parámetros</div>
@@ -1028,34 +1028,6 @@
       </div>
 
       <div style="margin-top:22px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Semana siguiente (1ra mitad)</div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label style="font-size:11px;color:var(--muted)">Inicio</label>
-            <input type="date" class="search-input" id="ns-sig1-inicio" style="width:160px;color-scheme:dark" />
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label style="font-size:11px;color:var(--muted)">Final</label>
-            <input type="date" class="search-input" id="ns-sig1-final" style="width:160px;color-scheme:dark" />
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top:22px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Semana siguiente (2da mitad)</div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label style="font-size:11px;color:var(--muted)">Inicio</label>
-            <input type="date" class="search-input" id="ns-sig2-inicio" style="width:160px;color-scheme:dark" />
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label style="font-size:11px;color:var(--muted)">Final</label>
-            <input type="date" class="search-input" id="ns-sig2-final" style="width:160px;color-scheme:dark" />
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top:22px">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Rubros</div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn btn-outline" onclick="nsSelectAllRubros()" style="font-size:12px">Todos</button>
@@ -1069,45 +1041,6 @@
         <span id="ns-params-estado" style="margin-left:14px;font-size:13px;color:var(--muted)"></span>
       </div>
 
-    </div>
-  </div>
-
-  <!-- NS Semana en curso (3er apartado) -->
-  <div class="section-heading" style="margin-top:40px"><h2>NS Semana en curso</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-actual-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-actual-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-  </div>
-
-  <!-- NS Semana siguiente 1ra mitad (4to apartado) -->
-  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (1ra mitad)</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-sig1-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-sig1-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-  </div>
-
-  <!-- NS Semana siguiente 2da mitad (5to apartado) -->
-  <div class="section-heading" style="margin-top:24px"><h2>NS Semana siguiente (2da mitad)</h2></div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta CM</div>
-      <div id="ns-sig2-cm"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
-    </div>
-    <div class="card" style="flex:1;min-width:320px">
-      <div class="card-title">Planta Toro</div>
-      <div id="ns-sig2-toro"><div class="empty"><div class="big">📊</div>Sin datos</div></div>
     </div>
   </div>
 
@@ -2712,10 +2645,6 @@
     cob_fe_final:  "ns-cob-fe-final",
     actual_inicio: "ns-actual-inicio",
     actual_final:  "ns-actual-final",
-    sig1_inicio:   "ns-sig1-inicio",
-    sig1_final:    "ns-sig1-final",
-    sig2_inicio:   "ns-sig2-inicio",
-    sig2_final:    "ns-sig2-final",
   };
   const NS_RUBROS_LISTA = [
     "Bandeja","BIB Bolsa","BIB Envase","BIB Manijas","BOTELLA Vidrio",
@@ -2798,81 +2727,6 @@
     parent.dataset.open = abierto ? "0" : "1";
     parent.querySelector(".ns-arrow").textContent = abierto ? "▶" : "▼";
     document.querySelectorAll(`.${gid}`).forEach(tr => tr.style.display = abierto ? "none" : "");
-  }
-
-  // Renderiza tarjeta de cobertura + tabla dinámica de faltantes de un bloque/planta
-  function nsRenderBloque(elId, resumen, detalle, planta) {
-    const el = document.getElementById(elId);
-    const fila = (resumen || []).find(r => (r.planta || "").toUpperCase() === planta);
-
-    // ── Tarjeta % ──
-    let cardHtml;
-    if (!fila) {
-      cardHtml = `<div class="empty" style="padding:24px 0"><div class="big">—</div>Sin datos</div>`;
-    } else {
-      const cobertura = (fila.cobertura == null) ? "0%" : fila.cobertura;
-      cardHtml = `
-        <div style="text-align:center;padding:14px 8px 6px">
-          <div style="font-size:44px;font-weight:800;font-family:var(--mono);color:#34c97e;line-height:1">${cobertura}</div>
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px">Cobertura</div>
-        </div>
-        <div style="display:flex;justify-content:space-around;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px">
-          <div style="text-align:center"><div style="color:var(--muted)">Programado</div><div style="font-family:var(--mono);font-weight:600;margin-top:2px">${nsFmt(fila.total_programado)}</div></div>
-          <div style="text-align:center"><div style="color:var(--muted)">Cubre</div><div style="font-family:var(--mono);font-weight:600;color:#34c97e;margin-top:2px">${nsFmt(fila.cubre)}</div></div>
-          <div style="text-align:center"><div style="color:var(--muted)">No cubre</div><div style="font-family:var(--mono);font-weight:600;color:#f76060;margin-top:2px">${nsFmt(fila.no_cubre)}</div></div>
-        </div>`;
-    }
-
-    // ── Tabla dinámica de faltantes ──
-    const filasP = (detalle || []).filter(r => (r.planta || "").toUpperCase() === planta);
-    let tablaHtml;
-    if (!filasP.length) {
-      tablaHtml = `<div style="text-align:center;color:var(--muted);font-size:12px;padding:16px 0">✓ Sin faltantes</div>`;
-    } else {
-      // Agrupar por rubro
-      const grupos = {};
-      filasP.forEach(r => {
-        const k = r.rubro ?? "(sin rubro)";
-        (grupos[k] = grupos[k] || []).push(r);
-      });
-      const gidBase = elId.replace(/[^a-z0-9]/gi, "");
-      let gi = 0;
-      const bloques = Object.entries(grupos).map(([rubro, items]) => {
-        const gid = `${gidBase}g${gi++}`;
-        const sumaMinSaldo = items.reduce((a, r) => a + (parseFloat(r.saldo) || 0), 0);
-        const hijos = items.map(r => `
-          <tr class="${gid}" style="display:none">
-            <td style="padding:6px 10px 6px 28px;color:var(--muted)">${r.descripcion_ppal ?? ""}</td>
-            <td style="padding:6px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(r.saldo)}</td>
-          </tr>`).join("");
-        return `
-          <tr id="${gid}-hdr" data-open="0" onclick="nsToggleGroup('${gid}')" style="cursor:pointer;border-top:1px solid var(--border)">
-            <td style="padding:8px 10px;font-weight:600"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${rubro}</td>
-            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(sumaMinSaldo)}</td>
-          </tr>${hijos}`;
-      }).join("");
-      tablaHtml = `
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Detalle de faltantes</div>
-          <div class="table-wrap">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead><tr>
-                <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:11px">Rubro · Producto</th>
-                <th style="text-align:right;padding:6px 10px;color:var(--muted);font-size:11px">Saldo</th>
-              </tr></thead>
-              <tbody>${bloques}</tbody>
-            </table>
-          </div>
-        </div>`;
-    }
-
-    el.innerHTML = cardHtml + tablaHtml;
-  }
-
-  function nsSetLoading() {
-    ["ns-actual-cm","ns-actual-toro","ns-sig1-cm","ns-sig1-toro","ns-sig2-cm","ns-sig2-toro"].forEach(id => {
-      document.getElementById(id).innerHTML = `<div class="empty" style="padding:24px 0"><div class="big">⏳</div>Calculando…</div>`;
-    });
   }
 
   // ── Reporte de faltantes ──
@@ -3011,13 +2865,7 @@
     }
   };
 
-  function nsCoberturaPct(resumen, planta) {
-    const fila = (resumen || []).find(r => (r.planta || "").toUpperCase() === planta);
-    if (!fila || fila.cobertura == null) return 0;
-    return parseFloat(String(fila.cobertura).replace("%", "").replace(",", ".")) || 0;
-  }
-
-  // Bultos programados de una planta = total_programado de su fila (igual que NS Semana en curso)
+  // Bultos programados de una planta = total_programado de su fila del resumen de cobertura
   function nsBultosProgramados(resumen, planta) {
     const fila = (resumen || []).find(r => (r.planta || "").toUpperCase() === planta);
     return fila ? (parseFloat(fila.total_programado) || 0) : 0;
@@ -3598,7 +3446,6 @@
     const estado = document.getElementById("ns-params-estado");
     btn1.disabled = true; btn2.disabled = true;
     estado.textContent = "Consultando PostgreSQL…";
-    nsSetLoading();
 
     try {
       const res = await fetch(`${API}/api/pg/nivel-servicio`, {
@@ -3608,13 +3455,6 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error desconocido");
-
-      nsRenderBloque("ns-actual-cm",   data.actual.resumen, data.actual.detalle, "CM");
-      nsRenderBloque("ns-actual-toro", data.actual.resumen, data.actual.detalle, "TORO");
-      nsRenderBloque("ns-sig1-cm",     data.sig1.resumen,   data.sig1.detalle,   "CM");
-      nsRenderBloque("ns-sig1-toro",   data.sig1.resumen,   data.sig1.detalle,   "TORO");
-      nsRenderBloque("ns-sig2-cm",     data.sig2.resumen,   data.sig2.detalle,   "CM");
-      nsRenderBloque("ns-sig2-toro",   data.sig2.resumen,   data.sig2.detalle,   "TORO");
 
       const reporteRows = nsBuildReporteRows(data);
       nsRenderReporte(reporteRows);

@@ -277,8 +277,6 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
     const {
       cob_fe_inicio, cob_hora, cob_fe_final, rubros,
       actual_inicio, actual_final,
-      sig1_inicio, sig1_final,
-      sig2_inicio, sig2_final,
     } = req.body || {};
 
     if (!cob_fe_inicio || !cob_hora || !cob_fe_final)
@@ -286,7 +284,7 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
     if (!Array.isArray(rubros) || !rubros.length)
       return res.status(400).json({ error: "Seleccioná al menos un rubro." });
 
-    // 1 consulta por rango de semana → devuelve CM y TORO juntos (GROUP BY planta)
+    // Resumen de cobertura de la semana en curso → devuelve CM y TORO juntos (GROUP BY planta)
     const sql = `
       WITH detalle AS (
         SELECT *
@@ -313,17 +311,6 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       FROM lineas l
       GROUP BY l.planta
       ORDER BY l.planta`;
-
-    // Detalle de faltantes (evaluacion = 'no cubre'), agrupado por planta + producto + rubro
-    const sqlDetalle = `
-      SELECT planta, descripcion_ppal, rubro, MIN(saldo) AS saldo
-      FROM indicador_cobertura($1::date, $2::date, $3::time)
-      WHERE evaluacion = 'no cubre'
-        AND rubro = ANY($4::text[])
-        AND dia >= $5::date
-        AND dia <= $6::date
-      GROUP BY planta, descripcion_ppal, rubro
-      ORDER BY planta, descripcion_ppal, rubro`;
 
     // Reporte de faltantes (SEMANA EN CURSO): a nivel insumo (componente) + producto.
     // Trae todas las filas, sin deduplicar por combinación.
@@ -377,31 +364,16 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       GROUP BY e.dia, e.descripcion_ppal, e.rubro
       ORDER BY e.dia, e.descripcion_ppal, e.rubro`;
 
-    const runResumen = (ini, fin) =>
-      pgPool.query(sql, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
-    const runDetalle = (ini, fin) =>
-      pgPool.query(sqlDetalle, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, ini, fin]);
+    const args = [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final];
 
-    const [
-      actualR, sig1R, sig2R,
-      actualD, sig1D, sig2D,
-      reporte,
-      tablero,
-    ] = await Promise.all([
-      runResumen(actual_inicio, actual_final),
-      runResumen(sig1_inicio,   sig1_final),
-      runResumen(sig2_inicio,   sig2_final),
-      runDetalle(actual_inicio, actual_final),
-      runDetalle(sig1_inicio,   sig1_final),
-      runDetalle(sig2_inicio,   sig2_final),
-      pgPool.query(sqlReporte, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final]),
-      pgPool.query(sqlTablero, [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final]),
+    const [actualR, reporte, tablero] = await Promise.all([
+      pgPool.query(sql,        args),
+      pgPool.query(sqlReporte, args),
+      pgPool.query(sqlTablero, args),
     ]);
 
     res.json({
-      actual: { resumen: actualR.rows, detalle: actualD.rows },
-      sig1:   { resumen: sig1R.rows,   detalle: sig1D.rows },
-      sig2:   { resumen: sig2R.rows,   detalle: sig2D.rows },
+      actual:  { resumen: actualR.rows },
       reporte: reporte.rows,
       tablero: tablero.rows,
     });
