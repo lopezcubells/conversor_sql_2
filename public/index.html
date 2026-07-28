@@ -864,11 +864,6 @@
           </div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-          <button class="btn btn-primary" id="rec-btn-actualizar">🔄 Actualizar</button>
-          <span id="rec-ultima-act" style="font-size:11px;color:var(--muted)"></span>
-        </div>
-
       </div>
     </div>
 
@@ -898,7 +893,13 @@
   <div style="margin-bottom:24px"></div>
 
   <!-- 2. Tabla -->
-  <div class="section-heading"><h2>Recepciones</h2></div>
+  <div class="section-heading" style="align-items:center">
+    <h2>Recepciones</h2>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="rec-ultima-act" style="font-size:11px;color:var(--muted)"></span>
+      <button class="btn btn-primary" id="rec-btn-actualizar">🔄 Actualizar</button>
+    </div>
+  </div>
 
   <div class="search-row" style="margin-bottom:8px">
     <input class="search-input" id="rec-q-cod" placeholder="Filtrar COD…" style="max-width:180px" oninput="recFiltrar()" />
