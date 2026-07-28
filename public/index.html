@@ -2318,7 +2318,7 @@
 
   // ── Recepciones ──
 
-  let recAllData      = [];   // todas las filas de la view
+  let recAllData      = [];   // filas de la view, ya acotadas a REC_RUBROS_PERMITIDOS
   let recFilteredData = [];
   let recFechas       = [];   // fechas distintas ordenadas (para los sliders)
   let recSort         = { col: "fecha_recepcion", dir: "desc" };
@@ -2326,6 +2326,19 @@
   let recLoaded       = false;
   let recBarChart     = null;
   const REC_PAGE_SIZE = 50;
+
+  // Únicos rubros que se muestran en la pestaña; el resto se descarta al cargar.
+  // La comparación ignora tildes y mayúsculas para no depender de cómo estén
+  // escritos en la base (p. ej. "Rotulo" vs "Rótulo").
+  const REC_RUBROS_PERMITIDOS = [
+    "Bandeja", "BIB Bolsa", "BIB Envase", "BIB Manijas", "BOTELLA Vidrio",
+    "Cajas", "Cápsulas", "ETIQUETA CT", "ETIQUETA FR", "ETIQUETA Medallas y Stickers",
+    "ETIQUETA Rotulo", "FILM Termocontraible", "Pallets", "Plancha", "Separador",
+    "Stretch", "Tapa", "Tapón", "TETRA Envases",
+  ];
+  const recNormRubro = s =>
+    String(s ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+  const REC_RUBROS_SET = new Set(REC_RUBROS_PERMITIDOS.map(recNormRubro));
 
   function recFmtFecha(str) {
     if (!str) return "";
@@ -2657,7 +2670,7 @@
       const res = await fetch(`${API}/api/pg/recepciones`);
       if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
       const { rows } = await res.json();
-      recAllData = rows;
+      recAllData = rows.filter(r => REC_RUBROS_SET.has(recNormRubro(r.rubro)));
       recBuildFilters();
       if (preservarFiltros && !rangoCompleto && recFechas.length) recRestaurarRango(fMinVal, fMaxVal);
       recFiltrar();
