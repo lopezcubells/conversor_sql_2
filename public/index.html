@@ -2553,17 +2553,33 @@
         plugins: {
           legend: { display: false },
           tooltip: { enabled: false },
+          // Solo el número, en celeste, para distinguirlo del nombre del proveedor
           datalabels: {
             anchor: "end", align: "end", offset: 6,
-            color: "#1c1f2b",
-            font: { weight: "bold", size: 11 },
-            formatter: (v, c) => `${c.chart.data.labels[c.dataIndex]}: ${Math.round(v).toLocaleString("es-AR")}`,
+            color: "#0ea5e9",
+            font: { weight: "bold", size: 12 },
+            formatter: v => Math.round(v).toLocaleString("es-AR"),
           },
         },
         scales: {
-          // Minimalista: sin ejes ni grilla, el dato vive en la etiqueta
-          x: { suggestedMax: maxV * 1.45, display: false, grid: { display: false } },
-          y: { display: false, grid: { display: false } },
+          // Sin eje horizontal ni grilla; solo se reserva lugar para el número
+          x: { suggestedMax: maxV * 1.2, display: false, grid: { display: false } },
+          // El proveedor va como etiqueta del eje: Chart.js le reserva el ancho
+          // que necesite, así el texto nunca queda cortado
+          y: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: {
+              color: "#1c1f2b",
+              font: { weight: "bold", size: 11 },
+              autoSkip: false,
+              // Corta nombres desmedidos para que no se coman la tarjeta entera
+              callback(i) {
+                const t = String(this.getLabelForValue(i) ?? "");
+                return t.length > 30 ? t.slice(0, 29) + "…" : t;
+              },
+            },
+          },
         },
       },
       plugins: [ChartDataLabels],
