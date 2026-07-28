@@ -864,6 +864,11 @@
           </div>
         </div>
 
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+          <button class="btn btn-primary" id="rec-btn-actualizar">🔄 Actualizar</button>
+          <span id="rec-ultima-act" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+
       </div>
     </div>
 
@@ -2615,24 +2620,69 @@
     recRender();
   }
 
-  async function initRecepciones() {
-    if (recLoaded) return;
+  // Reposiciona los sliders sobre las fechas más cercanas al rango que tenía el usuario
+  // (los índices cambian al recargar, por eso se guarda el valor de fecha y no el índice).
+  function recRestaurarRango(fMinVal, fMaxVal) {
+    const minEl = document.getElementById("rec-fecha-min");
+    const maxEl = document.getElementById("rec-fecha-max");
+    minEl.value = recNearestFechaIdx(fMinVal);
+    let iMax = recFechas.length - 1;
+    for (let i = recFechas.length - 1; i >= 0; i--) {
+      if (recFechas[i] <= fMaxVal) { iMax = i; break; }
+    }
+    maxEl.value = iMax;
+    if (parseInt(maxEl.value) < parseInt(minEl.value)) maxEl.value = minEl.value;
+    recUpdateSliderLabels();
+  }
+
+  // Carga (o recarga) las recepciones desde PostgreSQL.
+  // Con preservarFiltros, mantiene el rango de fechas elegido por el usuario; si tenía el
+  // rango completo lo extiende para que entren las recepciones nuevas.
+  async function recCargar(preservarFiltros = false) {
     const status = document.getElementById("rec-status");
+    const btn    = document.getElementById("rec-btn-actualizar");
     status.textContent = "Consultando PostgreSQL…";
+    btn.disabled = true;
+
+    let fMinVal = null, fMaxVal = null, rangoCompleto = true;
+    if (preservarFiltros && recFechas.length) {
+      const iMin = parseInt(document.getElementById("rec-fecha-min").value);
+      const iMax = parseInt(document.getElementById("rec-fecha-max").value);
+      rangoCompleto = (iMin === 0 && iMax === recFechas.length - 1);
+      fMinVal = recFechas[iMin];
+      fMaxVal = recFechas[iMax];
+    }
+
     try {
       const res = await fetch(`${API}/api/pg/recepciones`);
       if (!res.ok) throw new Error((await res.json()).error || "Sin conexión");
       const { rows } = await res.json();
       recAllData = rows;
       recBuildFilters();
+      if (preservarFiltros && !rangoCompleto && recFechas.length) recRestaurarRango(fMinVal, fMaxVal);
       recFiltrar();
       status.textContent = "";
+      document.getElementById("rec-ultima-act").textContent =
+        `Actualizado ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`;
       recLoaded = true;
+      return true;
     } catch (e) {
       status.textContent = "⚠ " + e.message;
       document.getElementById("rec-table-wrap").innerHTML =
         `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
+      return false;
+    } finally {
+      btn.disabled = false;
     }
+  }
+
+  document.getElementById("rec-btn-actualizar").addEventListener("click", async () => {
+    if (await recCargar(true)) toast("✅ Recepciones actualizadas", "ok");
+  });
+
+  function initRecepciones() {
+    if (recLoaded) return;
+    recCargar(false);
   }
 
   // ── Nivel de servicio ──
