@@ -880,6 +880,14 @@
       </div>
     </div>
 
+    <div class="card" style="flex:1;min-width:320px;margin-bottom:0;display:flex;flex-direction:column">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Cantidad recibida por proveedor</div>
+      <div id="rec-pie-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;min-height:160px">Seleccioná un rubro</div>
+      <div id="rec-pie-box" style="position:relative;height:200px;display:none">
+        <canvas id="rec-pie"></canvas>
+      </div>
+    </div>
+
     <div class="card" style="min-width:230px;margin-bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:6px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Total cantidad recibida</div>
       <div id="rec-total" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--accent2, #34c97e)">—</div>
@@ -2325,6 +2333,7 @@
   let recPage         = 0;
   let recLoaded       = false;
   let recBarChart     = null;
+  let recPieChart     = null;
   const REC_PAGE_SIZE = 50;
 
   // Únicos rubros que se muestran en la pestaña; el resto se descarta al cargar.
@@ -2473,12 +2482,90 @@
       totalEl.textContent = "—";
       subEl.textContent = "Seleccioná un rubro";
       recRenderChart(null);
+      recRenderPie(null);
       return;
     }
     const suma = recFilteredData.reduce((acc, r) => acc + (parseFloat(r.cantidad_recibida) || 0), 0);
     totalEl.textContent = Math.round(suma).toLocaleString("es-AR");
     subEl.textContent = rubro;
     recRenderChart(rubro);
+    recRenderPie(rubro);
+  }
+
+  // Torta: cantidad recibida por proveedor. Igual que la tarjeta y el gráfico de barras,
+  // solo se dibuja cuando hay un rubro concreto seleccionado (con "Todos" no muestra nada).
+  function recRenderPie(rubro) {
+    const box   = document.getElementById("rec-pie-box");
+    const empty = document.getElementById("rec-pie-empty");
+    if (!rubro) {
+      if (recPieChart) { recPieChart.destroy(); recPieChart = null; }
+      box.style.display = "none";
+      empty.style.display = "flex";
+      empty.textContent = "Seleccioná un rubro";
+      return;
+    }
+
+    // Sumar cantidad_recibida por proveedor sobre los datos ya filtrados
+    const porProv = new Map();
+    recFilteredData.forEach(r => {
+      const prov = (r.proveedor ?? "").toString().trim() || "(sin proveedor)";
+      porProv.set(prov, (porProv.get(prov) || 0) + (parseFloat(r.cantidad_recibida) || 0));
+    });
+    const entries = [...porProv.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+
+    if (!entries.length) {
+      if (recPieChart) { recPieChart.destroy(); recPieChart = null; }
+      box.style.display = "none";
+      empty.style.display = "flex";
+      empty.textContent = "Sin datos de proveedor";
+      return;
+    }
+
+    empty.style.display = "none";
+    box.style.display = "block";
+
+    const labels = entries.map(([k]) => k);
+    const data   = entries.map(([, v]) => Math.round(v));
+
+    const ctx = document.getElementById("rec-pie").getContext("2d");
+    if (recPieChart) recPieChart.destroy();
+    recPieChart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: labels.map((_, i) => RUBRO_PALETTE[i % RUBRO_PALETTE.length]),
+          borderColor: "#ffffff",
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: 6 },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.label}: ${Math.round(c.raw).toLocaleString("es-AR")}` } },
+          datalabels: {
+            color: "#1c1f2b",
+            backgroundColor: "rgba(255,255,255,.78)",
+            borderRadius: 3,
+            padding: { top: 2, bottom: 2, left: 4, right: 4 },
+            font: { weight: "bold", size: 10 },
+            textAlign: "center",
+            // Solo proveedor + cantidad. Las porciones muy chicas quedan sin etiqueta
+            // para que no se superpongan (el valor sigue visible en el tooltip).
+            formatter: (v, c) => {
+              const total = c.dataset.data.reduce((a, b) => a + b, 0);
+              if (!total || v / total < 0.04) return null;
+              return [c.chart.data.labels[c.dataIndex], Math.round(v).toLocaleString("es-AR")];
+            },
+          },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
   }
 
   // Gráfico de barras: cantidad recibida por mes de lo filtrado
@@ -2612,6 +2699,7 @@
         ${recThSort("Rubro",           "rubro")}
         ${recThSort("Unidad negocio",  "unidad_negocio")}
         ${recThSort("Observaciones",   "observaciones")}
+        ${recThSort("Proveedor",       "proveedor")}
         ${recThSort("Cant. recibida",  "cantidad_recibida")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
@@ -2621,6 +2709,7 @@
         <td>${r.rubro ?? ""}</td>
         <td>${r.unidad_negocio ?? ""}</td>
         <td>${r.observaciones ?? ""}</td>
+        <td>${r.proveedor ?? ""}</td>
         <td style="text-align:right">${r.cantidad_recibida != null ? fmtNum(r.cantidad_recibida) : ""}</td>
       </tr>`).join("")}</tbody>
     </table>`;
