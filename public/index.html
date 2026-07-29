@@ -178,6 +178,10 @@
     #ns-tablero-wrap.ns-tb-expandido { max-height: none; }
     /* Filas compactas: más filas visibles sin achicar la tipografía */
     #ns-tablero-wrap table { line-height: 1.25; }
+
+    /* Reporte de faltantes: los encabezados pueden usar dos líneas. Con anchos
+       fijos, el nowrap global les impondría un mínimo y forzaría scroll lateral. */
+    #ns-reporte-wrap th { white-space: normal; }
     #ns-tablero-wrap thead th {
       position: sticky;
       top: 0;
@@ -2963,6 +2967,14 @@
   // Un tablero por Rubro (con su propio título), y dentro de cada uno, agrupado por Insumo:
   // la fila de grupo suma Cantidad faltante y Bultos afectados, y lleva los 3 inputs de usuario
   // (asociados al grupo, no a cada línea interna).
+  // Mismo reparto de anchos en todas las tablas de rubro: con table-layout:fixed
+  // las columnas quedan alineadas entre sí en vez de dimensionarse por su contenido.
+  const NS_REP_COLGROUP = `<colgroup>
+    <col style="width:22%"><col style="width:20%"><col style="width:7%">
+    <col style="width:9%"><col style="width:9%"><col style="width:8%">
+    <col style="width:12.5%"><col style="width:12.5%">
+  </colgroup>`;
+
   function nsRenderReporte(rows) {
     nsReporteRows = rows || [];
     const wrap = document.getElementById("ns-reporte-wrap");
@@ -3010,21 +3022,22 @@
             <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(sumaCant)}</td>
             <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600">${nsFmt(sumaBul)}</td>
             <td style="padding:6px 8px" onclick="event.stopPropagation()">
-              <select class="search-input ns-rep-real" data-gid="${gid}" style="min-width:70px;padding:6px 8px;font-size:12px">
+              <select class="search-input ns-rep-real" data-gid="${gid}" style="width:100%;min-width:0;padding:6px 8px;font-size:12px">
                 <option value=""></option>
                 <option value="SI">SI</option>
                 <option value="NO">NO</option>
               </select>
             </td>
-            <td style="padding:6px 8px" onclick="event.stopPropagation()"><input type="text" class="search-input ns-rep-causa" data-gid="${gid}" style="min-width:160px;padding:6px 8px;font-size:12px" /></td>
-            <td style="padding:6px 8px" onclick="event.stopPropagation()"><input type="text" class="search-input ns-rep-resp" data-gid="${gid}" style="min-width:160px;padding:6px 8px;font-size:12px" /></td>
+            <td style="padding:6px 8px" onclick="event.stopPropagation()"><input type="text" class="search-input ns-rep-causa" data-gid="${gid}" style="width:100%;min-width:0;padding:6px 8px;font-size:12px" /></td>
+            <td style="padding:6px 8px" onclick="event.stopPropagation()"><input type="text" class="search-input ns-rep-resp" data-gid="${gid}" style="width:100%;min-width:0;padding:6px 8px;font-size:12px" /></td>
           </tr>${hijos}`;
       }).join("");
 
       return `
         <div style="margin-top:${si === 0 ? 4 : 28}px">
           <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--accent)">${nsEsc(rubro)}</div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+            ${NS_REP_COLGROUP}
             <thead><tr>
               <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Insumo</th>
               <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Producto afectado</th>
