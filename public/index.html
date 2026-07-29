@@ -168,6 +168,31 @@
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: rgba(255,255,255,.02); }
 
+    /* ── Tablero de faltantes: encabezado y columnas Fecha/Producto fijas ──
+       El contenedor necesita alto propio: un sticky se ancla al ancestro
+       scrolleable más cercano (este wrapper, por su overflow), no a la página. */
+    #ns-tablero-wrap { max-height: 70vh; overflow: auto; }
+    #ns-tablero-wrap thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      /* con border-collapse:separate el borde viaja con la celda fija */
+      border-bottom: none;
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    /* Fecha define el ancho; ese ancho es el desplazamiento de Producto */
+    #ns-tablero-wrap .ns-tb-fecha,
+    #ns-tablero-wrap .ns-tb-prod {
+      position: sticky;
+      background: var(--surface);
+      z-index: 1;
+    }
+    #ns-tablero-wrap .ns-tb-fecha { left: 0;    width: 96px; min-width: 96px; }
+    #ns-tablero-wrap .ns-tb-prod  { left: 96px; }
+    /* Esquinas: fijas en ambos ejes, por encima del resto */
+    #ns-tablero-wrap thead th.ns-tb-fecha,
+    #ns-tablero-wrap thead th.ns-tb-prod { z-index: 3; background: var(--bg); }
+
     /* ── Search ── */
     .search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
     .search-input {
@@ -3392,8 +3417,8 @@
       productos.forEach((producto, i) => {
         const celdas = rubros.map(r => celda(estadoMap.get(`${fecha}||${producto}||${r}`) ?? 0)).join("");
         filasHtml.push(`<tr>
-          ${i === 0 ? `<td rowspan="${productos.length}" style="font-weight:700;vertical-align:top;padding:8px 10px;border-right:1px solid var(--border);white-space:nowrap">${nsFmtFechaDMY(fecha)}</td>` : ""}
-          <td style="padding:6px 10px;white-space:nowrap">${nsEsc(producto)}</td>
+          ${i === 0 ? `<td class="ns-tb-fecha" rowspan="${productos.length}" style="font-weight:700;vertical-align:top;padding:8px 10px;border-right:1px solid var(--border);white-space:nowrap">${nsFmtFechaDMY(fecha)}</td>` : ""}
+          <td class="ns-tb-prod" style="padding:6px 10px;white-space:nowrap;border-right:1px solid var(--border)">${nsEsc(producto)}</td>
           ${celdas}
         </tr>`);
       });
@@ -3404,10 +3429,10 @@
     ).join("");
 
     wrap.innerHTML = `
-      <table style="border-collapse:collapse;font-size:12px">
+      <table style="border-collapse:separate;border-spacing:0;font-size:12px">
         <thead><tr>
-          <th style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Fecha</th>
-          <th style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Producto</th>
+          <th class="ns-tb-fecha" style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Fecha</th>
+          <th class="ns-tb-prod" style="padding:8px 10px;color:var(--muted);font-size:11px;text-align:left">Producto</th>
           ${headRubros}
         </tr></thead>
         <tbody>${filasHtml.join("")}</tbody>
