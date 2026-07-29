@@ -171,7 +171,13 @@
     /* ── Tablero de faltantes: encabezado y columnas Fecha/Producto fijas ──
        El contenedor necesita alto propio: un sticky se ancla al ancestro
        scrolleable más cercano (este wrapper, por su overflow), no a la página. */
-    #ns-tablero-wrap { max-height: 70vh; overflow: auto; }
+    #ns-tablero-wrap { max-height: 88vh; overflow: auto; }
+    /* Modo expandido: sin tope de alto, scrollea la página y entran todas las
+       filas de corrido. El encabezado deja de quedar fijo (el contenedor ya no
+       scrollea verticalmente), que es el precio de ver todo junto. */
+    #ns-tablero-wrap.ns-tb-expandido { max-height: none; }
+    /* Filas compactas: más filas visibles sin achicar la tipografía */
+    #ns-tablero-wrap table { line-height: 1.25; }
     #ns-tablero-wrap thead th {
       position: sticky;
       top: 0;
@@ -1012,7 +1018,10 @@
 
   <!-- BLOQUE 4: Tablero de faltantes por producto/día/rubro -->
   <div class="card">
-    <div class="card-title">Tablero de faltantes por producto</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div class="card-title" style="margin-bottom:0">Tablero de faltantes por producto</div>
+      <button class="btn btn-outline" id="ns-tb-toggle" style="font-size:12px" onclick="nsTableroToggle()">⤢ Expandir</button>
+    </div>
     <div class="table-wrap" id="ns-tablero-wrap">
       <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el tablero</div>
     </div>
@@ -3376,6 +3385,19 @@
 
   // ── Tablero de faltantes por producto/día/rubro (pivot) ──
 
+  // Alterna entre el modo compacto (alto acotado, encabezado y columnas fijas)
+  // y el expandido (sin tope de alto: se ven todas las filas, scrollea la página).
+  function nsTableroToggle() {
+    const wrap = document.getElementById("ns-tablero-wrap");
+    const btn  = document.getElementById("ns-tb-toggle");
+    const expandido = wrap.classList.toggle("ns-tb-expandido");
+    btn.textContent = expandido ? "⤡ Compactar" : "⤢ Expandir";
+    btn.title = expandido
+      ? "Volver al alto acotado; el encabezado y las columnas Fecha/Producto quedan fijos"
+      : "Quitar el tope de alto para ver todas las filas de corrido";
+    if (!expandido) wrap.scrollTop = 0;
+  }
+
   // estado: 1 = falta ese insumo, 0 = no falta / no aplica, -1 = sobra
   const NS_TABLERO_ESTADO_STYLE = {
     "1":  { bg: "#1a4731", fg: "#6ee7a8" },
@@ -3408,7 +3430,7 @@
 
     function celda(estado) {
       const s = NS_TABLERO_ESTADO_STYLE[String(estado ?? 0)] || NS_TABLERO_ESTADO_STYLE["0"];
-      return `<td style="text-align:center;background:${s.bg};color:${s.fg};font-weight:700;padding:6px 4px;border-bottom:2px solid var(--bg)">${estado ?? 0}</td>`;
+      return `<td style="text-align:center;background:${s.bg};color:${s.fg};font-weight:700;padding:2px 4px;border-bottom:1px solid var(--bg)">${estado ?? 0}</td>`;
     }
 
     const filasHtml = [];
@@ -3417,8 +3439,8 @@
       productos.forEach((producto, i) => {
         const celdas = rubros.map(r => celda(estadoMap.get(`${fecha}||${producto}||${r}`) ?? 0)).join("");
         filasHtml.push(`<tr>
-          ${i === 0 ? `<td class="ns-tb-fecha" rowspan="${productos.length}" style="font-weight:700;vertical-align:top;padding:8px 10px;border-right:1px solid var(--border);white-space:nowrap">${nsFmtFechaDMY(fecha)}</td>` : ""}
-          <td class="ns-tb-prod" style="padding:6px 10px;white-space:nowrap;border-right:1px solid var(--border)">${nsEsc(producto)}</td>
+          ${i === 0 ? `<td class="ns-tb-fecha" rowspan="${productos.length}" style="font-weight:700;vertical-align:top;padding:3px 10px;border-right:1px solid var(--border);white-space:nowrap">${nsFmtFechaDMY(fecha)}</td>` : ""}
+          <td class="ns-tb-prod" style="padding:2px 10px;white-space:nowrap;border-right:1px solid var(--border)">${nsEsc(producto)}</td>
           ${celdas}
         </tr>`);
       });
