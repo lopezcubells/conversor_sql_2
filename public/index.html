@@ -553,6 +553,7 @@
   <div class="tab" data-tab="inmovilizados">Inmovilizados</div>
   <div class="tab" data-tab="recepciones">Recepciones</div>
   <div class="tab" data-tab="nivel-servicio">Nivel de servicio</div>
+  <div class="tab" data-tab="necesidad-final">Necesidad Final</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1098,6 +1099,55 @@
 
 </div>
 
+<!-- ═══ NECESIDAD FINAL ═══ -->
+<div class="pane" id="tab-necesidad-final">
+
+  <!-- BLOQUE 1: Parámetros -->
+  <div class="section-heading"><h2>Parámetros</h2></div>
+  <div class="card">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha arranque semanal</label>
+        <input type="date" class="search-input" id="nf-fe-arranque" style="width:160px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora arranque semanal</label>
+        <input type="time" class="search-input" id="nf-hora-arranque" step="60" style="width:140px;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha horizonte consumo</label>
+        <input type="date" class="search-input" id="nf-fe-horizonte" style="width:160px;color-scheme:dark" />
+      </div>
+      <button class="btn btn-success" id="nf-btn-calcular">💾 Guardar y Calcular</button>
+      <span id="nf-estado" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+
+    <div style="margin-top:22px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Rubros</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-outline" onclick="nfSelectAllRubros()" style="font-size:12px">Todos</button>
+        <button class="btn btn-outline" onclick="nfClearAllRubros()" style="font-size:12px">Ninguno</button>
+      </div>
+      <div id="nf-rubro-checks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- BLOQUE 2: Necesidad final -->
+  <div class="section-heading" style="margin-top:24px"><h2>Necesidad final</h2></div>
+  <div class="search-row" style="margin-bottom:8px">
+    <input class="search-input" id="nf-q-cod" placeholder="Codigo Insumo…" style="max-width:180px" oninput="nfFiltrar()" />
+    <input class="search-input" id="nf-q-desc" placeholder="Descripción Insumo…" oninput="nfFiltrar()" />
+    <span id="nf-count" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="nf-table-wrap">
+      <div class="empty"><div class="big">📋</div>Configurá los parámetros y presioná "Guardar y Calcular"</div>
+    </div>
+  </div>
+  <div class="pagination" id="nf-pagination"></div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1215,6 +1265,7 @@
       if (tab.dataset.tab === "inmovilizados") initInmovilizados();
       if (tab.dataset.tab === "recepciones") initRecepciones();
       if (tab.dataset.tab === "nivel-servicio") initNivelServicio();
+      if (tab.dataset.tab === "necesidad-final") initNecesidadFinal();
     });
   });
 
@@ -3708,6 +3759,234 @@
     if (nsLoaded) return;
     nsRestoreParams();
     nsLoaded = true;
+  }
+
+  // ── Necesidad final ──
+
+  const NF_STORAGE_KEY = "necesidad-final-params";
+  const NF_PAGE_SIZE   = 50;
+  const NF_RUBROS_LISTA = [
+    "Adhesivos y Cintas", "Bandeja", "BIB Bolsa", "BIB Envase", "BIB Manijas",
+    "BOTELLA Vidrio", "Cajas", "Cápsulas", "Esquineros", "ETIQUETA CT",
+    "ETIQUETA Cuello", "ETIQUETA FR", "ETIQUETA Medallas y Stickers", "ETIQUETA Rotulo",
+    "FILM Termocontraible", "Pallets", "Plancha", "Separador", "Stretch",
+    "Tapa", "Tapón", "TETRA Envases",
+  ];
+
+  let nfAllData      = [];   // filas devueltas por la función
+  let nfFilteredData = [];
+  let nfSort         = { col: "necesidad_final", dir: "desc" };
+  let nfPage         = 0;
+  let nfRubrosInit   = false;
+
+  // ── Rubros (pills) ──
+  function nfInitRubros(seleccionados) {
+    const checks = document.getElementById("nf-rubro-checks");
+    if (nfRubrosInit) {
+      document.querySelectorAll("#nf-rubro-checks input").forEach(cb => {
+        cb.checked = seleccionados ? seleccionados.includes(cb.value) : true;
+        cb.closest("label").style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      });
+      return;
+    }
+    checks.innerHTML = "";
+    NF_RUBROS_LISTA.forEach(r => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 12px;border:1px solid var(--border);border-radius:99px;white-space:nowrap;transition:border-color .15s";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = r;
+      cb.checked = seleccionados ? seleccionados.includes(r) : true;
+      cb.style.accentColor = "#4f8ef7";
+      cb.addEventListener("change", () => {
+        label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+        nfFiltrar();
+      });
+      label.style.borderColor = cb.checked ? "var(--accent)" : "var(--border)";
+      label.appendChild(cb); label.appendChild(document.createTextNode(r));
+      checks.appendChild(label);
+    });
+    nfRubrosInit = true;
+  }
+
+  function nfGetRubros() {
+    return Array.from(document.querySelectorAll("#nf-rubro-checks input:checked")).map(cb => cb.value);
+  }
+  function nfSelectAllRubros() {
+    document.querySelectorAll("#nf-rubro-checks input").forEach(cb => {
+      cb.checked = true; cb.closest("label").style.borderColor = "var(--accent)";
+    });
+    nfFiltrar();
+  }
+  function nfClearAllRubros() {
+    document.querySelectorAll("#nf-rubro-checks input").forEach(cb => {
+      cb.checked = false; cb.closest("label").style.borderColor = "var(--border)";
+    });
+    nfFiltrar();
+  }
+
+  // ── Parámetros ──
+  function nfGetParams() {
+    return {
+      fecha_arranque_semanal:  document.getElementById("nf-fe-arranque").value,
+      hora_arranque_semanal:   document.getElementById("nf-hora-arranque").value,
+      fecha_horizonte_consumo: document.getElementById("nf-fe-horizonte").value,
+      rubros: nfGetRubros(),
+    };
+  }
+
+  function nfRestoreParams() {
+    try {
+      const s = JSON.parse(localStorage.getItem(NF_STORAGE_KEY) || "null");
+      nfInitRubros(s && s.rubros ? s.rubros : null);
+      if (!s) return;
+      document.getElementById("nf-fe-arranque").value   = s.fecha_arranque_semanal  || "";
+      document.getElementById("nf-hora-arranque").value = s.hora_arranque_semanal   || "";
+      document.getElementById("nf-fe-horizonte").value  = s.fecha_horizonte_consumo || "";
+      nfMostrarEstado(s);
+    } catch (e) { nfInitRubros(null); }
+  }
+
+  function nfMostrarEstado(p) {
+    const el = document.getElementById("nf-estado");
+    if (p.fecha_arranque_semanal && p.hora_arranque_semanal && p.fecha_horizonte_consumo) {
+      el.innerHTML = `✓ Guardado: arranque <strong style="color:var(--text)">${p.fecha_arranque_semanal} ${p.hora_arranque_semanal}</strong> · horizonte <strong style="color:var(--text)">${p.fecha_horizonte_consumo}</strong>`;
+    } else {
+      el.textContent = "";
+    }
+  }
+
+  // ── Filtro, orden y render ──
+  // El rubro se compara sin tildes ni mayúsculas, igual que en Recepciones, para no
+  // depender de cómo esté tildado en la base (p. ej. "Rotulo" vs "Rótulo").
+  function nfFiltrar() {
+    const rubros = new Set(nfGetRubros().map(recNormRubro));
+    const qCod   = document.getElementById("nf-q-cod").value.trim().toLowerCase();
+    const qDesc  = document.getElementById("nf-q-desc").value.trim().toLowerCase();
+    nfFilteredData = nfAllData.filter(r => {
+      if (!rubros.has(recNormRubro(r.rubro))) return false;
+      if (qCod  && !String(r.cod_corto   ?? "").toLowerCase().includes(qCod))  return false;
+      if (qDesc && !String(r.descripcion ?? "").toLowerCase().includes(qDesc)) return false;
+      return true;
+    });
+    nfApplySort();
+    nfPage = 0;
+    nfRender();
+  }
+
+  function nfSortBy(col) {
+    if (nfSort.col === col) nfSort.dir = nfSort.dir === "asc" ? "desc" : "asc";
+    else { nfSort.col = col; nfSort.dir = "desc"; }
+    nfApplySort();
+    nfPage = 0;
+    nfRender();
+  }
+
+  function nfApplySort() {
+    if (!nfSort.col) return;
+    const col = nfSort.col, dir = nfSort.dir;
+    nfFilteredData.sort((a, b) => {
+      const va = a[col] ?? "", vb = b[col] ?? "";
+      const na = parseFloat(va), nb = parseFloat(vb);
+      const cmp = (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
+        ? na - nb
+        : String(va).localeCompare(String(vb));
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  function nfThSort(label, col, alignRight = false) {
+    const active = nfSort.col === col;
+    const arrow  = active ? (nfSort.dir === "asc" ? "▲" : "▼") : "▾";
+    return `<th class="sortable${active ? " sort-active" : ""}" onclick="nfSortBy('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap${alignRight ? ";text-align:right" : ""}">${label} <span style="opacity:${active ? 1 : .4}">${arrow}</span></th>`;
+  }
+
+  function nfRender() {
+    const wrap  = document.getElementById("nf-table-wrap");
+    const total = nfFilteredData.length;
+    document.getElementById("nf-count").textContent = total ? `${total.toLocaleString()} registros` : "";
+
+    if (!total) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin resultados para este filtro</div>`;
+      document.getElementById("nf-pagination").innerHTML = "";
+      return;
+    }
+
+    const start = nfPage * NF_PAGE_SIZE;
+    const page  = nfFilteredData.slice(start, start + NF_PAGE_SIZE);
+    const num   = v => v != null && v !== "" ? fmtNum(v) : "";
+
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        ${nfThSort("Cód. Corto",         "cod_corto")}
+        ${nfThSort("Descripción",        "descripcion")}
+        ${nfThSort("Rubro",              "rubro")}
+        ${nfThSort("Arranque semanal",   "arranque_semanal",   true)}
+        ${nfThSort("Recepción semanal",  "recepcion_semanal",  true)}
+        ${nfThSort("Pendiente completo", "pendiente_completo", true)}
+        ${nfThSort("Consumo total",      "consumo_total",      true)}
+        ${nfThSort("Necesidad final",    "necesidad_final",    true)}
+      </tr></thead>
+      <tbody>${page.map(r => `<tr>
+        <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
+        <td>${nsEsc(r.descripcion)}</td>
+        <td>${nsEsc(r.rubro)}</td>
+        <td style="text-align:right">${num(r.arranque_semanal)}</td>
+        <td style="text-align:right">${num(r.recepcion_semanal)}</td>
+        <td style="text-align:right">${num(r.pendiente_completo)}</td>
+        <td style="text-align:right">${num(r.consumo_total)}</td>
+        <td style="text-align:right;font-weight:600;color:var(--accent)">${num(r.necesidad_final)}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+
+    renderPagination("nf-pagination", total, start, NF_PAGE_SIZE, "nfGoPage");
+  }
+
+  function nfGoPage(offset) {
+    nfPage = Math.floor(offset / NF_PAGE_SIZE);
+    nfRender();
+  }
+
+  // ── Guardar y calcular ──
+  document.getElementById("nf-btn-calcular").addEventListener("click", async () => {
+    const params = nfGetParams();
+    if (!params.fecha_arranque_semanal || !params.hora_arranque_semanal || !params.fecha_horizonte_consumo) {
+      toast("Completá los 3 parámetros antes de calcular.", "err"); return;
+    }
+
+    localStorage.setItem(NF_STORAGE_KEY, JSON.stringify(params));
+    nfMostrarEstado(params);
+
+    const btn    = document.getElementById("nf-btn-calcular");
+    const estado = document.getElementById("nf-estado");
+    btn.disabled = true;
+    estado.textContent = "Consultando PostgreSQL…";
+    document.getElementById("nf-table-wrap").innerHTML = `<div class="empty"><div class="big">⏳</div>Calculando…</div>`;
+
+    try {
+      const res = await fetch(`${API}/api/pg/necesidad-final`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      nfAllData = data.rows;
+      nfFiltrar();
+      nfMostrarEstado(params);
+      toast(`✅ ${data.rows.length.toLocaleString()} registros calculados`, "ok");
+    } catch (e) {
+      estado.textContent = "⚠ " + e.message;
+      document.getElementById("nf-table-wrap").innerHTML =
+        `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
+      toast("❌ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function initNecesidadFinal() {
+    nfRestoreParams();
   }
 
 </script>

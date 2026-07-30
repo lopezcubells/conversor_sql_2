@@ -419,6 +419,30 @@ app.post("/api/pg/nivel-servicio/registro", async (req, res) => {
   }
 });
 
+// ── Necesidad final ──
+
+app.post("/api/pg/necesidad-final", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { fecha_arranque_semanal, hora_arranque_semanal, fecha_horizonte_consumo } = req.body || {};
+    if (!fecha_arranque_semanal || !hora_arranque_semanal || !fecha_horizonte_consumo)
+      return res.status(400).json({ error: "Completá los 3 parámetros antes de calcular." });
+
+    const result = await pgPool.query(
+      `SELECT cod_corto, descripcion, rubro,
+              arranque_semanal, recepcion_semanal, pendiente_completo,
+              consumo_total, necesidad_final
+       FROM necesidad_final($1::date, $2::time, $3::date)
+       ORDER BY rubro, descripcion`,
+      [fecha_arranque_semanal, hora_arranque_semanal, fecha_horizonte_consumo]
+    );
+    res.json({ rows: result.rows });
+  } catch (e) {
+    console.error("PG necesidad-final error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Inmovilizados ──
 
 app.get("/api/pg/inmovilizados/rubros", async (req, res) => {
