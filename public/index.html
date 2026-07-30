@@ -3795,6 +3795,17 @@
     "Tapa", "Tapón", "TETRA Envases",
   ];
 
+  // Semáforo por criticidad ABC: se pinta la fila entera para distinguir de un vistazo
+  // lo más crítico. Sin categoría (o valor desconocido) queda en blanco.
+  const NF_ABC_STYLE = {
+    ALTA:  { bg: "#c62828", fg: "#ffffff", bold: true  },
+    MEDIA: { bg: "#f6c445", fg: "#111111", bold: false },
+    BAJA:  { bg: "#a5d6a7", fg: "#111111", bold: false },
+  };
+  const NF_ABC_DEFAULT = { bg: "#ffffff", fg: "#111111", bold: false };
+  const nfEstiloFila = cat =>
+    NF_ABC_STYLE[String(cat ?? "").trim().toUpperCase()] || NF_ABC_DEFAULT;
+
   let nfAllData      = [];   // filas devueltas por la función
   let nfFilteredData = [];
   let nfSort         = { col: "criticidad_valor", dir: "desc" };
@@ -3953,7 +3964,9 @@
         ${nfThSort("Criticidad",         "criticidad_valor",   true)}
         ${nfThSort("Criticidad ABC",     "criticidad_categoria")}
       </tr></thead>
-      <tbody>${page.map(r => `<tr>
+      <tbody>${page.map(r => {
+        const s = nfEstiloFila(r.criticidad_categoria);
+        return `<tr style="background:${s.bg};color:${s.fg}${s.bold ? ";font-weight:700" : ""}">
         <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
         <td>${nsEsc(r.descripcion)}</td>
         <td>${nsEsc(r.rubro)}</td>
@@ -3961,10 +3974,10 @@
         <td style="text-align:right">${num(r.recepcion_semanal)}</td>
         <td style="text-align:right">${num(r.pendiente_completo)}</td>
         <td style="text-align:right">${num(r.consumo_total)}</td>
-        <td style="text-align:right;font-weight:600;color:var(--accent)">${num(r.necesidad_final)}</td>
+        <td style="text-align:right;font-weight:700">${num(r.necesidad_final)}</td>
         <td style="text-align:right">${num(r.criticidad_valor)}</td>
         <td>${nsEsc(r.criticidad_categoria)}</td>
-      </tr>`).join("")}</tbody>
+      </tr>`; }).join("")}</tbody>
     </table>`;
 
     renderPagination("nf-pagination", total, start, NF_PAGE_SIZE, "nfGoPage");
