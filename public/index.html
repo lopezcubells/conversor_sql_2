@@ -1136,6 +1136,14 @@
       <span id="nf-estado" style="font-size:13px;color:var(--muted)"></span>
     </div>
 
+    <div style="margin-top:18px">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="nf-compras-curso" style="accent-color:#4f8ef7" onchange="nfFiltrar()">
+        Compras en curso
+        <span style="font-size:11px;color:var(--muted)">(pendiente completo &gt; 0)</span>
+      </label>
+    </div>
+
     <div style="margin-top:22px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:10px">Rubros</div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -3876,8 +3884,11 @@
     const rubros = new Set(nfGetRubros().map(recNormRubro));
     const qCod   = document.getElementById("nf-q-cod").value.trim().toLowerCase();
     const qDesc  = document.getElementById("nf-q-desc").value.trim().toLowerCase();
+    // No se guarda en localStorage a propósito: arranca siempre destildado
+    const soloCompras = document.getElementById("nf-compras-curso").checked;
     nfFilteredData = nfAllData.filter(r => {
       if (!rubros.has(recNormRubro(r.rubro))) return false;
+      if (soloCompras && !(parseFloat(r.pendiente_completo) > 0)) return false;
       if (qCod  && !String(r.cod_corto   ?? "").toLowerCase().includes(qCod))  return false;
       if (qDesc && !String(r.descripcion ?? "").toLowerCase().includes(qDesc)) return false;
       return true;
