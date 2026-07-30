@@ -3789,7 +3789,7 @@
 
   let nfAllData      = [];   // filas devueltas por la función
   let nfFilteredData = [];
-  let nfSort         = { col: "necesidad_final", dir: "desc" };
+  let nfSort         = { col: "criticidad_valor", dir: "desc" };
   let nfPage         = 0;
   let nfRubrosInit   = false;
 
@@ -3939,7 +3939,8 @@
         ${nfThSort("Pendiente completo", "pendiente_completo", true)}
         ${nfThSort("Consumo total",      "consumo_total",      true)}
         ${nfThSort("Necesidad final",    "necesidad_final",    true)}
-        ${nfThSort("Días de stock",      "dias_de_stock",      true)}
+        ${nfThSort("Criticidad",         "criticidad_valor",   true)}
+        ${nfThSort("Criticidad ABC",     "criticidad_categoria")}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
         <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
@@ -3950,7 +3951,8 @@
         <td style="text-align:right">${num(r.pendiente_completo)}</td>
         <td style="text-align:right">${num(r.consumo_total)}</td>
         <td style="text-align:right;font-weight:600;color:var(--accent)">${num(r.necesidad_final)}</td>
-        <td style="text-align:right">${num(r.dias_de_stock)}</td>
+        <td style="text-align:right">${num(r.criticidad_valor)}</td>
+        <td>${nsEsc(r.criticidad_categoria)}</td>
       </tr>`).join("")}</tbody>
     </table>`;
 
