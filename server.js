@@ -431,7 +431,7 @@ app.post("/api/pg/necesidad-final", async (req, res) => {
     const result = await pgPool.query(
       `SELECT cod_corto, descripcion, rubro,
               arranque_semanal, recepcion_semanal, pendiente_completo,
-              consumo_total, necesidad_final
+              consumo_total, necesidad_final, dias_de_stock
        FROM necesidad_final($1::date, $2::time, $3::date)
        ORDER BY rubro, descripcion`,
       [fecha_arranque_semanal, hora_arranque_semanal, fecha_horizonte_consumo]

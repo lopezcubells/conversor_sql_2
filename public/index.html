@@ -3925,6 +3925,7 @@
         ${nfThSort("Pendiente completo", "pendiente_completo", true)}
         ${nfThSort("Consumo total",      "consumo_total",      true)}
         ${nfThSort("Necesidad final",    "necesidad_final",    true)}
+        ${nfThSort("Días de stock",      "dias_de_stock",      true)}
       </tr></thead>
       <tbody>${page.map(r => `<tr>
         <td style="white-space:nowrap">${r.cod_corto ?? ""}</td>
@@ -3935,6 +3936,7 @@
         <td style="text-align:right">${num(r.pendiente_completo)}</td>
         <td style="text-align:right">${num(r.consumo_total)}</td>
         <td style="text-align:right;font-weight:600;color:var(--accent)">${num(r.necesidad_final)}</td>
+        <td style="text-align:right">${num(r.dias_de_stock)}</td>
       </tr>`).join("")}</tbody>
     </table>`;
 
