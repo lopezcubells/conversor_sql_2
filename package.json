@@ -1,7 +1,7 @@
 {
-  "name": "excel-to-sql",
+  "name": "reporte-indicadores-insumos",
   "version": "1.0.0",
-  "description": "Importador de Excel a SQLite",
+  "description": "Reporte de indicadores de abastecimiento de insumos (Express + PostgreSQL)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
