@@ -365,7 +365,9 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
       ORDER BY e.dia, e.descripcion_ppal, e.rubro`;
 
     // Urgencias: faltantes día por día. A diferencia del resto de los bloques, la función
-    // se llama con las fechas de SEMANA EN CURSO ($5/$6) y la hora de arranque ($3).
+    // se llama con las fechas de SEMANA EN CURSO y la hora de arranque, así que lleva su
+    // propio array de parámetros (si reusara el común, $1 y $2 quedarían sin usar y
+    // Postgres no podría inferirles el tipo).
     const sqlUrgencias = `
       SELECT dia,
              rubro,
@@ -373,18 +375,19 @@ app.post("/api/pg/nivel-servicio", async (req, res) => {
              descripcion_ppal,
              planta,
              faltante_puntual
-      FROM indicador_cobertura($5::date, $6::date, $3::time)
+      FROM indicador_cobertura($1::date, $2::date, $3::time)
       WHERE evaluacion = 'no cubre'
         AND rubro = ANY($4::text[])
       ORDER BY dia, rubro, cod_corto_comp, descripcion_comp, descripcion_ppal, planta`;
 
-    const args = [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final];
+    const args    = [cob_fe_inicio, cob_fe_final, cob_hora, rubros, actual_inicio, actual_final];
+    const argsUrg = [actual_inicio, actual_final, cob_hora, rubros];
 
     const [actualR, reporte, tablero, urgencias] = await Promise.all([
       pgPool.query(sql,          args),
       pgPool.query(sqlReporte,   args),
       pgPool.query(sqlTablero,   args),
-      pgPool.query(sqlUrgencias, args),
+      pgPool.query(sqlUrgencias, argsUrg),
     ]);
 
     res.json({
