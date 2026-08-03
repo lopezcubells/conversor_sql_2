@@ -3313,8 +3313,9 @@
           },
         },
         scales: {
-          x: { suggestedMax: maxV * 1.45, ticks: { display: false }, grid: { display: false } },
-          y: { ticks: { display: false }, grid: { display: false } },
+          // Sin eje ni grilla: el dato vive en la etiqueta de cada barra
+          x: { suggestedMax: maxV * 1.45, display: false, grid: { display: false } },
+          y: { display: false, grid: { display: false } },
         },
       },
       plugins: [ChartDataLabels],
@@ -3356,8 +3357,9 @@
           },
         },
         scales: {
-          x: { suggestedMax: maxV * 1.5, ticks: { color: "#333333", font: { size: 18 }, callback: v => Math.round(v).toLocaleString("es-AR") }, grid: { color: "#dddddd" } },
-          y: { ticks: { display: false }, grid: { display: false } },
+          // Sin eje ni grilla: el dato vive en la etiqueta de cada barra
+          x: { suggestedMax: maxV * 1.5, display: false, grid: { display: false } },
+          y: { display: false, grid: { display: false } },
         },
       },
       plugins: [ChartDataLabels],
