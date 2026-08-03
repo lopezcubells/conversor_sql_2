@@ -1040,7 +1040,15 @@
     </div>
   </div>
 
-  <!-- BLOQUE 6: Parámetros (colapsable, inicia oculto) -->
+  <!-- BLOQUE 6: Urgencias (faltantes día por día) -->
+  <div class="card">
+    <div class="card-title">Urgencias</div>
+    <div class="table-wrap" id="ns-urgencias-wrap">
+      <div class="empty"><div class="big">📋</div>Generá el cálculo para ver las urgencias</div>
+    </div>
+  </div>
+
+  <!-- BLOQUE 7: Parámetros (colapsable, inicia oculto) -->
   <div class="card" style="margin-top:40px">
     <div class="collapsible-header collapsed" id="ns-params-toggle">
       <div class="card-title" style="margin-bottom:0">Parámetros</div>
@@ -3129,6 +3137,142 @@
     wrap.innerHTML = secciones.join("");
   }
 
+  // ── Urgencias (faltantes día por día) ──
+
+  // Una tabla por día, con el detalle de faltantes de esa fecha.
+  // Jerarquía: Rubro (colapsable, arranca cerrado) › Insumo (colapsable) › líneas.
+  // Sin columnas de carga manual: acá solo se consulta.
+  const NS_URG_COLGROUP = `<colgroup>
+    <col style="width:26%"><col style="width:30%"><col style="width:26%">
+    <col style="width:8%"><col style="width:10%">
+  </colgroup>`;
+
+  const NS_URG_DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+  // "Lunes 03/08/2026" — se parsea a mano para no depender de la zona horaria del navegador
+  function nsUrgTituloFecha(iso) {
+    const s = String(iso).slice(0, 10);
+    const [y, m, d] = s.split("-").map(Number);
+    if (!y || !m || !d) return s;
+    const nombre = NS_URG_DIAS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+    return `${nombre} ${nsFmtFechaDMY(s)}`;
+  }
+
+  // Una fila es visible solo si todos sus ancestros están abiertos.
+  function nsUrgRefresh() {
+    const abiertos = new Set();
+    document.querySelectorAll("#ns-urgencias-wrap tr[data-gid]").forEach(tr => {
+      if (tr.dataset.open === "1") abiertos.add(tr.dataset.gid);
+    });
+    document.querySelectorAll("#ns-urgencias-wrap tr[data-parent]").forEach(tr => {
+      // se recorre la cadena de padres hacia arriba
+      let gid = tr.dataset.parent, visible = true;
+      while (gid) {
+        if (!abiertos.has(gid)) { visible = false; break; }
+        const padre = document.querySelector(`#ns-urgencias-wrap tr[data-gid="${gid}"]`);
+        gid = padre ? padre.dataset.parent : "";
+      }
+      tr.style.display = visible ? "" : "none";
+    });
+  }
+
+  function nsUrgToggle(gid) {
+    const tr = document.querySelector(`#ns-urgencias-wrap tr[data-gid="${gid}"]`);
+    if (!tr) return;
+    const abierto = tr.dataset.open === "1";
+    tr.dataset.open = abierto ? "0" : "1";
+    const flecha = tr.querySelector(".ns-arrow");
+    if (flecha) flecha.textContent = abierto ? "▶" : "▼";
+    nsUrgRefresh();
+  }
+
+  function nsRenderUrgencias(rows) {
+    const wrap = document.getElementById("ns-urgencias-wrap");
+    if (!rows || !rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">✓</div>Sin urgencias en el rango</div>`;
+      return;
+    }
+
+    // Nivel 1: por día
+    const porDia = new Map();
+    rows.forEach(r => {
+      const dia = String(r.dia ?? "").slice(0, 10);
+      if (!porDia.has(dia)) porDia.set(dia, []);
+      porDia.get(dia).push(r);
+    });
+
+    let gi = 0;
+    const secciones = [...porDia.keys()].sort().map((dia, si) => {
+      // Nivel 2: por rubro
+      const porRubro = new Map();
+      porDia.get(dia).forEach(r => {
+        const rubro = r.rubro ?? "(sin rubro)";
+        if (!porRubro.has(rubro)) porRubro.set(rubro, new Map());
+        // Nivel 3: por insumo
+        const insumo = nsConcat(r.cod_corto_comp, r.descripcion_comp);
+        const porInsumo = porRubro.get(rubro);
+        if (!porInsumo.has(insumo)) porInsumo.set(insumo, []);
+        porInsumo.get(insumo).push(r);
+      });
+
+      const cuerpo = [...porRubro.entries()].map(([rubro, porInsumo]) => {
+        const rgid = `nsurg${gi++}`;
+        let totalRubro = 0;
+
+        const bloquesInsumo = [...porInsumo.entries()].map(([insumo, items]) => {
+          const igid = `nsurg${gi++}`;
+          const sumaInsumo = items.reduce((a, it) => a + (parseFloat(it.faltante_puntual) || 0), 0);
+          totalRubro += sumaInsumo;
+
+          const hijos = items.map(it => `
+            <tr data-parent="${igid}" style="display:none">
+              <td></td>
+              <td></td>
+              <td style="padding:6px 10px;color:var(--muted)">${nsEsc(it.descripcion_ppal)}</td>
+              <td style="padding:6px 10px;color:var(--muted)">${nsEsc(it.planta)}</td>
+              <td style="padding:6px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(it.faltante_puntual)}</td>
+            </tr>`).join("");
+
+          return `
+            <tr data-gid="${igid}" data-parent="${rgid}" data-open="0" onclick="nsUrgToggle('${igid}')" style="display:none;cursor:pointer">
+              <td></td>
+              <td style="padding:7px 10px 7px 20px"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${nsEsc(insumo)}</td>
+              <td></td>
+              <td></td>
+              <td style="padding:7px 10px;text-align:right;font-family:var(--mono);color:#f76060">${nsFmt(sumaInsumo)}</td>
+            </tr>${hijos}`;
+        }).join("");
+
+        return `
+          <tr data-gid="${rgid}" data-open="0" onclick="nsUrgToggle('${rgid}')" style="cursor:pointer;border-top:1px solid var(--border)">
+            <td style="padding:8px 10px;font-weight:600"><span class="ns-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${nsEsc(rubro)}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="padding:8px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#f76060">${nsFmt(totalRubro)}</td>
+          </tr>${bloquesInsumo}`;
+      }).join("");
+
+      return `
+        <div style="margin-top:${si === 0 ? 4 : 28}px">
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--accent)">${nsEsc(nsUrgTituloFecha(dia))}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+            ${NS_URG_COLGROUP}
+            <thead><tr>
+              <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Rubro</th>
+              <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Insumo</th>
+              <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Producto afectado</th>
+              <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:11px">Planta</th>
+              <th style="text-align:right;padding:8px 10px;color:var(--muted);font-size:11px">Cantidad faltante</th>
+            </tr></thead>
+            <tbody>${cuerpo}</tbody>
+          </table>
+        </div>`;
+    });
+
+    wrap.innerHTML = secciones.join("");
+  }
+
   // ── Gráficos de anillo (Nivel de servicio, semana en curso) ──
   let nsDonutTotal = null, nsDonutCM = null, nsDonutToro = null;
   let nsDonutValues = { cm: 0, toro: 0, total: 0, afCM: 0, afToro: 0, afTotal: 0, pgCM: 0, pgToro: 0, pgTotal: 0 };
@@ -3765,6 +3909,7 @@
       nsRenderCausaBar();
       nsRenderRubroBar();
       nsRenderTablero(data.tablero);
+      nsRenderUrgencias(data.urgencias);
 
       estado.innerHTML = `✓ Calculado`;
       toast("✅ Nivel de servicio calculado", "ok");
