@@ -644,6 +644,22 @@
           <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final PMP</label>
           <input type="date" class="search-input" id="av-fe-final-pmp" style="width:160px;color-scheme:dark" />
         </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha inicio semana (mes sgte.)</label>
+          <input type="date" class="search-input" id="av-fe-inicio-sem-sgte" style="width:160px;color-scheme:dark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Fecha final semana (mes sgte.)</label>
+          <input type="date" class="search-input" id="av-fe-final-sem-sgte" style="width:160px;color-scheme:dark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">% de arranque</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" class="search-input" id="av-porc-arranque" min="0" max="100" step="0.01"
+                   placeholder="0 a 100" style="width:110px;color-scheme:dark" />
+            <span style="color:var(--muted);font-size:13px">%</span>
+          </div>
+        </div>
       </div>
       <div id="av-params-estado" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
       <div class="btn-row" style="margin-top:14px">
@@ -1621,7 +1637,10 @@
   // ── Avance (PostgreSQL) ──
 
   const AV_STORAGE_KEY = "avance-params-pg";
-  const AV_PARAM_IDS   = ["av-fe-arranque", "av-hora-arranque", "av-fe-inicio-pmp", "av-fe-final-pmp"];
+  const AV_PARAM_IDS   = [
+    "av-fe-arranque", "av-hora-arranque", "av-fe-inicio-pmp", "av-fe-final-pmp",
+    "av-fe-inicio-sem-sgte", "av-fe-final-sem-sgte", "av-porc-arranque",
+  ];
 
   // Colapsable de parámetros
   document.getElementById("avance-params-toggle").addEventListener("click", () => {
@@ -1636,12 +1655,31 @@
   });
 
   function avGetParams() {
+    // El usuario carga el arranque como porcentaje (0 a 100); la función espera
+    // la fracción (0 a 1). Se guardan los dos: el tipeado para repoblar el campo
+    // sin arrastrar errores de redondeo, y la fracción para mandar al servidor.
+    const pct = document.getElementById("av-porc-arranque").value.trim();
     return {
-      fe_arranque_stock:  document.getElementById("av-fe-arranque").value,
+      fe_arranque_stock:   document.getElementById("av-fe-arranque").value,
       hora_arranque_stock: document.getElementById("av-hora-arranque").value,
-      fe_inicio_pmp:      document.getElementById("av-fe-inicio-pmp").value,
-      fe_final_pmp:       document.getElementById("av-fe-final-pmp").value,
+      fe_inicio_pmp:       document.getElementById("av-fe-inicio-pmp").value,
+      fe_final_pmp:        document.getElementById("av-fe-final-pmp").value,
+      fe_inicio_semana_mes_sgte: document.getElementById("av-fe-inicio-sem-sgte").value,
+      fe_final_semana_mes_sgte:  document.getElementById("av-fe-final-sem-sgte").value,
+      porcentaje_arranque_pct:   pct,
+      porcentaje_arranque:       pct === "" ? "" : Number(pct) / 100,
     };
+  }
+
+  // 0 es un % válido, así que el porcentaje se valida por vacío, no por falsy.
+  function avParamsIncompletos(p) {
+    const faltaFecha = !p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp
+      || !p.fe_final_pmp || !p.fe_inicio_semana_mes_sgte || !p.fe_final_semana_mes_sgte;
+    if (faltaFecha) return "Completá todas las fechas y la hora antes de continuar.";
+    const n = Number(p.porcentaje_arranque_pct);
+    if (p.porcentaje_arranque_pct === "" || !Number.isFinite(n) || n < 0 || n > 100)
+      return "El % de arranque debe ser un número entre 0 y 100.";
+    return "";
   }
 
   function avRestoreParams() {
@@ -1652,6 +1690,9 @@
       document.getElementById("av-hora-arranque").value    = saved.hora_arranque_stock  || "";
       document.getElementById("av-fe-inicio-pmp").value    = saved.fe_inicio_pmp        || "";
       document.getElementById("av-fe-final-pmp").value     = saved.fe_final_pmp         || "";
+      document.getElementById("av-fe-inicio-sem-sgte").value = saved.fe_inicio_semana_mes_sgte || "";
+      document.getElementById("av-fe-final-sem-sgte").value  = saved.fe_final_semana_mes_sgte  || "";
+      document.getElementById("av-porc-arranque").value      = saved.porcentaje_arranque_pct   || "";
       avMostrarEstado(saved);
       // Si hay rubros guardados y ya están los checks poblados, restaurar selección
       if (saved.rubros_seleccionados?.length) {
@@ -1663,7 +1704,11 @@
   function avMostrarEstado(p) {
     const estado = document.getElementById("av-params-estado");
     if (p.fe_arranque_stock && p.hora_arranque_stock && p.fe_inicio_pmp && p.fe_final_pmp) {
-      estado.innerHTML = `✓ Guardado: <strong style="color:var(--text)">${p.fe_arranque_stock} ${p.hora_arranque_stock}</strong> · PMP: <strong style="color:var(--text)">${p.fe_inicio_pmp} → ${p.fe_final_pmp}</strong>`;
+      const semSgte = (p.fe_inicio_semana_mes_sgte && p.fe_final_semana_mes_sgte)
+        ? ` · Semana mes sgte.: <strong style="color:var(--text)">${p.fe_inicio_semana_mes_sgte} → ${p.fe_final_semana_mes_sgte}</strong>` : "";
+      const arranque = (p.porcentaje_arranque_pct !== "" && p.porcentaje_arranque_pct != null)
+        ? ` · Arranque: <strong style="color:var(--text)">${p.porcentaje_arranque_pct}%</strong>` : "";
+      estado.innerHTML = `✓ Guardado: <strong style="color:var(--text)">${p.fe_arranque_stock} ${p.hora_arranque_stock}</strong> · PMP: <strong style="color:var(--text)">${p.fe_inicio_pmp} → ${p.fe_final_pmp}</strong>${semSgte}${arranque}`;
     } else {
       estado.textContent = "";
     }
@@ -1671,9 +1716,8 @@
 
   document.getElementById("av-btn-guardar").addEventListener("click", () => {
     const p = avGetParams();
-    if (!p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp || !p.fe_final_pmp) {
-      toast("Completá los 4 parámetros antes de guardar.", "err"); return;
-    }
+    const error = avParamsIncompletos(p);
+    if (error) { toast(error, "err"); return; }
     // Guardar también los rubros actualmente seleccionados
     p.rubros_seleccionados = avGetRubrosSeleccionados();
     localStorage.setItem(AV_STORAGE_KEY, JSON.stringify(p));
@@ -1786,8 +1830,6 @@
         ${avTh("Nec. Inicial","necesidad_inicial", s, "sortAvRubro")}
         ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvRubro")}
         ${avTh("Avance",      "avance",            s, "sortAvRubro")}
-        ${avTh("Exceso",      "exceso",            s, "sortAvRubro")}
-        ${avTh("Tipo",        "tipo",              s, "sortAvRubro")}
       </tr></thead>
       <tbody>${sorted.map(r => `<tr>
         <td>${r.rubro ?? ""}</td>
@@ -1797,8 +1839,6 @@
         <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
         <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
         <td>${avanceBar(r.avance)}</td>
-        <td>${r.exceso != null ? fmtNum(r.exceso) : ""}</td>
-        <td>${r.tipo ?? ""}</td>
       </tr>`).join("")}</tbody>
     </table>`;
   }
@@ -1830,8 +1870,6 @@
         ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvArt")}
         ${avTh("Mín Rec/Nec", "minimo_rec_vs_nec", s, "sortAvArt")}
         ${avTh("Avance",      "avance",            s, "sortAvArt")}
-        ${avTh("Exceso",      "exceso",            s, "sortAvArt")}
-        ${avTh("Tipo Exceso", "tipo_exceso",       s, "sortAvArt")}
       </tr></thead>
       <tbody>${sorted.map(r => `<tr>
         <td>${r.cod_corto ?? ""}</td>
@@ -1844,8 +1882,6 @@
         <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
         <td>${r.minimo_rec_vs_nec != null ? fmtNum(r.minimo_rec_vs_nec) : ""}</td>
         <td>${avanceBar(r.avance)}</td>
-        <td>${r.exceso != null ? fmtNum(r.exceso) : ""}</td>
-        <td>${r.tipo_exceso ?? ""}</td>
       </tr>`).join("")}</tbody>
     </table>`;
   }
@@ -1873,9 +1909,8 @@
     const btn  = document.getElementById("av-btn-calcular");
     const info = document.getElementById("av-calc-info");
 
-    if (!p.fe_arranque_stock || !p.hora_arranque_stock || !p.fe_inicio_pmp || !p.fe_final_pmp) {
-      toast("Completá los 4 parámetros antes de calcular.", "err"); return;
-    }
+    const error = avParamsIncompletos(p);
+    if (error) { toast(error, "err"); return; }
 
     btn.disabled = true;
     info.textContent = "Calculando…";

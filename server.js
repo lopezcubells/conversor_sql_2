@@ -164,18 +164,33 @@ process.on("unhandledRejection", err => console.error("Promesa:", err));
 app.post("/api/pg/avance/calcular", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
-    const { fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp } = req.body || {};
-    if (!fe_arranque_stock || !hora_arranque_stock || !fe_inicio_pmp || !fe_final_pmp)
-      return res.status(400).json({ error: "Completá los 4 parámetros antes de calcular." });
+    const {
+      fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp,
+      fe_inicio_semana_mes_sgte, fe_final_semana_mes_sgte, porcentaje_arranque,
+    } = req.body || {};
 
+    if (!fe_arranque_stock || !hora_arranque_stock || !fe_inicio_pmp || !fe_final_pmp
+        || !fe_inicio_semana_mes_sgte || !fe_final_semana_mes_sgte)
+      return res.status(400).json({ error: "Completá todos los parámetros antes de calcular." });
+
+    // Llega como fracción 0-1 (el usuario carga el porcentaje 0-100 en la pantalla).
+    // 0 es un valor válido, así que se compara contra null/vacío, no por falsy.
+    const porc = Number(porcentaje_arranque);
+    if (porcentaje_arranque === undefined || porcentaje_arranque === null || porcentaje_arranque === ""
+        || !Number.isFinite(porc) || porc < 0 || porc > 1)
+      return res.status(400).json({ error: "El % de arranque debe estar entre 0 y 100." });
+
+    // avance_x_rubro mantiene su firma de 4 parámetros; los tres nuevos son de avance_x_articulo.
     const [rubro, articulo] = await Promise.all([
       pgPool.query(
         `SELECT * FROM avance_x_rubro($1::date, $2::time, $3::date, $4::date)`,
         [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp]
       ),
       pgPool.query(
-        `SELECT * FROM avance_x_articulo($1::date, $2::time, $3::date, $4::date)`,
-        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp]
+        `SELECT * FROM avance_x_articulo($1::date, $2::time, $3::date, $4::date,
+                                         $5::date, $6::date, $7::numeric)`,
+        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp,
+         fe_inicio_semana_mes_sgte, fe_final_semana_mes_sgte, porc]
       ),
     ]);
 
