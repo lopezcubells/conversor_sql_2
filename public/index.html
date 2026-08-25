@@ -1827,6 +1827,7 @@
         ${avTh("Arranque",    "stock_arranque",    s, "sortAvRubro")}
         ${avTh("Recepciones", "recepciones",       s, "sortAvRubro")}
         ${avTh("Consumo",     "consumo",           s, "sortAvRubro")}
+        ${avTh("Consumo Arranque", "consumo_arranque", s, "sortAvRubro")}
         ${avTh("Nec. Inicial","necesidad_inicial", s, "sortAvRubro")}
         ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvRubro")}
         ${avTh("Avance",      "avance",            s, "sortAvRubro")}
@@ -1836,6 +1837,7 @@
         <td>${fmtNum(r.stock_arranque ?? 0)}</td>
         <td>${fmtNum(r.recepciones ?? 0)}</td>
         <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.consumo_arranque != null ? fmtNum(r.consumo_arranque) : ""}</td>
         <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
         <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
         <td>${avanceBar(r.avance)}</td>
@@ -1866,6 +1868,7 @@
         ${avTh("Arranque",    "stock_arranque",    s, "sortAvArt")}
         ${avTh("Recepciones", "recepciones",       s, "sortAvArt")}
         ${avTh("Consumo",     "consumo",           s, "sortAvArt")}
+        ${avTh("Consumo Arranque", "consumo_arranque_mes_sgte", s, "sortAvArt")}
         ${avTh("Nec. Inicial","necesidad_inicial", s, "sortAvArt")}
         ${avTh("Nec. Actual", "necesidad_actual",  s, "sortAvArt")}
         ${avTh("Mín Rec/Nec", "minimo_rec_vs_nec", s, "sortAvArt")}
@@ -1878,6 +1881,7 @@
         <td>${fmtNum(r.stock_arranque ?? 0)}</td>
         <td>${fmtNum(r.recepciones ?? 0)}</td>
         <td>${fmtNum(r.consumo ?? 0)}</td>
+        <td>${r.consumo_arranque_mes_sgte != null ? fmtNum(r.consumo_arranque_mes_sgte) : ""}</td>
         <td>${r.necesidad_inicial != null ? fmtNum(r.necesidad_inicial) : ""}</td>
         <td>${r.necesidad_actual  != null ? fmtNum(r.necesidad_actual)  : ""}</td>
         <td>${r.minimo_rec_vs_nec != null ? fmtNum(r.minimo_rec_vs_nec) : ""}</td>
