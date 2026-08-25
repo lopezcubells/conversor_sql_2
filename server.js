@@ -180,18 +180,16 @@ app.post("/api/pg/avance/calcular", async (req, res) => {
         || !Number.isFinite(porc) || porc < 0 || porc > 1)
       return res.status(400).json({ error: "El % de arranque debe estar entre 0 y 100." });
 
-    // avance_x_rubro mantiene su firma de 4 parámetros; los tres nuevos son de avance_x_articulo.
+    // Las dos funciones comparten la misma firma de 7 parámetros.
+    const argsAvance = [
+      fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp,
+      fe_inicio_semana_mes_sgte, fe_final_semana_mes_sgte, porc,
+    ];
+    const firma = `$1::date, $2::time, $3::date, $4::date, $5::date, $6::date, $7::numeric`;
+
     const [rubro, articulo] = await Promise.all([
-      pgPool.query(
-        `SELECT * FROM avance_x_rubro($1::date, $2::time, $3::date, $4::date)`,
-        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp]
-      ),
-      pgPool.query(
-        `SELECT * FROM avance_x_articulo($1::date, $2::time, $3::date, $4::date,
-                                         $5::date, $6::date, $7::numeric)`,
-        [fe_arranque_stock, hora_arranque_stock, fe_inicio_pmp, fe_final_pmp,
-         fe_inicio_semana_mes_sgte, fe_final_semana_mes_sgte, porc]
-      ),
+      pgPool.query(`SELECT * FROM avance_x_rubro(${firma})`,    argsAvance),
+      pgPool.query(`SELECT * FROM avance_x_articulo(${firma})`, argsAvance),
     ]);
 
     res.json({
