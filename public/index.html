@@ -1052,7 +1052,13 @@
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
       <div class="card-title" style="margin-bottom:0">Tablero de faltantes por producto</div>
-      <button class="btn btn-outline" id="ns-tb-toggle" style="font-size:12px" onclick="nsTableroToggle()">⤢ Expandir</button>
+      <div style="display:flex;align-items:center;gap:16px">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="ns-tb-solo-faltantes" style="accent-color:#4f8ef7" onchange="nsTableroRefiltrar()">
+          Solo faltantes
+        </label>
+        <button class="btn btn-outline" id="ns-tb-toggle" style="font-size:12px" onclick="nsTableroToggle()">⤢ Expandir</button>
+      </div>
     </div>
     <div class="table-wrap" id="ns-tablero-wrap">
       <div class="empty"><div class="big">📋</div>Generá el cálculo para ver el tablero</div>
@@ -3687,7 +3693,16 @@
     "-1": { bg: "#4a1515", fg: "#fca5a5" },
   };
 
+  // Los datos crudos quedan en memoria: el check filtra en el navegador,
+  // sin volver a consultar la base.
+  let nsTableroRows = [];
+
+  function nsTableroRefiltrar() {
+    nsRenderTablero(nsTableroRows);
+  }
+
   function nsRenderTablero(rows) {
+    nsTableroRows = rows || [];
     const wrap = document.getElementById("ns-tablero-wrap");
     if (!rows || !rows.length) {
       wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin datos para el tablero</div>`;
@@ -3715,9 +3730,18 @@
       return `<td style="text-align:center;background:${s.bg};color:${s.fg};font-weight:700;padding:2px 4px;border-bottom:1px solid var(--bg)">${estado ?? 0}</td>`;
     }
 
+    // "Solo faltantes": deja unicamente las filas con al menos un -1 entre los rubros.
+    // El rowspan de la fecha se calcula sobre lo que queda, y las fechas que se
+    // quedan sin productos no se dibujan.
+    const soloFaltantes = document.getElementById("ns-tb-solo-faltantes").checked;
+    const tieneFaltante = (fecha, producto) =>
+      rubros.some(r => Number(estadoMap.get(`${fecha}||${producto}||${r}`) ?? 0) === -1);
+
     const filasHtml = [];
     fechas.forEach(fecha => {
-      const productos = fechasMap.get(fecha);
+      const productos = soloFaltantes
+        ? fechasMap.get(fecha).filter(prod => tieneFaltante(fecha, prod))
+        : fechasMap.get(fecha);
       productos.forEach((producto, i) => {
         const celdas = rubros.map(r => celda(estadoMap.get(`${fecha}||${producto}||${r}`) ?? 0)).join("");
         filasHtml.push(`<tr>
@@ -3731,6 +3755,11 @@
     const headRubros = rubros.map(r =>
       `<th style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;padding:6px 4px;font-size:11px;color:var(--muted);text-align:left;height:150px">${nsEsc(r)}</th>`
     ).join("");
+
+    if (!filasHtml.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">✓</div>Sin faltantes en el rango</div>`;
+      return;
+    }
 
     wrap.innerHTML = `
       <table style="border-collapse:separate;border-spacing:0;font-size:12px">
