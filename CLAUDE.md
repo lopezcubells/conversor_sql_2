@@ -50,7 +50,7 @@ negocio**, solo la consulta y la presenta.
   `indicador_cobertura`, `necesidad_final`
 - **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
   `view_stock_x_rubro`
-- **Tablas de datos**: `bd_consumos_im_if_consolidado` (consumos históricos),
+- **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos),
   `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
   `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`)
 - **Tablas propias de la app**: `app_users` (login; se crea sola al arrancar),

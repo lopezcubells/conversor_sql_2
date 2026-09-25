@@ -564,7 +564,7 @@ const CH_BASE = `
            c.numero_orden,
            c.fecha_orden::date             AS fecha_orden,
            COALESCE(c.consumo, 0)::numeric AS consumo
-    FROM bd_consumos_im_if_consolidado c
+    FROM consumos_im_if_consolidado c
     LEFT JOIN art a ON a.cod_corto = c.cod_corto
     LEFT JOIN art p ON p.cod_corto = c.cod_corto_ppal
     LEFT JOIN ins i ON i.cod_corto = c.cod_corto
@@ -594,10 +594,10 @@ app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const [un, td, ru, sr] = await Promise.all([
-      pgPool.query("SELECT DISTINCT unidad_negocio AS v FROM bd_consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT tipo_doc       AS v FROM bd_consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT rubro          AS v FROM bd_articulos_x_rubro          WHERE rubro          IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT sub_rubro      AS v FROM bd_maestro_insumos            WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT unidad_negocio AS v FROM consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT tipo_doc       AS v FROM consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT rubro          AS v FROM bd_articulos_x_rubro       WHERE rubro          IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT sub_rubro      AS v FROM bd_maestro_insumos         WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
     ]);
     const vals = r => r.rows.map(x => x.v);
     res.json({

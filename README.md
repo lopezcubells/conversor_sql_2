@@ -65,7 +65,7 @@ La app no calcula lógica de negocio: consulta y presenta.
 **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
 `view_stock_x_rubro`
 
-**Tablas de datos**: `bd_consumos_im_if_consolidado`, `bd_articulos_x_rubro`,
+**Tablas de datos**: `consumos_im_if_consolidado`, `bd_articulos_x_rubro`,
 `bd_maestro_insumos`
 
 **Tablas propias**: `app_users` (usuarios; se crea sola al arrancar) y
