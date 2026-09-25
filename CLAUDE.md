@@ -32,6 +32,7 @@ sus identificadores** (ids de HTML, funciones y variables de JS).
 | Recepciones | `rec*` | `initRecepciones()` |
 | Nivel de servicio | `ns*` | `initNivelServicio()` |
 | Necesidad Final | `nf*` | `initNecesidadFinal()` |
+| Consumo Histórico | `ch*` | `initConsumoHistorico()` |
 
 **Respetar el prefijo al agregar código.** Es lo único que evita colisiones de
 nombres en un archivo de este tamaño. El router de pestañas está en el listener
@@ -49,8 +50,15 @@ negocio**, solo la consulta y la presenta.
   `indicador_cobertura`, `necesidad_final`
 - **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
   `view_stock_x_rubro`
+- **Tablas de datos**: `bd_consumos_im_if_consolidado` (consumos históricos),
+  `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
+  `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`)
 - **Tablas propias de la app**: `app_users` (login; se crea sola al arrancar),
   `registro_nivel_servicio` (histórico que se inserta al generar el PDF)
+
+Las dos tablas de referencia pueden traer más de una fila por `cod_corto`. Al
+unirlas hay que deduplicarlas antes (`DISTINCT ON`): un `LEFT JOIN` directo
+multiplica las filas de consumo e infla todos los totales sin avisar.
 
 Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`.
 `ADMIN_USER`/`ADMIN_PASS` solo se usan la primera vez, cuando `app_users` está vacía.

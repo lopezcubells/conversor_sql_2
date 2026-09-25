@@ -566,6 +566,7 @@
   <div class="tab" data-tab="recepciones">Recepciones</div>
   <div class="tab" data-tab="nivel-servicio">Nivel de servicio</div>
   <div class="tab" data-tab="necesidad-final">Necesidad Final</div>
+  <div class="tab" data-tab="consumo-historico">Consumo Histórico</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1222,6 +1223,149 @@
 
 </div>
 
+<!-- ═══ CONSUMO HISTÓRICO ═══ -->
+<div class="pane" id="tab-consumo-historico">
+
+  <!-- Encabezado -->
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div>
+      <div class="card-title" style="margin-bottom:6px">Consumo histórico</div>
+      <div style="font-size:12px;color:var(--muted);max-width:640px;line-height:1.5">
+        Sale de <strong style="color:var(--text);font-family:var(--mono)">bd_consumos_im_if_consolidado</strong>,
+        enriquecida con la descripción y el rubro de <strong style="color:var(--text);font-family:var(--mono)">bd_articulos_x_rubro</strong>
+        y el subrubro de <strong style="color:var(--text);font-family:var(--mono)">bd_maestro_insumos</strong>.
+        Si acabás de recargar esas tablas, tocá Actualizar.
+      </div>
+    </div>
+    <button class="btn btn-primary" id="ch-btn-actualizar">🔄 Actualizar</button>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card">
+    <div class="card-title">Filtros</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Código insumo</label>
+        <input type="text" class="search-input" id="ch-q-cod" placeholder="Cód. corto…" style="width:150px;min-width:0" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Descripción insumo</label>
+        <input type="text" class="search-input" id="ch-q-desc" placeholder="Descripción…" style="width:100%;min-width:0" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Código producto</label>
+        <input type="text" class="search-input" id="ch-q-prod" placeholder="Cód. producto…" style="width:150px;min-width:0" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:180px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Rubro</label>
+        <select class="search-input" id="ch-rubro" style="min-width:0"><option value="">Todos</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:180px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Subrubro</label>
+        <select class="search-input" id="ch-subrubro" style="min-width:0"><option value="">Todos</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:170px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Unidad de negocio</label>
+        <select class="search-input" id="ch-un" style="min-width:0"><option value="">Todas</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:150px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Tipo de documento</label>
+        <select class="search-input" id="ch-tipodoc" style="min-width:0"><option value="">Todos</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Desde</label>
+        <input type="date" class="search-input" id="ch-desde" style="width:160px;min-width:0;color-scheme:dark" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hasta</label>
+        <input type="date" class="search-input" id="ch-hasta" style="width:160px;min-width:0;color-scheme:dark" />
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-success" id="ch-btn-aplicar">🔎 Aplicar filtros</button>
+      <button class="btn btn-outline" id="ch-btn-limpiar">✕ Limpiar</button>
+      <span id="ch-estado" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- Tarjetas de totales -->
+  <div class="kpi-row" id="ch-kpis"></div>
+
+  <!-- Evolución: el gráfico principal -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div class="card-title" style="margin-bottom:0">Evolución del consumo</div>
+      <div style="display:flex;gap:6px" id="ch-grano-row">
+        <button class="btn btn-outline ch-grano" data-grano="anual"   style="font-size:12px">Anual</button>
+        <button class="btn btn-outline ch-grano" data-grano="mensual" style="font-size:12px">Mensual</button>
+        <button class="btn btn-outline ch-grano" data-grano="diario"  style="font-size:12px">Diario</button>
+      </div>
+    </div>
+    <div style="position:relative;height:320px;margin-top:14px"><canvas id="ch-chart-serie"></canvas></div>
+  </div>
+
+  <!-- Rankings -->
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div class="card" style="flex:1;min-width:340px">
+      <div class="card-title">Top insumos por consumo</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Clic en una barra para filtrar por ese insumo</div>
+      <div style="position:relative;height:360px"><canvas id="ch-chart-insumos"></canvas></div>
+    </div>
+    <div class="card" style="flex:1;min-width:340px">
+      <div class="card-title">Top productos por consumo</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Clic en una barra para filtrar por ese producto</div>
+      <div style="position:relative;height:360px"><canvas id="ch-chart-productos"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Cortes -->
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div class="card" style="flex:1;min-width:300px">
+      <div class="card-title" style="text-align:center">Consumo por rubro</div>
+      <div style="position:relative;height:280px"><canvas id="ch-chart-rubro"></canvas></div>
+    </div>
+    <div class="card" style="flex:1;min-width:300px">
+      <div class="card-title" style="text-align:center">Consumo por subrubro</div>
+      <div style="position:relative;height:280px"><canvas id="ch-chart-subrubro"></canvas></div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div class="card" style="flex:1;min-width:300px">
+      <div class="card-title" style="text-align:center">Consumo por unidad de negocio</div>
+      <div style="position:relative;height:260px"><canvas id="ch-chart-un"></canvas></div>
+    </div>
+    <div class="card" style="flex:1;min-width:300px">
+      <div class="card-title" style="text-align:center">Consumo por tipo de documento</div>
+      <div style="position:relative;height:260px"><canvas id="ch-chart-tipodoc"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Insumo → productos -->
+  <div class="card">
+    <div class="card-title">En qué productos se usó cada insumo</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+      Los 20 insumos de mayor consumo del filtro actual. Clic en una fila para abrir el detalle por producto.
+    </div>
+    <div class="table-wrap" id="ch-ip-wrap">
+      <div class="empty"><div class="big">📦</div>Aplicá un filtro para ver el cruce</div>
+    </div>
+  </div>
+
+  <!-- Detalle -->
+  <div class="card" style="padding:0">
+    <div class="table-wrap" id="ch-detalle-wrap">
+      <div class="empty"><div class="big">📋</div>Aplicá un filtro para ver el detalle</div>
+    </div>
+  </div>
+  <div class="pagination" id="ch-detalle-pagination"></div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1340,6 +1484,7 @@
       if (tab.dataset.tab === "recepciones") initRecepciones();
       if (tab.dataset.tab === "nivel-servicio") initNivelServicio();
       if (tab.dataset.tab === "necesidad-final") initNecesidadFinal();
+      if (tab.dataset.tab === "consumo-historico") initConsumoHistorico();
     });
   });
 
@@ -4018,6 +4163,483 @@
     if (nsLoaded) return;
     nsRestoreParams();
     nsLoaded = true;
+  }
+
+
+  // ── Consumo histórico ──
+
+  const CH_STORAGE_KEY = "consumo-historico-params";
+  const CH_PAGE_SIZE   = 50;
+
+  let chLoaded  = false;
+  let chGrano   = "mensual";
+  let chIPRows  = [];            // cruce insumo → producto de la última consulta
+  let chCharts  = { serie: null, insumos: null, productos: null, rubro: null, subrubro: null, un: null, tipodoc: null };
+
+  const chEsc = s => nsEsc(s);
+  const chNum = n => fmtNum(parseFloat(n) || 0);
+
+  // Miles cortos para ejes y etiquetas: 1.234.567 → "1,2 M"
+  function chCorto(n) {
+    const v = Math.abs(parseFloat(n) || 0);
+    if (v >= 1e6) return (n / 1e6).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " M";
+    if (v >= 1e3) return (n / 1e3).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " k";
+    return chNum(n);
+  }
+
+  function chFmtFecha(v) {
+    if (!v) return "";
+    const d = String(v).slice(0, 10).split("-");
+    return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(v);
+  }
+
+  // Un filtro vacío se manda como null/[]: el servidor lo interpreta como "no filtrar"
+  function chGetFiltros() {
+    const val  = id => document.getElementById(id).value.trim();
+    const lista = id => (val(id) ? [val(id)] : []);
+    return {
+      q_cod:  val("ch-q-cod"),
+      q_desc: val("ch-q-desc"),
+      q_prod: val("ch-q-prod"),
+      rubros:           lista("ch-rubro"),
+      sub_rubros:       lista("ch-subrubro"),
+      unidades_negocio: lista("ch-un"),
+      tipos_doc:        lista("ch-tipodoc"),
+      desde: val("ch-desde"),
+      hasta: val("ch-hasta"),
+      grano: chGrano,
+    };
+  }
+
+  function chRestoreFiltros() {
+    try {
+      const g = JSON.parse(localStorage.getItem(CH_STORAGE_KEY) || "null");
+      if (!g) return;
+      const set = (id, v) => { if (v != null) document.getElementById(id).value = v; };
+      set("ch-q-cod",  g.q_cod);
+      set("ch-q-desc", g.q_desc);
+      set("ch-q-prod", g.q_prod);
+      set("ch-desde",  g.desde);
+      set("ch-hasta",  g.hasta);
+      if (g.grano && CH_GRANOS_VALIDOS.includes(g.grano)) chGrano = g.grano;
+      // los selects se restauran después de poblarlos con los valores de la base
+      chSelPendientes = {
+        "ch-rubro":    (g.rubros           || [])[0] || "",
+        "ch-subrubro": (g.sub_rubros       || [])[0] || "",
+        "ch-un":       (g.unidades_negocio || [])[0] || "",
+        "ch-tipodoc":  (g.tipos_doc        || [])[0] || "",
+      };
+    } catch (e) {}
+  }
+
+  const CH_GRANOS_VALIDOS = ["anual", "mensual", "diario"];
+  let chSelPendientes = null;
+
+  function chMarcarGrano() {
+    document.querySelectorAll(".ch-grano").forEach(b => {
+      const activo = b.dataset.grano === chGrano;
+      b.className = "btn ch-grano " + (activo ? "btn-primary" : "btn-outline");
+    });
+  }
+
+  // ── Selectores de filtro ──
+
+  async function chCargarFiltros() {
+    try {
+      const res  = await fetch(`${API}/api/pg/consumo-historico/filtros`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      const llenar = (id, valores, todos) => {
+        const sel = document.getElementById(id);
+        const actual = sel.value;
+        sel.innerHTML = `<option value="">${todos}</option>` +
+          valores.map(v => `<option value="${chEsc(v)}">${chEsc(v)}</option>`).join("");
+        const deseado = (chSelPendientes && chSelPendientes[id]) || actual;
+        if (deseado && valores.includes(deseado)) sel.value = deseado;
+      };
+      llenar("ch-rubro",    data.rubros           || [], "Todos");
+      llenar("ch-subrubro", data.sub_rubros       || [], "Todos");
+      llenar("ch-un",       data.unidades_negocio || [], "Todas");
+      llenar("ch-tipodoc",  data.tipos_doc        || [], "Todos");
+      chSelPendientes = null;
+    } catch (e) {
+      toast("❌ No se pudieron cargar los filtros: " + e.message, "err");
+    }
+  }
+
+  // ── Tarjetas ──
+
+  function chRenderKpis(r) {
+    const rango = (r.desde && r.hasta) ? `${chFmtFecha(r.desde)} → ${chFmtFecha(r.hasta)}` : "—";
+    document.getElementById("ch-kpis").innerHTML = `
+      <div class="kpi-card" style="--kpi-accent:#4f8ef7">
+        <div class="kpi-label">Consumo total</div>
+        <div class="kpi-value">${chNum(r.consumo_total)}</div>
+        <div class="kpi-sub">${rango}</div>
+      </div>
+      <div class="kpi-card" style="--kpi-accent:#34c97e">
+        <div class="kpi-label">Movimientos</div>
+        <div class="kpi-value">${chNum(r.movimientos)}</div>
+        <div class="kpi-sub">filas del consolidado</div>
+      </div>
+      <div class="kpi-card" style="--kpi-accent:#a78bfa">
+        <div class="kpi-label">Insumos distintos</div>
+        <div class="kpi-value">${chNum(r.insumos)}</div>
+        <div class="kpi-sub">códigos cortos</div>
+      </div>
+      <div class="kpi-card" style="--kpi-accent:#f7874f">
+        <div class="kpi-label">Productos distintos</div>
+        <div class="kpi-value">${chNum(r.productos)}</div>
+        <div class="kpi-sub">códigos principales</div>
+      </div>`;
+  }
+
+  // ── Gráficos ──
+
+  const CH_GRID = "rgba(255,255,255,.06)";
+  const CH_TICK = "#7b7f99";
+
+  function chNuevoChart(clave, canvasId, config) {
+    if (chCharts[clave]) chCharts[clave].destroy();
+    const ctx = document.getElementById(canvasId).getContext("2d");
+    chCharts[clave] = new Chart(ctx, config);
+    return chCharts[clave];
+  }
+
+  function chRenderSerie(rows) {
+    const labels = rows.map(r => r.periodo);
+    const datos  = rows.map(r => parseFloat(r.consumo) || 0);
+    chNuevoChart("serie", "ch-chart-serie", {
+      type: "bar",
+      data: { labels, datasets: [{
+        label: "Consumo",
+        data: datos,
+        backgroundColor: "#4f8ef7",
+        hoverBackgroundColor: "#7aaefc",
+        borderRadius: 3,
+        maxBarThickness: 46,
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: false },
+          tooltip: { callbacks: { label: c => "Consumo: " + chNum(c.parsed.y) } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: CH_TICK, maxRotation: 0, autoSkip: true, maxTicksLimit: 24 } },
+          y: { grid: { color: CH_GRID }, ticks: { color: CH_TICK, callback: v => chCorto(v) }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  // Barras horizontales de ranking; al hacer clic filtra por el código de la barra
+  function chRenderRanking(clave, canvasId, rows, campoCod, campoDesc, alClickear) {
+    const labels = rows.map(r => {
+      const d = String(r[campoDesc] ?? "").trim();
+      const c = String(r[campoCod] ?? "").trim() || "(sin código)";
+      return d ? `${c} · ${d.slice(0, 34)}` : c;
+    });
+    const datos  = rows.map(r => parseFloat(r.consumo) || 0);
+    const colores = rows.map((_, i) => colorForRank(i, rows.length));
+    const maxV = Math.max(...datos, 1);
+
+    chNuevoChart(clave, canvasId, {
+      type: "bar",
+      data: { labels, datasets: [{ data: datos, backgroundColor: colores, borderRadius: 3 }] },
+      options: {
+        indexAxis: "y",
+        responsive: true, maintainAspectRatio: false, animation: false,
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const fila = rows[els[0].index];
+          if (fila) alClickear(fila);
+        },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => "Consumo: " + chNum(c.parsed.x) } },
+          datalabels: {
+            anchor: "end", align: "end", color: "#9fb6d9", font: { size: 11, weight: "600" },
+            formatter: v => chCorto(v),
+          },
+        },
+        scales: {
+          x: { suggestedMax: maxV * 1.25, display: false, grid: { display: false } },
+          y: { grid: { display: false }, ticks: { color: CH_TICK, font: { size: 11 }, autoSkip: false } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+  }
+
+  function chRenderDona(clave, canvasId, rows) {
+    const top = rows.slice(0, 9);
+    const resto = rows.slice(9).reduce((a, r) => a + (parseFloat(r.consumo) || 0), 0);
+    const labels = top.map(r => r.clave);
+    const datos  = top.map(r => parseFloat(r.consumo) || 0);
+    const colores = top.map((_, i) => colorForRank(i, top.length));
+    if (resto > 0) { labels.push("Otros"); datos.push(resto); colores.push(RUBRO_OTROS_COLOR); }
+    const total = datos.reduce((a, b) => a + b, 0) || 1;
+
+    chNuevoChart(clave, canvasId, {
+      type: "doughnut",
+      data: { labels, datasets: [{ data: datos, backgroundColor: colores, borderWidth: 0 }] },
+      options: {
+        cutout: "58%",
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "right", labels: { color: CH_TICK, font: { size: 11 }, boxWidth: 12, padding: 8 } },
+          datalabels: { display: false },
+          tooltip: { callbacks: {
+            label: c => `${c.label}: ${chNum(c.parsed)} (${(100 * c.parsed / total).toFixed(1)}%)`,
+          } },
+        },
+      },
+    });
+  }
+
+  function chRenderBarrasClave(clave, canvasId, rows) {
+    const top = rows.slice(0, 12);
+    const datos = top.map(r => parseFloat(r.consumo) || 0);
+    const maxV  = Math.max(...datos, 1);
+    chNuevoChart(clave, canvasId, {
+      type: "bar",
+      data: { labels: top.map(r => r.clave), datasets: [{
+        data: datos, backgroundColor: top.map((_, i) => colorForRank(i, top.length)), borderRadius: 3,
+      }] },
+      options: {
+        indexAxis: "y",
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => "Consumo: " + chNum(c.parsed.x) } },
+          datalabels: {
+            anchor: "end", align: "end", color: "#9fb6d9", font: { size: 11, weight: "600" },
+            formatter: v => chCorto(v),
+          },
+        },
+        scales: {
+          x: { suggestedMax: maxV * 1.25, display: false, grid: { display: false } },
+          y: { grid: { display: false }, ticks: { color: CH_TICK, font: { size: 11 }, autoSkip: false } },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
+  }
+
+  // ── Insumo → productos ──
+
+  function chToggleIP(gid) {
+    const hdr = document.getElementById(`${gid}-hdr`);
+    const abierto = hdr.dataset.open === "1";
+    hdr.dataset.open = abierto ? "0" : "1";
+    hdr.querySelector(".ch-arrow").textContent = abierto ? "▶" : "▼";
+    document.querySelectorAll(`.${gid}`).forEach(tr => tr.style.display = abierto ? "none" : "");
+  }
+
+  function chRenderInsumoProducto(rows) {
+    chIPRows = rows || [];
+    const wrap = document.getElementById("ch-ip-wrap");
+    if (!chIPRows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📦</div>Sin datos para el filtro actual</div>`;
+      return;
+    }
+
+    // Agrupado por insumo, respetando el orden que ya trae el servidor (consumo desc)
+    const porInsumo = new Map();
+    chIPRows.forEach(r => {
+      if (!porInsumo.has(r.cod_corto)) {
+        porInsumo.set(r.cod_corto, {
+          cod: r.cod_corto, desc: r.descripcion, rubro: r.rubro,
+          total: parseFloat(r.consumo_insumo) || 0, items: [],
+        });
+      }
+      porInsumo.get(r.cod_corto).items.push(r);
+    });
+
+    let gi = 0;
+    const filas = [...porInsumo.values()].map(g => {
+      const gid = `chip${gi++}`;
+      const hijos = g.items.map(it => {
+        const v    = parseFloat(it.consumo) || 0;
+        const pct  = g.total ? (100 * v / g.total) : 0;
+        return `
+          <tr class="${gid}" style="display:none">
+            <td style="padding:6px 10px 6px 28px;color:var(--muted);font-family:var(--mono);font-size:11px">${chEsc(it.cod_corto_ppal)}</td>
+            <td style="padding:6px 10px;color:var(--muted)" colspan="2">${chEsc(it.descripcion_ppal)}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:var(--mono)">${chNum(v)}</td>
+            <td style="padding:6px 10px;width:150px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;border-radius:99px;background:var(--border);overflow:hidden">
+                  <div style="height:100%;width:${pct.toFixed(1)}%;background:#4f8ef7;border-radius:99px"></div>
+                </div>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:42px;text-align:right">${pct.toFixed(1)}%</span>
+              </div>
+            </td>
+          </tr>`;
+      }).join("");
+
+      return `
+        <tr id="${gid}-hdr" data-open="0" onclick="chToggleIP('${gid}')" style="cursor:pointer;border-top:1px solid var(--border)">
+          <td style="padding:9px 10px;font-weight:600;font-family:var(--mono);font-size:12px">
+            <span class="ch-arrow" style="display:inline-block;width:14px;color:var(--muted)">▶</span>${chEsc(g.cod)}
+          </td>
+          <td style="padding:9px 10px;font-weight:600">${chEsc(g.desc)}</td>
+          <td style="padding:9px 10px;color:var(--muted);font-size:11px">${chEsc(g.rubro)}</td>
+          <td style="padding:9px 10px;text-align:right;font-family:var(--mono);font-weight:600;color:#4f8ef7">${chNum(g.total)}</td>
+          <td style="padding:9px 10px;text-align:right;color:var(--muted);font-size:11px">${g.items.length} producto${g.items.length === 1 ? "" : "s"}</td>
+        </tr>${hijos}`;
+    }).join("");
+
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left">Insumo</th>
+          <th style="text-align:left">Descripción</th>
+          <th style="text-align:left">Rubro</th>
+          <th style="text-align:right">Consumo</th>
+          <th style="text-align:right">Productos</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>`;
+  }
+
+  // ── Detalle ──
+
+  function chRenderDetalle(rows, total, offset) {
+    const wrap = document.getElementById("ch-detalle-wrap");
+    if (!rows || !rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin registros para este filtro</div>`;
+      document.getElementById("ch-detalle-pagination").innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Cód. Insumo</th><th>Descripción</th><th>Rubro</th><th>Subrubro</th>
+          <th>Cód. Producto</th><th>Producto</th><th>U. Negocio</th><th>Tipo Doc</th>
+          <th>N° Doc</th><th>Tipo Orden</th><th>N° Orden</th><th style="text-align:right">Consumo</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${chFmtFecha(r.fecha_orden)}</td>
+          <td>${chEsc(r.cod_corto)}</td>
+          <td>${chEsc(r.descripcion)}</td>
+          <td>${chEsc(r.rubro)}</td>
+          <td>${chEsc(r.sub_rubro)}</td>
+          <td>${chEsc(r.cod_corto_ppal)}</td>
+          <td>${chEsc(r.descripcion_ppal)}</td>
+          <td>${chEsc(r.unidad_negocio)}</td>
+          <td>${chEsc(r.tipo_doc)}</td>
+          <td>${chEsc(r.numero_documento)}</td>
+          <td>${chEsc(r.tipo_orden)}</td>
+          <td>${chEsc(r.numero_orden)}</td>
+          <td style="text-align:right">${chNum(r.consumo)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+    renderPagination("ch-detalle-pagination", total, offset, CH_PAGE_SIZE, "chCargarDetalle");
+  }
+
+  // Paginado: vuelve a pedir solo la tabla, sin recalcular gráficos ni tarjetas
+  async function chCargarDetalle(offset) {
+    const payload = { ...chGetFiltros(), offset };
+    try {
+      const res  = await fetch(`${API}/api/pg/consumo-historico/detalle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      chRenderDetalle(data.detalle, data.total, data.offset);
+      document.getElementById("ch-detalle-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      toast("❌ " + e.message, "err");
+    }
+  }
+
+  // ── Carga principal ──
+
+  async function chCargar() {
+    const filtros = chGetFiltros();
+    localStorage.setItem(CH_STORAGE_KEY, JSON.stringify(filtros));
+
+    const estado = document.getElementById("ch-estado");
+    const btns   = [document.getElementById("ch-btn-aplicar"), document.getElementById("ch-btn-actualizar")];
+    btns.forEach(b => b.disabled = true);
+    estado.textContent = "Consultando PostgreSQL…";
+
+    try {
+      const res = await fetch(`${API}/api/pg/consumo-historico`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...filtros, offset: 0 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+
+      chRenderKpis(data.resumen || {});
+      chRenderSerie(data.serie || []);
+      chRenderRanking("insumos", "ch-chart-insumos", data.top_insumos || [],
+        "cod_corto", "descripcion", fila => {
+          document.getElementById("ch-q-cod").value = fila.cod_corto ?? "";
+          chCargar();
+        });
+      chRenderRanking("productos", "ch-chart-productos", data.top_productos || [],
+        "cod_corto_ppal", "descripcion_ppal", fila => {
+          document.getElementById("ch-q-prod").value = fila.cod_corto_ppal ?? "";
+          chCargar();
+        });
+      chRenderDona("rubro",    "ch-chart-rubro",    data.por_rubro    || []);
+      chRenderBarrasClave("subrubro", "ch-chart-subrubro", data.por_sub_rubro || []);
+      chRenderDona("un",       "ch-chart-un",       data.por_unidad   || []);
+      chRenderDona("tipodoc",  "ch-chart-tipodoc",  data.por_tipo_doc || []);
+      chRenderInsumoProducto(data.insumo_producto || []);
+      chRenderDetalle(data.detalle || [], data.total || 0, data.offset || 0);
+
+      estado.textContent = `✓ ${chNum(data.total || 0)} registros`;
+    } catch (e) {
+      estado.textContent = "⚠ " + e.message;
+      toast("❌ " + e.message, "err");
+    } finally {
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  document.getElementById("ch-btn-aplicar").addEventListener("click", chCargar);
+  document.getElementById("ch-btn-actualizar").addEventListener("click", chCargar);
+
+  document.getElementById("ch-btn-limpiar").addEventListener("click", () => {
+    ["ch-q-cod", "ch-q-desc", "ch-q-prod", "ch-desde", "ch-hasta",
+     "ch-rubro", "ch-subrubro", "ch-un", "ch-tipodoc"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    chCargar();
+  });
+
+  ["ch-q-cod", "ch-q-desc", "ch-q-prod"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") chCargar(); });
+  });
+  ["ch-rubro", "ch-subrubro", "ch-un", "ch-tipodoc"].forEach(id => {
+    document.getElementById(id).addEventListener("change", chCargar);
+  });
+
+  document.querySelectorAll(".ch-grano").forEach(b => {
+    b.addEventListener("click", () => {
+      chGrano = b.dataset.grano;
+      chMarcarGrano();
+      chCargar();
+    });
+  });
+
+  async function initConsumoHistorico() {
+    if (chLoaded) return;
+    chLoaded = true;
+    chRestoreFiltros();
+    chMarcarGrano();
+    await chCargarFiltros();
+    chCargar();
   }
 
   // ── Necesidad final ──

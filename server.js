@@ -532,3 +532,252 @@ app.get("/api/pg/inmovilizados/detalle", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Consumo histórico ──
+
+// Las tablas de referencia pueden tener más de una fila por código; se deduplican
+// con DISTINCT ON antes de unir. Sin eso, un LEFT JOIN multiplicaría cada consumo
+// por la cantidad de filas repetidas e inflaría todos los totales.
+const CH_BASE = `
+  WITH art AS (
+    SELECT DISTINCT ON (cod_corto) cod_corto, descripcion, rubro
+    FROM bd_articulos_x_rubro
+    WHERE cod_corto IS NOT NULL
+    ORDER BY cod_corto
+  ),
+  ins AS (
+    SELECT DISTINCT ON (cod_corto) cod_corto, sub_rubro
+    FROM bd_maestro_insumos
+    WHERE cod_corto IS NOT NULL
+    ORDER BY cod_corto
+  ),
+  base AS (
+    SELECT c.cod_corto,
+           a.descripcion                   AS descripcion,
+           a.rubro                         AS rubro,
+           i.sub_rubro                     AS sub_rubro,
+           c.cod_corto_ppal,
+           p.descripcion                   AS descripcion_ppal,
+           c.unidad_negocio,
+           c.tipo_doc,
+           c.numero_documento,
+           c.tipo_orden,
+           c.numero_orden,
+           c.fecha_orden::date             AS fecha_orden,
+           COALESCE(c.consumo, 0)::numeric AS consumo
+    FROM bd_consumos_im_if_consolidado c
+    LEFT JOIN art a ON a.cod_corto = c.cod_corto
+    LEFT JOIN art p ON p.cod_corto = c.cod_corto_ppal
+    LEFT JOIN ins i ON i.cod_corto = c.cod_corto
+    WHERE ($1::text   IS NULL OR c.cod_corto      ILIKE $1)
+      AND ($2::text   IS NULL OR a.descripcion    ILIKE $2)
+      AND ($3::text[] IS NULL OR a.rubro          = ANY($3::text[]))
+      AND ($4::text[] IS NULL OR i.sub_rubro      = ANY($4::text[]))
+      AND ($5::text[] IS NULL OR c.unidad_negocio = ANY($5::text[]))
+      AND ($6::text[] IS NULL OR c.tipo_doc       = ANY($6::text[]))
+      AND ($7::date   IS NULL OR c.fecha_orden::date >= $7::date)
+      AND ($8::date   IS NULL OR c.fecha_orden::date <= $8::date)
+      AND ($9::text   IS NULL OR c.cod_corto_ppal ILIKE $9)
+  )`;
+
+// El desplegado del gráfico principal entra como identificador dentro del SQL,
+// así que sale de esta tabla y nunca del texto que mandó el navegador.
+const CH_GRANOS = {
+  anual:   { trunc: "year",  formato: "YYYY" },
+  mensual: { trunc: "month", formato: "YYYY-MM" },
+  diario:  { trunc: "day",   formato: "YYYY-MM-DD" },
+};
+
+const CH_PAGE_SIZE = 50;
+
+// Valores disponibles para los selectores de filtro
+app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const [un, td, ru, sr] = await Promise.all([
+      pgPool.query("SELECT DISTINCT unidad_negocio AS v FROM bd_consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT tipo_doc       AS v FROM bd_consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT rubro          AS v FROM bd_articulos_x_rubro          WHERE rubro          IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT sub_rubro      AS v FROM bd_maestro_insumos            WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
+    ]);
+    const vals = r => r.rows.map(x => x.v);
+    res.json({
+      unidades_negocio: vals(un),
+      tipos_doc:        vals(td),
+      rubros:           vals(ru),
+      sub_rubros:       vals(sr),
+    });
+  } catch (e) {
+    console.error("PG consumo-historico/filtros error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Arma los argumentos comunes a todas las consultas del tablero.
+// Un filtro vacío viaja como NULL, que en el WHERE significa "no filtrar".
+function chArgs(body) {
+  const txt  = v => (v && String(v).trim() ? `%${String(v).trim()}%` : null);
+  const arr  = v => (Array.isArray(v) && v.length ? v : null);
+  const fech = v => (v && String(v).trim() ? String(v).trim() : null);
+  return [
+    txt(body.q_cod), txt(body.q_desc),
+    arr(body.rubros), arr(body.sub_rubros),
+    arr(body.unidades_negocio), arr(body.tipos_doc),
+    fech(body.desde), fech(body.hasta),
+    txt(body.q_prod),
+  ];
+}
+
+app.post("/api/pg/consumo-historico", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const body   = req.body || {};
+    const grano  = CH_GRANOS[body.grano] || CH_GRANOS.mensual;
+    const args   = chArgs(body);
+    const offset = Math.max(0, parseInt(body.offset) || 0);
+
+    const sqlResumen = `${CH_BASE}
+      SELECT COALESCE(SUM(consumo), 0)          AS consumo_total,
+             COUNT(*)::int                      AS movimientos,
+             COUNT(DISTINCT cod_corto)::int     AS insumos,
+             COUNT(DISTINCT cod_corto_ppal)::int AS productos,
+             MIN(fecha_orden)                   AS desde,
+             MAX(fecha_orden)                   AS hasta
+      FROM base`;
+
+    const sqlSerie = `${CH_BASE}
+      SELECT to_char(date_trunc('${grano.trunc}', fecha_orden), '${grano.formato}') AS periodo,
+             date_trunc('${grano.trunc}', fecha_orden) AS orden,
+             SUM(consumo) AS consumo
+      FROM base
+      WHERE fecha_orden IS NOT NULL
+      GROUP BY 1, 2
+      ORDER BY 2`;
+
+    // Los cuatro cortes salen de un solo recorrido de la tabla en vez de cuatro.
+    const sqlDims = `${CH_BASE}
+      SELECT CASE WHEN GROUPING(rubro)          = 0 THEN 'rubro'
+                  WHEN GROUPING(sub_rubro)      = 0 THEN 'sub_rubro'
+                  WHEN GROUPING(unidad_negocio) = 0 THEN 'unidad_negocio'
+                  ELSE 'tipo_doc' END AS dim,
+             CASE WHEN GROUPING(rubro)          = 0 THEN COALESCE(rubro,          '(sin dato)')
+                  WHEN GROUPING(sub_rubro)      = 0 THEN COALESCE(sub_rubro,      '(sin dato)')
+                  WHEN GROUPING(unidad_negocio) = 0 THEN COALESCE(unidad_negocio, '(sin dato)')
+                  ELSE COALESCE(tipo_doc, '(sin dato)') END AS clave,
+             SUM(consumo) AS consumo
+      FROM base
+      GROUP BY GROUPING SETS ((rubro), (sub_rubro), (unidad_negocio), (tipo_doc))
+      ORDER BY 1, 3 DESC`;
+
+    const sqlTopInsumos = `${CH_BASE}
+      SELECT cod_corto,
+             MAX(descripcion)                    AS descripcion,
+             MAX(rubro)                          AS rubro,
+             MAX(sub_rubro)                      AS sub_rubro,
+             SUM(consumo)                        AS consumo,
+             COUNT(DISTINCT cod_corto_ppal)::int AS productos
+      FROM base
+      GROUP BY cod_corto
+      ORDER BY consumo DESC NULLS LAST
+      LIMIT 15`;
+
+    const sqlTopProductos = `${CH_BASE}
+      SELECT cod_corto_ppal,
+             MAX(descripcion_ppal)          AS descripcion_ppal,
+             SUM(consumo)                   AS consumo,
+             COUNT(DISTINCT cod_corto)::int AS insumos
+      FROM base
+      GROUP BY cod_corto_ppal
+      ORDER BY consumo DESC NULLS LAST
+      LIMIT 15`;
+
+    // Insumo → productos: se acota a los 20 insumos de mayor consumo para que
+    // el cruce no crezca con el producto de ambas dimensiones.
+    const sqlInsumoProducto = `${CH_BASE},
+      top AS (
+        SELECT cod_corto, SUM(consumo) AS consumo
+        FROM base
+        GROUP BY cod_corto
+        ORDER BY consumo DESC NULLS LAST
+        LIMIT 20
+      )
+      SELECT b.cod_corto,
+             MAX(b.descripcion)      AS descripcion,
+             MAX(b.rubro)            AS rubro,
+             b.cod_corto_ppal,
+             MAX(b.descripcion_ppal) AS descripcion_ppal,
+             SUM(b.consumo)          AS consumo,
+             MAX(t.consumo)          AS consumo_insumo
+      FROM base b
+      JOIN top t ON t.cod_corto = b.cod_corto
+      GROUP BY b.cod_corto, b.cod_corto_ppal
+      ORDER BY MAX(t.consumo) DESC NULLS LAST, b.cod_corto, SUM(b.consumo) DESC`;
+
+    const sqlDetalle = `${CH_BASE}
+      SELECT fecha_orden, cod_corto, descripcion, rubro, sub_rubro,
+             cod_corto_ppal, descripcion_ppal,
+             unidad_negocio, tipo_doc, numero_documento,
+             tipo_orden, numero_orden, consumo,
+             (COUNT(*) OVER ())::int AS total
+      FROM base
+      ORDER BY fecha_orden DESC NULLS LAST, cod_corto
+      LIMIT ${CH_PAGE_SIZE} OFFSET $10`;
+
+    const [resumen, serie, dims, topIns, topProd, insProd, detalle] = await Promise.all([
+      pgPool.query(sqlResumen,        args),
+      pgPool.query(sqlSerie,          args),
+      pgPool.query(sqlDims,           args),
+      pgPool.query(sqlTopInsumos,     args),
+      pgPool.query(sqlTopProductos,   args),
+      pgPool.query(sqlInsumoProducto, args),
+      pgPool.query(sqlDetalle,        [...args, offset]),
+    ]);
+
+    const porDim = d => dims.rows.filter(r => r.dim === d).map(r => ({ clave: r.clave, consumo: r.consumo }));
+
+    res.json({
+      resumen:         resumen.rows[0] || {},
+      serie:           serie.rows,
+      por_rubro:       porDim("rubro"),
+      por_sub_rubro:   porDim("sub_rubro"),
+      por_unidad:      porDim("unidad_negocio"),
+      por_tipo_doc:    porDim("tipo_doc"),
+      top_insumos:     topIns.rows,
+      top_productos:   topProd.rows,
+      insumo_producto: insProd.rows,
+      detalle:         detalle.rows,
+      total:           detalle.rows.length ? detalle.rows[0].total : 0,
+      offset,
+    });
+  } catch (e) {
+    console.error("PG consumo-historico error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Paginado del detalle: repite solo la consulta de la tabla, sin recalcular el tablero
+app.post("/api/pg/consumo-historico/detalle", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const body   = req.body || {};
+    const args   = chArgs(body);
+    const offset = Math.max(0, parseInt(body.offset) || 0);
+    const result = await pgPool.query(`${CH_BASE}
+      SELECT fecha_orden, cod_corto, descripcion, rubro, sub_rubro,
+             cod_corto_ppal, descripcion_ppal,
+             unidad_negocio, tipo_doc, numero_documento,
+             tipo_orden, numero_orden, consumo,
+             (COUNT(*) OVER ())::int AS total
+      FROM base
+      ORDER BY fecha_orden DESC NULLS LAST, cod_corto
+      LIMIT ${CH_PAGE_SIZE} OFFSET $10`, [...args, offset]);
+
+    res.json({
+      detalle: result.rows,
+      total:   result.rows.length ? result.rows[0].total : 0,
+      offset,
+    });
+  } catch (e) {
+    console.error("PG consumo-historico/detalle error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
