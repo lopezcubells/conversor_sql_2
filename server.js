@@ -577,6 +577,7 @@ const CH_BASE = `
       AND ($7::date   IS NULL OR c.fecha_orden::date >= $7::date)
       AND ($8::date   IS NULL OR c.fecha_orden::date <= $8::date)
       AND ($9::text   IS NULL OR c.cod_corto_ppal ILIKE $9)
+      AND ($10::int[] IS NULL OR EXTRACT(YEAR FROM c.fecha_orden)::int = ANY($10::int[]))
   )`;
 
 // El desplegado del gráfico principal entra como identificador dentro del SQL,
@@ -593,11 +594,12 @@ const CH_PAGE_SIZE = 50;
 app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
-    const [un, td, ru, sr] = await Promise.all([
+    const [un, td, ru, sr, an] = await Promise.all([
       pgPool.query("SELECT DISTINCT unidad_negocio AS v FROM consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
       pgPool.query("SELECT DISTINCT tipo_doc       AS v FROM consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
       pgPool.query("SELECT DISTINCT rubro          AS v FROM bd_articulos_x_rubro       WHERE rubro          IS NOT NULL ORDER BY 1"),
       pgPool.query("SELECT DISTINCT sub_rubro      AS v FROM bd_maestro_insumos         WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT EXTRACT(YEAR FROM fecha_orden)::int AS v FROM consumos_im_if_consolidado WHERE fecha_orden IS NOT NULL ORDER BY 1"),
     ]);
     const vals = r => r.rows.map(x => x.v);
     res.json({
@@ -605,6 +607,7 @@ app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
       tipos_doc:        vals(td),
       rubros:           vals(ru),
       sub_rubros:       vals(sr),
+      anios:            vals(an),
     });
   } catch (e) {
     console.error("PG consumo-historico/filtros error:", e.message);
@@ -618,12 +621,19 @@ function chArgs(body) {
   const txt  = v => (v && String(v).trim() ? `%${String(v).trim()}%` : null);
   const arr  = v => (Array.isArray(v) && v.length ? v : null);
   const fech = v => (v && String(v).trim() ? String(v).trim() : null);
+  // Los años llegan como botones; se quedan solo los enteros válidos
+  const anios = v => {
+    if (!Array.isArray(v)) return null;
+    const limpios = v.map(x => parseInt(x, 10)).filter(Number.isInteger);
+    return limpios.length ? limpios : null;
+  };
   return [
     txt(body.q_cod), txt(body.q_desc),
     arr(body.rubros), arr(body.sub_rubros),
     arr(body.unidades_negocio), arr(body.tipos_doc),
     fech(body.desde), fech(body.hasta),
     txt(body.q_prod),
+    anios(body.anios),
   ];
 }
 
@@ -720,7 +730,7 @@ app.post("/api/pg/consumo-historico", async (req, res) => {
              (COUNT(*) OVER ())::int AS total
       FROM base
       ORDER BY fecha_orden DESC NULLS LAST, cod_corto
-      LIMIT ${CH_PAGE_SIZE} OFFSET $10`;
+      LIMIT ${CH_PAGE_SIZE} OFFSET $11`;
 
     const [resumen, serie, dims, topIns, topProd, insProd, detalle] = await Promise.all([
       pgPool.query(sqlResumen,        args),
@@ -769,7 +779,7 @@ app.post("/api/pg/consumo-historico/detalle", async (req, res) => {
              (COUNT(*) OVER ())::int AS total
       FROM base
       ORDER BY fecha_orden DESC NULLS LAST, cod_corto
-      LIMIT ${CH_PAGE_SIZE} OFFSET $10`, [...args, offset]);
+      LIMIT ${CH_PAGE_SIZE} OFFSET $11`, [...args, offset]);
 
     res.json({
       detalle: result.rows,

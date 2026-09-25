@@ -1285,6 +1285,13 @@
       </div>
     </div>
 
+    <div style="margin-top:16px">
+      <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Años</label>
+      <div id="ch-anios" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <span style="font-size:12px;color:var(--muted)">—</span>
+      </div>
+    </div>
+
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-success" id="ch-btn-aplicar">🔎 Aplicar filtros</button>
       <button class="btn btn-outline" id="ch-btn-limpiar">✕ Limpiar</button>
@@ -4207,6 +4214,7 @@
       tipos_doc:        lista("ch-tipodoc"),
       desde: val("ch-desde"),
       hasta: val("ch-hasta"),
+      anios: [...chAnios].sort(),
       grano: chGrano,
     };
   }
@@ -4222,6 +4230,7 @@
       set("ch-desde",  g.desde);
       set("ch-hasta",  g.hasta);
       if (g.grano && CH_GRANOS_VALIDOS.includes(g.grano)) chGrano = g.grano;
+      if (Array.isArray(g.anios)) chAnios = new Set(g.anios.map(Number).filter(Number.isInteger));
       // los selects se restauran después de poblarlos con los valores de la base
       chSelPendientes = {
         "ch-rubro":    (g.rubros           || [])[0] || "",
@@ -4234,6 +4243,36 @@
 
   const CH_GRANOS_VALIDOS = ["anual", "mensual", "diario"];
   let chSelPendientes = null;
+  let chAnios         = new Set();   // años elegidos; vacío = todos
+  let chAniosDisponibles = [];       // los que existen en la base
+
+  // Los botones salen de los años que hay en los datos, así que aparecen solos
+  // a medida que se cargan años nuevos.
+  function chRenderAnios() {
+    const cont = document.getElementById("ch-anios");
+    if (!chAniosDisponibles.length) {
+      cont.innerHTML = `<span style="font-size:12px;color:var(--muted)">Sin fechas en los datos</span>`;
+      return;
+    }
+    const btn = (texto, activo, attr) =>
+      `<button class="btn ${activo ? "btn-primary" : "btn-outline"}" ${attr} style="font-size:12px">${texto}</button>`;
+    cont.innerHTML =
+      btn("Todos", chAnios.size === 0, `data-anio="todos"`) +
+      chAniosDisponibles.map(a => btn(a, chAnios.has(a), `data-anio="${a}"`)).join("");
+  }
+
+  // Un clic alterna el año; "Todos" limpia la selección
+  document.getElementById("ch-anios").addEventListener("click", e => {
+    const b = e.target.closest("button[data-anio]");
+    if (!b) return;
+    if (b.dataset.anio === "todos") chAnios.clear();
+    else {
+      const a = parseInt(b.dataset.anio, 10);
+      if (chAnios.has(a)) chAnios.delete(a); else chAnios.add(a);
+    }
+    chRenderAnios();
+    chCargar();
+  });
 
   function chMarcarGrano() {
     document.querySelectorAll(".ch-grano").forEach(b => {
@@ -4261,6 +4300,10 @@
       llenar("ch-subrubro", data.sub_rubros       || [], "Todos");
       llenar("ch-un",       data.unidades_negocio || [], "Todas");
       llenar("ch-tipodoc",  data.tipos_doc        || [], "Todos");
+      chAniosDisponibles = (data.anios || []).map(Number).filter(Number.isInteger);
+      // si un año guardado ya no está en los datos, se descarta
+      chAnios = new Set([...chAnios].filter(a => chAniosDisponibles.includes(a)));
+      chRenderAnios();
       chSelPendientes = null;
     } catch (e) {
       toast("❌ No se pudieron cargar los filtros: " + e.message, "err");
@@ -4615,6 +4658,8 @@
      "ch-rubro", "ch-subrubro", "ch-un", "ch-tipodoc"].forEach(id => {
       document.getElementById(id).value = "";
     });
+    chAnios.clear();
+    chRenderAnios();
     chCargar();
   });
 
