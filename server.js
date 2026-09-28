@@ -534,6 +534,14 @@ app.get("/api/pg/inmovilizados/detalle", async (req, res) => {
 
 // ── Consumo histórico ──
 
+// Comparación tolerante para los filtros de valor exacto. El valor elegido sale
+// del mismo SELECT DISTINCT que llena el desplegable, así que deberían coincidir
+// tal cual — salvo que la columna sea character(n), donde el relleno con espacios
+// se pierde al castear a text y la igualdad falla sin que se note. Se recortan
+// espacios y se ignoran mayúsculas de los dos lados para que no dependa del tipo.
+const chIgual = (col, param) =>
+  `upper(btrim(${col}::text)) = ANY(SELECT upper(btrim(x)) FROM unnest(${param}::text[]) AS x)`;
+
 // Las tablas de referencia pueden tener más de una fila por código; se deduplican
 // con DISTINCT ON antes de unir. Sin eso, un LEFT JOIN multiplicaría cada consumo
 // por la cantidad de filas repetidas e inflaría todos los totales.
@@ -570,10 +578,10 @@ const CH_BASE = `
     LEFT JOIN ins i ON i.cod_corto = c.cod_corto
     WHERE ($1::text   IS NULL OR c.cod_corto      ILIKE $1)
       AND ($2::text   IS NULL OR a.descripcion    ILIKE $2)
-      AND ($3::text[] IS NULL OR a.rubro          = ANY($3::text[]))
-      AND ($4::text[] IS NULL OR i.sub_rubro      = ANY($4::text[]))
-      AND ($5::text[] IS NULL OR c.unidad_negocio = ANY($5::text[]))
-      AND ($6::text[] IS NULL OR c.tipo_doc       = ANY($6::text[]))
+      AND ($3::text[] IS NULL OR ${chIgual("a.rubro",          "$3")})
+      AND ($4::text[] IS NULL OR ${chIgual("i.sub_rubro",      "$4")})
+      AND ($5::text[] IS NULL OR ${chIgual("c.unidad_negocio", "$5")})
+      AND ($6::text[] IS NULL OR ${chIgual("c.tipo_doc",       "$6")})
       AND ($7::date   IS NULL OR c.fecha_orden::date >= $7::date)
       AND ($8::date   IS NULL OR c.fecha_orden::date <= $8::date)
       AND ($9::text   IS NULL OR c.cod_corto_ppal ILIKE $9)
@@ -596,10 +604,10 @@ app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const [un, td, ru, sr, an] = await Promise.all([
-      pgPool.query("SELECT DISTINCT unidad_negocio AS v FROM consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT tipo_doc       AS v FROM consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT rubro          AS v FROM bd_articulos_x_rubro       WHERE rubro          IS NOT NULL ORDER BY 1"),
-      pgPool.query("SELECT DISTINCT sub_rubro      AS v FROM bd_maestro_insumos         WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT btrim(unidad_negocio::text) AS v FROM consumos_im_if_consolidado WHERE unidad_negocio IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT btrim(tipo_doc::text)       AS v FROM consumos_im_if_consolidado WHERE tipo_doc       IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT btrim(rubro::text)          AS v FROM bd_articulos_x_rubro       WHERE rubro          IS NOT NULL ORDER BY 1"),
+      pgPool.query("SELECT DISTINCT btrim(sub_rubro::text)      AS v FROM bd_maestro_insumos         WHERE sub_rubro      IS NOT NULL ORDER BY 1"),
       pgPool.query("SELECT DISTINCT EXTRACT(YEAR FROM fecha_orden)::int AS v FROM consumos_im_if_consolidado WHERE fecha_orden IS NOT NULL ORDER BY 1"),
     ]);
     const vals = r => r.rows.map(x => x.v);
