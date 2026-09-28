@@ -578,6 +578,7 @@ const CH_BASE = `
       AND ($8::date   IS NULL OR c.fecha_orden::date <= $8::date)
       AND ($9::text   IS NULL OR c.cod_corto_ppal ILIKE $9)
       AND ($10::int[] IS NULL OR EXTRACT(YEAR FROM c.fecha_orden)::int = ANY($10::int[]))
+      AND ($11::text  IS NULL OR p.descripcion    ILIKE $11)
   )`;
 
 // El desplegado del gráfico principal entra como identificador dentro del SQL,
@@ -634,6 +635,7 @@ function chArgs(body) {
     fech(body.desde), fech(body.hasta),
     txt(body.q_prod),
     anios(body.anios),
+    txt(body.q_desc_prod),
   ];
 }
 
@@ -730,7 +732,7 @@ app.post("/api/pg/consumo-historico", async (req, res) => {
              (COUNT(*) OVER ())::int AS total
       FROM base
       ORDER BY fecha_orden DESC NULLS LAST, cod_corto
-      LIMIT ${CH_PAGE_SIZE} OFFSET $11`;
+      LIMIT ${CH_PAGE_SIZE} OFFSET $12`;
 
     const [resumen, serie, dims, topIns, topProd, insProd, detalle] = await Promise.all([
       pgPool.query(sqlResumen,        args),
@@ -779,7 +781,7 @@ app.post("/api/pg/consumo-historico/detalle", async (req, res) => {
              (COUNT(*) OVER ())::int AS total
       FROM base
       ORDER BY fecha_orden DESC NULLS LAST, cod_corto
-      LIMIT ${CH_PAGE_SIZE} OFFSET $11`, [...args, offset]);
+      LIMIT ${CH_PAGE_SIZE} OFFSET $12`, [...args, offset]);
 
     res.json({
       detalle: result.rows,

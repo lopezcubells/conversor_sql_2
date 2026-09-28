@@ -1245,16 +1245,23 @@
     <div class="card-title">Filtros</div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
       <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Código producto</label>
+        <input type="text" class="search-input" id="ch-q-prod" placeholder="Cód. producto…" style="width:150px;min-width:0" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Descripción producto</label>
+        <input type="text" class="search-input" id="ch-q-desc-prod" placeholder="Descripción del producto…" style="width:100%;min-width:0" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">
+      <div style="display:flex;flex-direction:column;gap:4px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Código insumo</label>
         <input type="text" class="search-input" id="ch-q-cod" placeholder="Cód. corto…" style="width:150px;min-width:0" />
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">
         <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Descripción insumo</label>
         <input type="text" class="search-input" id="ch-q-desc" placeholder="Descripción…" style="width:100%;min-width:0" />
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Código producto</label>
-        <input type="text" class="search-input" id="ch-q-prod" placeholder="Cód. producto…" style="width:150px;min-width:0" />
       </div>
     </div>
 
@@ -4208,6 +4215,7 @@
       q_cod:  val("ch-q-cod"),
       q_desc: val("ch-q-desc"),
       q_prod: val("ch-q-prod"),
+      q_desc_prod: val("ch-q-desc-prod"),
       rubros:           lista("ch-rubro"),
       sub_rubros:       lista("ch-subrubro"),
       unidades_negocio: lista("ch-un"),
@@ -4227,6 +4235,7 @@
       set("ch-q-cod",  g.q_cod);
       set("ch-q-desc", g.q_desc);
       set("ch-q-prod", g.q_prod);
+      set("ch-q-desc-prod", g.q_desc_prod);
       set("ch-desde",  g.desde);
       set("ch-hasta",  g.hasta);
       if (g.grano && CH_GRANOS_VALIDOS.includes(g.grano)) chGrano = g.grano;
@@ -4654,7 +4663,7 @@
   document.getElementById("ch-btn-actualizar").addEventListener("click", chCargar);
 
   document.getElementById("ch-btn-limpiar").addEventListener("click", () => {
-    ["ch-q-cod", "ch-q-desc", "ch-q-prod", "ch-desde", "ch-hasta",
+    ["ch-q-cod", "ch-q-desc", "ch-q-prod", "ch-q-desc-prod", "ch-desde", "ch-hasta",
      "ch-rubro", "ch-subrubro", "ch-un", "ch-tipodoc"].forEach(id => {
       document.getElementById(id).value = "";
     });
@@ -4663,7 +4672,7 @@
     chCargar();
   });
 
-  ["ch-q-cod", "ch-q-desc", "ch-q-prod"].forEach(id => {
+  ["ch-q-cod", "ch-q-desc", "ch-q-prod", "ch-q-desc-prod"].forEach(id => {
     document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") chCargar(); });
   });
   ["ch-rubro", "ch-subrubro", "ch-un", "ch-tipodoc"].forEach(id => {
