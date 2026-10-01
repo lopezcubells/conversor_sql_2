@@ -78,6 +78,12 @@ Las imágenes **no se exponen con URL pública**: las proxea `/api/r2/imagen`,
 así quedan detrás del login como el resto de la app. El listado se cachea en
 memoria 10 minutos; el botón Actualizar lo fuerza con `?refresh=1`.
 
+El panel de archivos sale de `bd_maestro_insumos` (vía `/api/pg/maestro-insumos`)
+y cada fila se vincula con su imagen por **nombre de archivo sin extensión =
+`cod_corto`**, comparado sin espacios ni mayúsculas. Las dos fuentes se piden
+con `Promise.allSettled`: si R2 falla, el maestro igual se muestra sin
+miniaturas, y al revés el aviso explica qué falta.
+
 ## Cómo verificar cambios (importante)
 
 **No hay Node instalado en el entorno de desarrollo**, así que la app no se puede

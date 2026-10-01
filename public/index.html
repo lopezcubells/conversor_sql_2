@@ -301,6 +301,37 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .cat-item-meta { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
+    /* Tabla del panel de archivos. border-collapse: separate es necesario para
+       que el borde acompañe al encabezado fijo; con collapse el borde es de la
+       tabla y no viaja con la celda. */
+    .cat-tabla { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    .cat-tabla thead th {
+      position: sticky; top: 0; z-index: 2;
+      background: var(--bg); color: var(--muted);
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+      text-align: left; font-weight: 600; white-space: nowrap;
+      padding: 6px 6px; border-bottom: none;
+      box-shadow: inset 0 -1px 0 var(--border);
+      cursor: pointer; user-select: none;
+    }
+    .cat-tabla thead th.cat-no-ord { cursor: default; }
+    .cat-tabla tbody td {
+      padding: 2px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cat-tabla tbody tr { cursor: pointer; }
+    .cat-tabla tbody tr:hover td { background: rgba(255,255,255,.04); }
+    .cat-tabla tbody tr.activo td { background: rgba(79,142,247,.16); }
+    .cat-td-mini { width: 38px; padding: 1px 4px !important; }
+    .cat-mono { font-family: var(--mono); font-size: 11px; }
+    /* Hueco del mismo tamaño que la miniatura: sin esto las filas sin imagen
+       miden distinto y la lista queda despareja. */
+    .cat-sin-img {
+      width: 26px; height: 26px; border-radius: 4px;
+      border: 1px dashed var(--border); display: grid; place-items: center;
+      font-size: 10px; color: var(--muted);
+    }
     /* Fondo a cuadros: deja ver la transparencia de los PNG */
     .cat-visor {
       flex: 1; min-height: 0;
@@ -1596,21 +1627,21 @@
     <div class="card cat-izq">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div class="card-title" style="margin-bottom:0">Archivos</div>
-        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
-          Miniaturas
-        </label>
+        <div style="display:flex;gap:14px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+            <input type="checkbox" id="cat-solo-img" style="accent-color:#4f8ef7">
+            Solo con imagen
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+            <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
+            Miniaturas
+          </label>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
-        <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar archivo…"
+        <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar por código, descripción o rubro…"
                style="flex:1;min-width:0;padding:6px 10px;font-size:12px" />
-        <select class="search-input" id="cat-orden" style="width:140px;min-width:0;padding:6px 10px;font-size:12px">
-          <option value="nombre">Nombre (A-Z)</option>
-          <option value="nombre-desc">Nombre (Z-A)</option>
-          <option value="fecha">Más recientes</option>
-          <option value="tamano">Más pesadas</option>
-        </select>
       </div>
 
       <div style="font-size:11px;color:var(--muted);margin-top:8px" id="cat-resumen">—</div>
@@ -5371,112 +5402,165 @@
   }
 
 
-  // ── Catálogo de imágenes (Cloudflare R2) ──
+  // ── Catálogo: maestro de insumos + imágenes en Cloudflare R2 ──
 
   let catLoaded   = false;
-  let catArchivos = [];     // todo el bucket
-  let catVisibles = [];     // lo que pasa el buscador, ya ordenado
-  let catActual   = null;   // archivo abierto en el visor
+  let catInsumos  = [];     // filas de bd_maestro_insumos
+  let catVisibles = [];     // lo que pasa el filtro, ya ordenado
+  let catImagenes = new Map();  // cod_corto normalizado -> clave en el bucket
+  let catActual   = null;   // insumo abierto en el visor
   let catZoom     = null;   // null = ajustar a la pantalla; número = escala
+  let catSort     = { col: "cod_corto", dir: "asc" };
 
   const catUrl = key => `${API}/api/r2/imagen?key=${encodeURIComponent(key)}`;
 
-  function catTamano(bytes) {
-    const b = parseFloat(bytes) || 0;
-    if (b >= 1048576) return (b / 1048576).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " MB";
-    if (b >= 1024)    return (b / 1024).toLocaleString("es-AR", { maximumFractionDigits: 0 }) + " kB";
-    return b + " B";
+  // El nombre del archivo sin extensión es el cod_corto. Se compara sin
+  // espacios ni mayúsculas para que un "  10001 " del maestro igual enganche.
+  const catNorm = v => String(v ?? "").trim().toUpperCase();
+  const catCodigoDeArchivo = key => catNorm(String(key).split("/").pop().replace(/\.[^.]+$/, ""));
+
+  const catImagenDe = insumo => catImagenes.get(catNorm(insumo && insumo.cod_corto)) || null;
+
+  function catAjustarAlto() {
+    const pane  = document.getElementById("tab-catalogo");
+    const split = pane.querySelector(".cat-split");
+    if (!pane.classList.contains("active")) return;
+    split.style.height = "";                       // se mide sin el alto anterior
+    const arriba = split.getBoundingClientRect().top;
+    split.style.height = Math.max(320, window.innerHeight - arriba - 28) + "px";
   }
 
-  function catFecha(v) {
-    if (!v) return "";
-    const d = new Date(v);
-    return isNaN(d) ? "" : d.toLocaleDateString("es-AR");
-  }
+  window.addEventListener("resize", catAjustarAlto);
 
-  // Nombre sin la "carpeta" ni la extensión, que es lo que se quiere leer
-  function catNombre(key) {
-    const hoja = String(key).split("/").pop();
-    return hoja.replace(/\.[^.]+$/, "");
-  }
+  // ── Listado ──
 
   function catFiltrarYOrdenar() {
     const q = document.getElementById("cat-buscar").value.trim().toLowerCase();
-    const orden = document.getElementById("cat-orden").value;
-    let lista = q ? catArchivos.filter(a => a.key.toLowerCase().includes(q)) : [...catArchivos];
-    const cmp = {
-      "nombre":      (a, b) => a.key.localeCompare(b.key, "es"),
-      "nombre-desc": (a, b) => b.key.localeCompare(a.key, "es"),
-      "fecha":       (a, b) => new Date(b.modificado || 0) - new Date(a.modificado || 0),
-      "tamano":      (a, b) => (b.tamano || 0) - (a.tamano || 0),
-    }[orden] || ((a, b) => a.key.localeCompare(b.key, "es"));
-    catVisibles = lista.sort(cmp);
+    const soloImg = document.getElementById("cat-solo-img").checked;
+
+    let lista = catInsumos;
+    if (soloImg) lista = lista.filter(catImagenDe);
+    if (q) lista = lista.filter(r =>
+      [r.cod_corto, r.cod_largo, r.descripcion, r.rubro]
+        .some(v => String(v ?? "").toLowerCase().includes(q)));
+
+    const signo = catSort.dir === "desc" ? -1 : 1;
+    catVisibles = [...lista].sort((a, b) => {
+      const va = a[catSort.col] ?? "", vb = b[catSort.col] ?? "";
+      // Los códigos son texto pero suelen ser numéricos: así 9 va antes que 10
+      const na = parseFloat(va), nb = parseFloat(vb);
+      if (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
+        return signo * (na - nb);
+      return signo * String(va).localeCompare(String(vb), "es");
+    });
     catRenderLista();
+  }
+
+  function catOrdenar(col) {
+    if (catSort.col === col) catSort.dir = catSort.dir === "asc" ? "desc" : "asc";
+    else catSort = { col, dir: "asc" };
+    catFiltrarYOrdenar();
+  }
+
+  function catTh(label, col, extra) {
+    const activa = catSort.col === col;
+    const flecha = activa ? (catSort.dir === "desc" ? "▼" : "▲") : "▾";
+    return `<th onclick="catOrdenar('${col}')"${extra || ""}>${label} <span style="opacity:${activa ? 1 : .4}">${flecha}</span></th>`;
   }
 
   function catRenderLista() {
     const cont = document.getElementById("cat-lista");
-    const resumen = document.getElementById("cat-resumen");
     const conMini = document.getElementById("cat-miniaturas").checked;
+    const conImagen = catInsumos.filter(catImagenDe).length;
 
-    const total = catVisibles.reduce((a, f) => a + (f.tamano || 0), 0);
-    resumen.textContent = catArchivos.length
-      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catArchivos.length.toLocaleString("es-AR")} archivos · ${catTamano(total)}`
+    document.getElementById("cat-resumen").textContent = catInsumos.length
+      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catInsumos.length.toLocaleString("es-AR")} insumos · ${conImagen.toLocaleString("es-AR")} con imagen`
       : "—";
 
     if (!catVisibles.length) {
       cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">🔍</div>${
-        catArchivos.length ? "Sin coincidencias" : "El bucket está vacío"}</div>`;
+        catInsumos.length ? "Sin coincidencias" : "El maestro está vacío"}</div>`;
       return;
     }
 
     // loading="lazy": las miniaturas se bajan recién cuando entran en pantalla
-    cont.innerHTML = catVisibles.map((f, i) => `
-      <div class="cat-item${catActual && catActual.key === f.key ? " activo" : ""}" data-i="${i}" title="${nsEsc(f.key)}">
-        ${conMini ? `<img class="cat-item-mini" loading="lazy" src="${catUrl(f.key)}" alt="">` : ""}
-        <span class="cat-item-nom">${nsEsc(catNombre(f.key))}</span>
-        <span class="cat-item-meta">${catTamano(f.tamano)}</span>
-      </div>`).join("");
+    const filas = catVisibles.map((r, i) => {
+      const key = catImagenDe(r);
+      const mini = !conMini ? "" : `<td class="cat-td-mini">${
+        key ? `<img class="cat-item-mini" loading="lazy" src="${catUrl(key)}" alt="">`
+            : `<div class="cat-sin-img">—</div>`}</td>`;
+      return `<tr class="${catActual && catActual.cod_corto === r.cod_corto ? "activo" : ""}" data-i="${i}">
+        ${mini}
+        <td class="cat-mono">${nsEsc(r.cod_corto)}</td>
+        <td class="cat-mono">${nsEsc(r.cod_largo)}</td>
+        <td title="${nsEsc(r.descripcion)}">${nsEsc(r.descripcion)}</td>
+        <td style="color:var(--muted)" title="${nsEsc(r.rubro)}">${nsEsc(r.rubro)}</td>
+      </tr>`;
+    }).join("");
+
+    cont.innerHTML = `
+      <table class="cat-tabla">
+        <colgroup>
+          ${conMini ? '<col style="width:38px">' : ""}
+          <col style="width:76px"><col style="width:96px"><col><col style="width:22%">
+        </colgroup>
+        <thead><tr>
+          ${conMini ? '<th class="cat-no-ord"></th>' : ""}
+          ${catTh("Cód. corto", "cod_corto")}
+          ${catTh("Cód. largo", "cod_largo")}
+          ${catTh("Descripción", "descripcion")}
+          ${catTh("Rubro", "rubro")}
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>`;
   }
 
   function catAbrir(i) {
-    const f = catVisibles[i];
-    if (!f) return;
-    catActual = f;
+    const r = catVisibles[i];
+    if (!r) return;
+    catActual = r;
     catZoom = null;
     catRenderLista();
     catRenderVisor();
-    // mantiene a la vista el elemento elegido cuando se navega con el teclado
-    const el = document.querySelector(`#cat-lista .cat-item[data-i="${i}"]`);
-    if (el) el.scrollIntoView({ block: "nearest" });
+    const fila = document.querySelector(`#cat-lista tbody tr[data-i="${i}"]`);
+    if (fila) fila.scrollIntoView({ block: "nearest" });
   }
+
+  // ── Visor ──
 
   function catRenderVisor() {
     const visor = document.getElementById("cat-visor");
     const abrir = document.getElementById("cat-abrir");
+    const titulo = document.getElementById("cat-visor-titulo");
+    const meta   = document.getElementById("cat-visor-meta");
+
     if (!catActual) {
-      visor.innerHTML = `<div class="empty"><div class="big">🖼️</div>Elegí un archivo de la lista</div>`;
-      document.getElementById("cat-visor-titulo").textContent = "Visor";
-      document.getElementById("cat-visor-meta").textContent = "";
+      visor.innerHTML = `<div class="empty"><div class="big">🖼️</div>Elegí un insumo de la lista</div>`;
+      titulo.textContent = "Visor";
+      meta.textContent = "";
       abrir.style.display = "none";
       return;
     }
-    document.getElementById("cat-visor-titulo").textContent = catNombre(catActual.key);
-    document.getElementById("cat-visor-meta").textContent =
-      `${catActual.key} · ${catTamano(catActual.tamano)}${catActual.modificado ? " · " + catFecha(catActual.modificado) : ""}`;
-    abrir.href = catUrl(catActual.key);
-    abrir.style.display = "";
 
-    visor.innerHTML = `<img id="cat-img" class="ajustada" src="${catUrl(catActual.key)}" alt="${nsEsc(catNombre(catActual.key))}">`;
+    titulo.textContent = `${catActual.cod_corto} · ${catActual.descripcion || ""}`.trim();
+    const key = catImagenDe(catActual);
+    meta.textContent = [catActual.cod_largo, catActual.rubro, key].filter(Boolean).join(" · ");
+
+    if (!key) {
+      visor.innerHTML = `<div class="empty"><div class="big">📷</div>Sin imagen para el código ${nsEsc(catActual.cod_corto)}</div>`;
+      abrir.style.display = "none";
+      return;
+    }
+
+    abrir.href = catUrl(key);
+    abrir.style.display = "";
+    visor.innerHTML = `<img id="cat-img" class="ajustada" src="${catUrl(key)}" alt="${nsEsc(catActual.descripcion || catActual.cod_corto)}">`;
     const img = document.getElementById("cat-img");
     img.addEventListener("error", () => {
       visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
     });
     // Al terminar de cargar se informa el tamaño real, que es dato útil del catálogo
-    img.addEventListener("load", () => {
-      document.getElementById("cat-visor-meta").textContent +=
-        ` · ${img.naturalWidth}×${img.naturalHeight} px`;
-    });
+    img.addEventListener("load", () => { meta.textContent += ` · ${img.naturalWidth}×${img.naturalHeight} px`; });
     catAplicarZoom();
   }
 
@@ -5507,36 +5591,61 @@
   async function catCargar(refrescar) {
     const cont = document.getElementById("cat-lista");
     const btn  = document.getElementById("cat-btn-actualizar");
+    const origen = document.getElementById("cat-origen");
     btn.disabled = true;
-    cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">⏳</div>Leyendo el bucket…</div>`;
-    try {
-      const res  = await fetch(`${API}/api/r2/catalogo${refrescar ? "?refresh=1" : ""}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error desconocido");
-      catArchivos = data.archivos || [];
-      document.getElementById("cat-origen").innerHTML =
-        `Bucket <strong style="color:var(--text);font-family:var(--mono)">${nsEsc(data.bucket || "")}</strong> en Cloudflare R2. Las imágenes se sirven a través de la app, así que siguen protegidas por el login.`;
-      catFiltrarYOrdenar();
-      catAjustarAlto();
-    } catch (e) {
-      catArchivos = [];
-      catVisibles = [];
-      document.getElementById("cat-resumen").textContent = "—";
-      cont.innerHTML = `<div class="empty" style="padding:24px 10px"><div class="big">⚠️</div>${nsEsc(e.message)}</div>`;
-    } finally {
-      btn.disabled = false;
+    cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">⏳</div>Cargando…</div>`;
+
+    // Las dos fuentes son independientes: si R2 falla, el maestro igual se ve
+    const [maestro, bucket] = await Promise.allSettled([
+      fetch(`${API}/api/pg/maestro-insumos`).then(async r => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Error desconocido");
+        return d;
+      }),
+      fetch(`${API}/api/r2/catalogo${refrescar ? "?refresh=1" : ""}`).then(async r => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Error desconocido");
+        return d;
+      }),
+    ]);
+
+    catImagenes = new Map();
+    let notaBucket = "";
+    if (bucket.status === "fulfilled") {
+      (bucket.value.archivos || []).forEach(a => {
+        const cod = catCodigoDeArchivo(a.key);
+        if (cod && !catImagenes.has(cod)) catImagenes.set(cod, a.key);
+      });
+      notaBucket = `Imágenes del bucket <strong style="color:var(--text);font-family:var(--mono)">${nsEsc(bucket.value.bucket || "")}</strong> en Cloudflare R2, vinculadas por nombre de archivo = cód. corto.`;
+    } else {
+      notaBucket = `<span style="color:#f7874f">Sin imágenes: ${nsEsc(bucket.reason.message)}</span>`;
     }
+
+    if (maestro.status === "fulfilled") {
+      catInsumos = maestro.value.insumos || [];
+      origen.innerHTML = `Datos de <strong style="color:var(--text);font-family:var(--mono)">bd_maestro_insumos</strong>. ${notaBucket}`;
+      catFiltrarYOrdenar();
+    } else {
+      catInsumos = [];
+      catVisibles = [];
+      origen.innerHTML = notaBucket;
+      document.getElementById("cat-resumen").textContent = "—";
+      cont.innerHTML = `<div class="empty" style="padding:24px 10px"><div class="big">⚠️</div>${nsEsc(maestro.reason.message)}</div>`;
+    }
+
+    catAjustarAlto();
+    btn.disabled = false;
   }
 
   // ── Eventos ──
 
   document.getElementById("cat-lista").addEventListener("click", e => {
-    const item = e.target.closest(".cat-item");
-    if (item) catAbrir(parseInt(item.dataset.i, 10));
+    const fila = e.target.closest("tbody tr[data-i]");
+    if (fila) catAbrir(parseInt(fila.dataset.i, 10));
   });
 
   document.getElementById("cat-buscar").addEventListener("input", catFiltrarYOrdenar);
-  document.getElementById("cat-orden").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-solo-img").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
 
@@ -5551,24 +5660,10 @@
     if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const i = catActual ? catVisibles.findIndex(f => f.key === catActual.key) : -1;
+    const i = catActual ? catVisibles.findIndex(r => r.cod_corto === catActual.cod_corto) : -1;
     const sig = e.key === "ArrowDown" ? i + 1 : i - 1;
     if (sig >= 0 && sig < catVisibles.length) catAbrir(sig);
   });
-
-  // El split toma el alto que sobra hasta el pie de la ventana, así la pestaña
-  // entra en una pantalla sin barra de desplazamiento. Se mide en vez de
-  // calcularse con vh porque arriba hay encabezado, solapas y una tarjeta.
-  function catAjustarAlto() {
-    const pane  = document.getElementById("tab-catalogo");
-    const split = pane.querySelector(".cat-split");
-    if (!pane.classList.contains("active")) return;
-    split.style.height = "";                       // se mide sin el alto anterior
-    const arriba = split.getBoundingClientRect().top;
-    split.style.height = Math.max(320, window.innerHeight - arriba - 28) + "px";
-  }
-
-  window.addEventListener("resize", catAjustarAlto);
 
   function initCatalogo() {
     if (catLoaded) {

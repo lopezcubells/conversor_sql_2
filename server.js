@@ -922,6 +922,27 @@ app.post("/api/pg/bom/despiece", async (req, res) => {
   }
 });
 
+// Maestro que alimenta el panel de archivos del catálogo. Una fila por
+// cod_corto: la tabla puede traer repetidos y duplicarían el listado.
+app.get("/api/pg/maestro-insumos", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const r = await pgPool.query(`
+      SELECT DISTINCT ON (btrim(cod_corto::text))
+             btrim(cod_corto::text)   AS cod_corto,
+             btrim(cod_largo::text)   AS cod_largo,
+             btrim(descripcion::text) AS descripcion,
+             btrim(rubro::text)       AS rubro
+      FROM bd_maestro_insumos
+      WHERE cod_corto IS NOT NULL AND btrim(cod_corto::text) <> ''
+      ORDER BY btrim(cod_corto::text)`);
+    res.json({ insumos: r.rows });
+  } catch (e) {
+    console.error("PG maestro-insumos error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Catálogo de imágenes (Cloudflare R2) ──
 
 // R2 habla el protocolo S3, así que alcanza con el cliente de S3 apuntado al
