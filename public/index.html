@@ -282,9 +282,19 @@
        min-height 0 para que scrollee la lista y no la página. */
     #tab-catalogo.active { display: flex; flex-direction: column; }
     #tab-catalogo .card { margin-bottom: 0; }
-    #tab-catalogo > .card:first-child { margin-bottom: 14px; padding: 14px 20px; }
+    /* Fila de arriba: el encabezado y el detalle, mitad y mitad, de modo que
+       el detalle quede justo encima del visor. */
+    #tab-catalogo .cat-top {
+      display: flex; gap: 16px; align-items: stretch;
+      flex-wrap: wrap; margin-bottom: 14px;
+    }
+    #tab-catalogo .cat-top > .card { flex: 1 1 320px; min-width: 0; padding: 14px 20px; }
+    .cat-det-campo { font-size: 11px; color: var(--muted); }
+    .cat-det-valor { font-family: var(--mono); font-size: 12px; color: var(--text); }
     .cat-split { display: flex; gap: 16px; align-items: stretch; min-height: 0; }
     /* Mitad y mitad: las dos columnas parten del mismo ancho base */
+    /* Con flex-basis 0 y box-sizing border-box, el relleno se suma al reparto:
+       si los dos paneles no tienen el MISMO padding, no quedan del mismo ancho. */
     .cat-izq, .cat-der {
       flex: 1 1 0; min-width: 0; min-height: 0;
       display: flex; flex-direction: column;
@@ -1631,14 +1641,36 @@
 <!-- ═══ CATÁLOGO ═══ -->
 <div class="pane" id="tab-catalogo">
 
-  <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
-    <div>
-      <div class="card-title" style="margin-bottom:6px">Catálogo de imágenes</div>
-      <div style="font-size:12px;color:var(--muted)" id="cat-origen">
-        Las imágenes se sirven desde el bucket de Cloudflare R2.
+  <div class="cat-top">
+
+    <div class="card" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div style="min-width:0">
+        <div class="card-title" style="margin-bottom:6px">Catálogo de imágenes</div>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.45" id="cat-origen">
+          Las imágenes se sirven desde el bucket de Cloudflare R2.
+        </div>
       </div>
+      <button class="btn btn-primary" id="cat-btn-actualizar" style="flex:0 0 auto">🔄 Actualizar</button>
     </div>
-    <button class="btn btn-primary" id="cat-btn-actualizar">🔄 Actualizar</button>
+
+    <!-- Detalle de lo seleccionado: queda arriba del visor, que solo muestra la imagen -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14px;font-weight:600;color:var(--text)" id="cat-visor-titulo">Detalle</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:3px" id="cat-visor-meta">Elegí un insumo de la lista</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex:0 0 auto">
+          <button class="btn btn-outline" id="cat-zoom-menos" style="font-size:12px" title="Alejar">−</button>
+          <span id="cat-zoom-valor" style="font-size:12px;color:var(--muted);min-width:46px;text-align:center">Ajustar</span>
+          <button class="btn btn-outline" id="cat-zoom-mas" style="font-size:12px" title="Acercar">+</button>
+          <button class="btn btn-outline" id="cat-zoom-ajustar" style="font-size:12px">Ajustar</button>
+          <a class="btn btn-outline" id="cat-abrir" style="font-size:12px;display:none" target="_blank" rel="noopener">Abrir ↗</a>
+        </div>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px" id="cat-det-campos"></div>
+    </div>
+
   </div>
 
   <div class="cat-split">
@@ -1683,24 +1715,10 @@
       <div class="pagination" id="cat-pagination" style="margin-top:10px"></div>
     </div>
 
-    <!-- Panel derecho: visor -->
+    <!-- Panel derecho: solo la imagen -->
     <div class="card cat-der">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="min-width:0">
-          <div class="card-title" style="margin-bottom:2px" id="cat-visor-titulo">Visor</div>
-          <div style="font-size:11px;color:var(--muted)" id="cat-visor-meta"></div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn btn-outline" id="cat-zoom-menos" style="font-size:12px" title="Alejar">−</button>
-          <span id="cat-zoom-valor" style="font-size:12px;color:var(--muted);min-width:46px;text-align:center">Ajustar</span>
-          <button class="btn btn-outline" id="cat-zoom-mas" style="font-size:12px" title="Acercar">+</button>
-          <button class="btn btn-outline" id="cat-zoom-ajustar" style="font-size:12px">Ajustar</button>
-          <a class="btn btn-outline" id="cat-abrir" style="font-size:12px;display:none" target="_blank" rel="noopener">Abrir ↗</a>
-        </div>
-      </div>
-
-      <div class="cat-visor" id="cat-visor" style="margin-top:12px">
-        <div class="empty"><div class="big">🖼️</div>Elegí un archivo de la lista</div>
+      <div class="cat-visor" id="cat-visor">
+        <div class="empty"><div class="big">🖼️</div>Elegí un insumo de la lista</div>
       </div>
     </div>
 
@@ -5609,39 +5627,66 @@
 
   // ── Visor ──
 
-  function catRenderVisor() {
-    const visor = document.getElementById("cat-visor");
-    const abrir = document.getElementById("cat-abrir");
+  // Panel de detalle: todo lo que no es la imagen (códigos, rubro, stock,
+  // archivo y medidas) vive acá, arriba del visor.
+  function catRenderDetalle(dimensiones) {
     const titulo = document.getElementById("cat-visor-titulo");
     const meta   = document.getElementById("cat-visor-meta");
+    const campos = document.getElementById("cat-det-campos");
+    const abrir  = document.getElementById("cat-abrir");
+
+    if (!catActual) {
+      titulo.textContent = "Detalle";
+      meta.textContent = "Elegí un insumo de la lista";
+      campos.innerHTML = "";
+      abrir.style.display = "none";
+      return;
+    }
+
+    const key = catImagenDe(catActual);
+    titulo.textContent = `${catActual.cod_corto} · ${catActual.descripcion || ""}`.trim();
+    meta.textContent = catActual.rubro || "";
+
+    const dato = (etiqueta, valor) => valor
+      ? `<div><div class="cat-det-campo">${etiqueta}</div><div class="cat-det-valor">${nsEsc(valor)}</div></div>`
+      : "";
+    campos.innerHTML =
+      dato("Cód. largo", catActual.cod_largo) +
+      dato("Stock", fmtNum(catActual.stock)) +
+      dato("Archivo", key || "sin imagen") +
+      dato("Medidas", dimensiones || "");
+
+    abrir.href = key ? catUrl(key) : "#";
+    abrir.style.display = key ? "" : "none";
+  }
+
+  function catRenderVisor() {
+    const visor = document.getElementById("cat-visor");
 
     if (!catActual) {
       visor.innerHTML = `<div class="empty"><div class="big">🖼️</div>Elegí un insumo de la lista</div>`;
-      titulo.textContent = "Visor";
-      meta.textContent = "";
-      abrir.style.display = "none";
+      catRenderDetalle();
       return;
     }
 
-    titulo.textContent = `${catActual.cod_corto} · ${catActual.descripcion || ""}`.trim();
     const key = catImagenDe(catActual);
-    meta.textContent = [catActual.cod_largo, catActual.rubro, key].filter(Boolean).join(" · ");
+    catRenderDetalle();
 
     if (!key) {
       visor.innerHTML = `<div class="empty"><div class="big">📷</div>Sin imagen para el código ${nsEsc(catActual.cod_corto)}</div>`;
-      abrir.style.display = "none";
       return;
     }
 
-    abrir.href = catUrl(key);
-    abrir.style.display = "";
     visor.innerHTML = `<img id="cat-img" class="ajustada" src="${catUrl(key)}" alt="${nsEsc(catActual.descripcion || catActual.cod_corto)}">`;
     const img = document.getElementById("cat-img");
     img.addEventListener("error", () => {
       visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
     });
-    // Al terminar de cargar se informa el tamaño real, que es dato útil del catálogo
-    img.addEventListener("load", () => { meta.textContent += ` · ${img.naturalWidth}×${img.naturalHeight} px`; });
+    // Las medidas reales recién se conocen al cargar; se pasan al panel de
+    // detalle en vez de concatenarse al texto, que al re-renderizar se duplicaba.
+    img.addEventListener("load", () => {
+      catRenderDetalle(`${img.naturalWidth}×${img.naturalHeight} px`);
+    });
     catAplicarZoom();
   }
 
