@@ -304,6 +304,26 @@
       flex-wrap: wrap; margin-bottom: 14px;
     }
     #tab-catalogo .cat-top > .card { flex: 1 1 320px; min-width: 0; padding: 14px 20px; }
+    /* Paginación al pie de la tabla, reducida a lo indispensable */
+    .cat-pag { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+    .cat-pag span { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .cat-pag button {
+      width: 20px; height: 20px; padding: 0; line-height: 1;
+      font-size: 12px; cursor: pointer;
+      background: none; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 5px;
+    }
+    .cat-pag button:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.05); }
+    .cat-pag button:disabled { opacity: .3; cursor: default; }
+    /* Refresco: solo el icono, al ras de los filtros */
+    .cat-refrescar {
+      flex: 0 0 auto; width: 28px; height: 28px; padding: 0;
+      font-size: 13px; line-height: 1; border-radius: 7px;
+      background: none; color: var(--muted);
+      border: 1px solid var(--border); cursor: pointer;
+    }
+    .cat-refrescar:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.05); }
+    .cat-refrescar:disabled { opacity: .4; cursor: default; }
     .cat-det-campo { font-size: 11px; color: var(--muted); }
     .cat-det-valor { font-family: var(--mono); font-size: 12px; color: var(--text); }
     .cat-split { display: flex; gap: 16px; align-items: stretch; min-height: 0; }
@@ -1662,14 +1682,35 @@
 
   <div class="cat-top">
 
-    <div class="card" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-      <div style="min-width:0">
-        <div class="card-title" style="margin-bottom:6px">Catálogo de imágenes</div>
-        <div style="font-size:11.5px;color:var(--muted);line-height:1.45" id="cat-origen">
-          Las imágenes se sirven desde el bucket de Cloudflare R2.
-        </div>
+    <!-- Filtros: viven acá para que el panel de abajo sea solo la tabla -->
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" class="search-input" id="cat-q-cod" placeholder="Cód. corto…"
+               style="flex:0 0 92px;width:92px;min-width:0;padding:6px 10px;font-size:12px" />
+        <input type="text" class="search-input" id="cat-q-largo" placeholder="Cód. largo…"
+               style="flex:0 0 112px;width:112px;min-width:0;padding:6px 10px;font-size:12px" />
+        <input type="text" class="search-input" id="cat-q-desc" placeholder="Descripción…"
+               style="flex:1 1 120px;min-width:0;padding:6px 10px;font-size:12px" />
+        <select class="search-input" id="cat-rubro" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
+          <option value="">Todos los rubros</option>
+        </select>
+        <button class="cat-refrescar" id="cat-btn-actualizar" title="Actualizar">⟳</button>
       </div>
-      <button class="btn btn-primary" id="cat-btn-actualizar" style="flex:0 0 auto">🔄 Actualizar</button>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cat-en-stock" style="accent-color:#4f8ef7">
+          En stock
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cat-solo-img" style="accent-color:#4f8ef7">
+          Solo con imagen
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
+          Miniaturas
+        </label>
+      </div>
     </div>
 
     <!-- Detalle de lo seleccionado: queda arriba del visor, que solo muestra la imagen -->
@@ -1685,44 +1726,12 @@
 
   <div class="cat-split">
 
-    <!-- Panel izquierdo: listado -->
+    <!-- Panel izquierdo: solo la tabla y su paginación -->
     <div class="card cat-izq">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div class="card-title" style="margin-bottom:0">Archivos</div>
-        <div style="display:flex;gap:14px">
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-            <input type="checkbox" id="cat-en-stock" style="accent-color:#4f8ef7">
-            En stock
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-            <input type="checkbox" id="cat-solo-img" style="accent-color:#4f8ef7">
-            Solo con imagen
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-            <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
-            Miniaturas
-          </label>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
-        <input type="text" class="search-input" id="cat-q-cod" placeholder="Cód. corto…"
-               style="flex:0 0 92px;width:92px;min-width:0;padding:6px 10px;font-size:12px" />
-        <input type="text" class="search-input" id="cat-q-largo" placeholder="Cód. largo…"
-               style="flex:0 0 112px;width:112px;min-width:0;padding:6px 10px;font-size:12px" />
-        <input type="text" class="search-input" id="cat-q-desc" placeholder="Descripción…"
-               style="flex:1 1 120px;min-width:0;padding:6px 10px;font-size:12px" />
-        <select class="search-input" id="cat-rubro" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
-          <option value="">Todos los rubros</option>
-        </select>
-      </div>
-
-      <div style="font-size:11px;color:var(--muted);margin-top:8px" id="cat-resumen">—</div>
-
-      <div class="cat-lista" id="cat-lista" style="margin-top:4px">
+      <div class="cat-lista" id="cat-lista">
         <div class="empty" style="padding:30px 10px"><div class="big">🖼️</div>Cargando…</div>
       </div>
-      <div class="pagination" id="cat-pagination" style="margin-top:10px"></div>
+      <div class="cat-pag" id="cat-pagination"></div>
     </div>
 
     <!-- Panel derecho: solo la imagen -->
@@ -5557,13 +5566,6 @@
     const conMini = document.getElementById("cat-miniaturas").checked;
     // "con imagen" se cuenta sobre lo que se está viendo: si contara todo el
     // maestro, con un rubro filtrado el número no tendría que ver con la lista.
-    const conImagen = catVisibles.filter(catImagenDe).length;
-    const conStock  = catVisibles.filter(r => (parseFloat(r.stock) || 0) > 0).length;
-
-    document.getElementById("cat-resumen").textContent = catInsumos.length
-      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catInsumos.length.toLocaleString("es-AR")} insumos · ${conImagen.toLocaleString("es-AR")} con imagen · ${conStock.toLocaleString("es-AR")} con stock`
-      : "—";
-
     if (!catVisibles.length) {
       cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">🔍</div>${
         catInsumos.length ? "Sin coincidencias" : "El maestro está vacío"}</div>`;
@@ -5611,7 +5613,21 @@
         <tbody>${filas}</tbody>
       </table>`;
 
-    renderPagination("cat-pagination", catVisibles.length, catOffset, CAT_PAGE_SIZE, "catIrA");
+    catRenderPaginacion(catVisibles.length);
+  }
+
+  // Paginación propia en vez de renderPagination: acá hace falta lo mínimo
+  // (dos flechas y "1/3"), para no robarle alto a la tabla.
+  function catRenderPaginacion(total) {
+    const cont = document.getElementById("cat-pagination");
+    const paginas = Math.max(1, Math.ceil(total / CAT_PAGE_SIZE));
+    const actual  = Math.floor(catOffset / CAT_PAGE_SIZE) + 1;
+    cont.innerHTML = `
+      <button ${catOffset === 0 ? "disabled" : ""} title="Anterior"
+              onclick="catIrA(${catOffset - CAT_PAGE_SIZE})">‹</button>
+      <span>${actual}/${paginas}</span>
+      <button ${catOffset + CAT_PAGE_SIZE >= total ? "disabled" : ""} title="Siguiente"
+              onclick="catIrA(${catOffset + CAT_PAGE_SIZE})">›</button>`;
   }
 
   function catIrA(offset) {
@@ -5703,7 +5719,6 @@
   async function catCargar(refrescar) {
     const cont = document.getElementById("cat-lista");
     const btn  = document.getElementById("cat-btn-actualizar");
-    const origen = document.getElementById("cat-origen");
     btn.disabled = true;
     cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">⏳</div>Cargando…</div>`;
 
@@ -5722,28 +5737,25 @@
     ]);
 
     catImagenes = new Map();
-    let notaBucket = "";
     if (bucket.status === "fulfilled") {
       (bucket.value.archivos || []).forEach(a => {
         const cod = catCodigoDeArchivo(a.key);
         if (cod && !catImagenes.has(cod)) catImagenes.set(cod, a.key);
       });
-      notaBucket = `Imágenes del bucket <strong style="color:var(--text);font-family:var(--mono)">${nsEsc(bucket.value.bucket || "")}</strong> en Cloudflare R2, vinculadas por nombre de archivo = cód. corto.`;
     } else {
-      notaBucket = `<span style="color:#f7874f">Sin imágenes: ${nsEsc(bucket.reason.message)}</span>`;
+      // Si el bucket falla, el maestro igual se ve: solo se avisa por toast
+      toast("⚠ Sin imágenes: " + bucket.reason.message, "err");
     }
 
     if (maestro.status === "fulfilled") {
       catInsumos = maestro.value.insumos || [];
       catPoblarRubros();
-      origen.innerHTML = `Datos de <strong style="color:var(--text);font-family:var(--mono)">bd_maestro_insumos</strong>. ${notaBucket}`;
       catFiltrarYOrdenar();
     } else {
       catInsumos = [];
       catVisibles = [];
-      origen.innerHTML = notaBucket;
-      document.getElementById("cat-resumen").textContent = "—";
       cont.innerHTML = `<div class="empty" style="padding:24px 10px"><div class="big">⚠️</div>${nsEsc(maestro.reason.message)}</div>`;
+      document.getElementById("cat-pagination").innerHTML = "";
     }
 
     catAjustarAlto();
