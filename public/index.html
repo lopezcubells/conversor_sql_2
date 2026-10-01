@@ -5651,9 +5651,9 @@
 
   // ── Visor ──
 
-  // Panel de detalle: todo lo que no es la imagen (códigos, rubro, stock,
-  // archivo y medidas) vive acá, arriba del visor.
-  function catRenderDetalle(dimensiones) {
+  // Panel de detalle: todo lo que no es la imagen (códigos, rubro y stock)
+  // vive acá, arriba del visor.
+  function catRenderDetalle() {
     const titulo = document.getElementById("cat-visor-titulo");
     const meta   = document.getElementById("cat-visor-meta");
     const campos = document.getElementById("cat-det-campos");
@@ -5666,7 +5666,6 @@
       return;
     }
 
-    const key = catImagenDe(catActual);
     titulo.textContent = `${catActual.cod_corto} · ${catActual.descripcion || ""}`.trim();
     meta.textContent = catActual.rubro || "";
 
@@ -5675,13 +5674,11 @@
       : "";
     campos.innerHTML =
       dato("Cód. largo", catActual.cod_largo) +
-      dato("Stock", fmtNum(catActual.stock)) +
-      dato("Archivo", key || "sin imagen") +
-      dato("Medidas", dimensiones || "");
+      dato("Stock", fmtNum(catActual.stock));
 
-    // El panel crece al llenarse (y de nuevo cuando llegan las medidas), así
-    // que el bloque de abajo tiene que volver a medir: si no, lo que sobra
-    // empuja la página y aparece la barra de desplazamiento.
+    // El panel crece al llenarse, así que el bloque de abajo tiene que volver
+    // a medir: si no, lo que sobra empuja la página y aparece la barra de
+    // desplazamiento.
     catAjustarAlto();
   }
 
@@ -5706,11 +5703,6 @@
     const img = document.getElementById("cat-img");
     img.addEventListener("error", () => {
       visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
-    });
-    // Las medidas reales recién se conocen al cargar; se pasan al panel de
-    // detalle en vez de concatenarse al texto, que al re-renderizar se duplicaba.
-    img.addEventListener("load", () => {
-      catRenderDetalle(`${img.naturalWidth}×${img.naturalHeight} px`);
     });
   }
 
