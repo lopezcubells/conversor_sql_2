@@ -98,9 +98,15 @@
       gap: 2px;
       padding: 16px 32px 0;
       border-bottom: 1px solid var(--border);
+      /* Si aun achicando no entran, se desplazan en horizontal antes que
+         partirse en dos renglones. La barra se oculta: se arrastra o se usa
+         la rueda con shift. */
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+    .tabs::-webkit-scrollbar { display: none; }
     .tab {
-      padding: 8px 20px;
+      padding: 8px 14px;
       cursor: pointer;
       border-radius: var(--radius) var(--radius) 0 0;
       color: var(--muted);
@@ -110,6 +116,20 @@
       border-bottom: none;
       transition: color .15s, background .15s;
       user-select: none;
+      /* Las dos claves del renglon unico: el texto no se parte y la solapa no
+         se deja comprimir por sus vecinas. */
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    /* En pantallas chicas se achican solapa y tipografia antes de llegar al
+       desplazamiento horizontal. */
+    @media (max-width: 1400px) {
+      .tabs { padding-left: 20px; padding-right: 20px; }
+      .tab  { padding: 8px 11px; font-size: 12.5px; }
+    }
+    @media (max-width: 1150px) {
+      .tabs { padding-left: 14px; padding-right: 14px; }
+      .tab  { padding: 8px 9px; font-size: 12px; letter-spacing: -.2px; }
     }
     .tab:hover   { color: var(--text); }
     .tab.active  {
