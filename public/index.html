@@ -1694,7 +1694,7 @@
         <select class="search-input" id="cat-rubro" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
           <option value="">Todos los rubros</option>
         </select>
-        <button class="cat-refrescar" id="cat-btn-actualizar" title="Actualizar">⟳</button>
+        <button class="cat-refrescar" id="cat-btn-actualizar" title="Reiniciar">⟳</button>
       </div>
 
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
@@ -5762,6 +5762,26 @@
     btn.disabled = false;
   }
 
+  // "Reiniciar" deja la pestaña como recién abierta: sin selección, sin filtros y
+  // con los datos pedidos de nuevo al origen (fuerza el refresco del bucket).
+  // Los campos se limpian ANTES de cargar, porque catCargar() termina filtrando.
+  function catReiniciar() {
+    document.getElementById("cat-q-cod").value   = "";
+    document.getElementById("cat-q-largo").value = "";
+    document.getElementById("cat-q-desc").value  = "";
+    document.getElementById("cat-rubro").value   = "";
+    document.getElementById("cat-en-stock").checked   = false;
+    document.getElementById("cat-solo-img").checked   = false;
+    document.getElementById("cat-miniaturas").checked = true;
+
+    catSort   = { col: "cod_corto", dir: "asc" };
+    catOffset = 0;
+    catActual = null;
+    catRenderVisor();   // devuelve visor y detalle a "Elegí un insumo de la lista"
+
+    catCargar(true);
+  }
+
   // ── Eventos ──
 
   document.getElementById("cat-lista").addEventListener("click", e => {
@@ -5776,7 +5796,7 @@
   document.getElementById("cat-en-stock").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
-  document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
+  document.getElementById("cat-btn-actualizar").addEventListener("click", catReiniciar);
 
   // Flechas para recorrer el catálogo sin soltar el teclado
   document.addEventListener("keydown", e => {
