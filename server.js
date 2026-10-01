@@ -960,6 +960,7 @@ app.get("/api/pg/maestro-insumos", async (req, res) => {
              btrim(coalesce(m.nombre_sencillo::text, '')) AS nombre_sencillo,
              btrim(coalesce(m.clasificacion::text, ''))   AS clasificacion,
              btrim(m.rubro::text)       AS rubro,
+             btrim(coalesce(m.familia::text, ''))         AS familia,
              COALESCE(s.stock, 0)       AS stock
       FROM bd_maestro_insumos m
       LEFT JOIN stock s ON s.cod_corto = btrim(m.cod_corto::text)

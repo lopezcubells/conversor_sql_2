@@ -1694,6 +1694,9 @@
         <select class="search-input" id="cat-rubro" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
           <option value="">Todos los rubros</option>
         </select>
+        <select class="search-input" id="cat-familia" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
+          <option value="">Todas las familias</option>
+        </select>
         <button class="cat-refrescar" id="cat-btn-actualizar" title="Reiniciar">⟳</button>
       </div>
 
@@ -5541,12 +5544,14 @@
     const soloImg = document.getElementById("cat-solo-img").checked;
     const enStock = document.getElementById("cat-en-stock").checked;
     const rubro = document.getElementById("cat-rubro").value;
+    const familia = document.getElementById("cat-familia").value;
     const genericas = catGenericasOn();
     const contiene = (valor, q) => recNormRubro(valor).includes(q);
 
     let lista = catInsumos;
     if (genericas) lista = lista.filter(catEsGenerica);
     if (rubro) lista = lista.filter(r => r.rubro === rubro);
+    if (familia) lista = lista.filter(r => r.familia === familia);
     if (enStock) lista = lista.filter(r => (parseFloat(r.stock) || 0) > 0);
     if (soloImg) lista = lista.filter(catImagenDe);
     if (qCod)   lista = lista.filter(r => contiene(r.cod_corto, qCod));
@@ -5575,6 +5580,18 @@
     sel.innerHTML = `<option value="">Todos los rubros</option>` +
       rubros.map(r => `<option value="${nsEsc(r)}">${nsEsc(r)}</option>`).join("");
     if (actual && rubros.includes(actual)) sel.value = actual;
+  }
+
+  // Mismo criterio que los rubros: las opciones salen de lo que realmente
+  // volvió del maestro, así no quedan familias que no filtran nada.
+  function catPoblarFamilias() {
+    const sel = document.getElementById("cat-familia");
+    const actual = sel.value;
+    const familias = [...new Set(catInsumos.map(r => r.familia).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "es"));
+    sel.innerHTML = `<option value="">Todas las familias</option>` +
+      familias.map(f => `<option value="${nsEsc(f)}">${nsEsc(f)}</option>`).join("");
+    if (actual && familias.includes(actual)) sel.value = actual;
   }
 
   function catOrdenar(col) {
@@ -5770,6 +5787,7 @@
     if (maestro.status === "fulfilled") {
       catInsumos = maestro.value.insumos || [];
       catPoblarRubros();
+      catPoblarFamilias();
       catFiltrarYOrdenar();
     } else {
       catInsumos = [];
@@ -5790,6 +5808,7 @@
     document.getElementById("cat-q-largo").value = "";
     document.getElementById("cat-q-desc").value  = "";
     document.getElementById("cat-rubro").value   = "";
+    document.getElementById("cat-familia").value = "";
     document.getElementById("cat-en-stock").checked   = false;
     document.getElementById("cat-solo-img").checked   = false;
     document.getElementById("cat-generica").checked   = false;
@@ -5817,6 +5836,7 @@
   document.getElementById("cat-generica").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-en-stock").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-familia").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", catReiniciar);
 
