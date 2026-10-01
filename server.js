@@ -922,6 +922,24 @@ app.post("/api/pg/bom/despiece", async (req, res) => {
   }
 });
 
+// Rubros que se muestran en el catálogo; el resto no se trae de la base.
+const CAT_RUBROS = [
+  "Adhesivos y Cintas", "Bandeja", "BIB Bolsa", "BIB Envase", "BIB Manijas",
+  "BOTELLA Vidrio", "Bozales", "Cajas", "Cápsulas", "Esquineros", "Estuche",
+  "ETIQUETA", "ETIQUETA CT", "ETIQUETA Cuello", "ETIQUETA FR",
+  "ETIQUETA Medallas y Stickers", "ETIQUETA Rotulo", "FILM Termocontraible",
+  "LATAS", "LATAS Film", "LATAS Funda", "LATAS Tapa", "Pallets", "Plancha",
+  "Separador", "Stretch", "Tapa", "Tapón", "TETRA Cinta", "TETRA Envases",
+  "TETRA Tapa",
+];
+
+// Compara ignorando espacios, mayúsculas y tildes. La lista de arriba mezcla
+// escrituras ("Cápsulas" con tilde, "ETIQUETA Rotulo" sin ella) y en la base
+// pueden estar al revés: con igualdad exacta el rubro desaparecería en
+// silencio. translate() alcanza y no necesita la extensión unaccent.
+const CAT_SIN_TILDES = (expr) =>
+  `upper(translate(btrim(${expr}), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN'))`;
+
 // Maestro que alimenta el panel de archivos del catálogo. Una fila por
 // cod_corto: la tabla puede traer repetidos y duplicarían el listado.
 app.get("/api/pg/maestro-insumos", async (req, res) => {
@@ -935,8 +953,10 @@ app.get("/api/pg/maestro-insumos", async (req, res) => {
              btrim(rubro::text)       AS rubro
       FROM bd_maestro_insumos
       WHERE cod_corto IS NOT NULL AND btrim(cod_corto::text) <> ''
-      ORDER BY btrim(cod_corto::text)`);
-    res.json({ insumos: r.rows });
+        AND ${CAT_SIN_TILDES("rubro::text")} = ANY(
+              SELECT ${CAT_SIN_TILDES("x")} FROM unnest($1::text[]) AS x)
+      ORDER BY btrim(cod_corto::text)`, [CAT_RUBROS]);
+    res.json({ insumos: r.rows, rubros: CAT_RUBROS });
   } catch (e) {
     console.error("PG maestro-insumos error:", e.message);
     res.status(500).json({ error: e.message });

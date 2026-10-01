@@ -1642,6 +1642,9 @@
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
         <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar por código, descripción o rubro…"
                style="flex:1;min-width:0;padding:6px 10px;font-size:12px" />
+        <select class="search-input" id="cat-rubro" style="flex:0 0 190px;width:190px;min-width:0;padding:6px 10px;font-size:12px">
+          <option value="">Todos los rubros</option>
+        </select>
       </div>
 
       <div style="font-size:11px;color:var(--muted);margin-top:8px" id="cat-resumen">—</div>
@@ -5437,8 +5440,10 @@
   function catFiltrarYOrdenar() {
     const q = document.getElementById("cat-buscar").value.trim().toLowerCase();
     const soloImg = document.getElementById("cat-solo-img").checked;
+    const rubro = document.getElementById("cat-rubro").value;
 
     let lista = catInsumos;
+    if (rubro) lista = lista.filter(r => r.rubro === rubro);
     if (soloImg) lista = lista.filter(catImagenDe);
     if (q) lista = lista.filter(r =>
       [r.cod_corto, r.cod_largo, r.descripcion, r.rubro]
@@ -5456,6 +5461,18 @@
     catRenderLista();
   }
 
+  // El desplegable se arma con los rubros que realmente volvieron, no con la
+  // lista completa: así no quedan opciones que no filtran nada.
+  function catPoblarRubros() {
+    const sel = document.getElementById("cat-rubro");
+    const actual = sel.value;
+    const rubros = [...new Set(catInsumos.map(r => r.rubro).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "es"));
+    sel.innerHTML = `<option value="">Todos los rubros</option>` +
+      rubros.map(r => `<option value="${nsEsc(r)}">${nsEsc(r)}</option>`).join("");
+    if (actual && rubros.includes(actual)) sel.value = actual;
+  }
+
   function catOrdenar(col) {
     if (catSort.col === col) catSort.dir = catSort.dir === "asc" ? "desc" : "asc";
     else catSort = { col, dir: "asc" };
@@ -5471,7 +5488,9 @@
   function catRenderLista() {
     const cont = document.getElementById("cat-lista");
     const conMini = document.getElementById("cat-miniaturas").checked;
-    const conImagen = catInsumos.filter(catImagenDe).length;
+    // "con imagen" se cuenta sobre lo que se está viendo: si contara todo el
+    // maestro, con un rubro filtrado el número no tendría que ver con la lista.
+    const conImagen = catVisibles.filter(catImagenDe).length;
 
     document.getElementById("cat-resumen").textContent = catInsumos.length
       ? `${catVisibles.length.toLocaleString("es-AR")} de ${catInsumos.length.toLocaleString("es-AR")} insumos · ${conImagen.toLocaleString("es-AR")} con imagen`
@@ -5623,6 +5642,7 @@
 
     if (maestro.status === "fulfilled") {
       catInsumos = maestro.value.insumos || [];
+      catPoblarRubros();
       origen.innerHTML = `Datos de <strong style="color:var(--text);font-family:var(--mono)">bd_maestro_insumos</strong>. ${notaBucket}`;
       catFiltrarYOrdenar();
     } else {
@@ -5646,6 +5666,7 @@
 
   document.getElementById("cat-buscar").addEventListener("input", catFiltrarYOrdenar);
   document.getElementById("cat-solo-img").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
 
