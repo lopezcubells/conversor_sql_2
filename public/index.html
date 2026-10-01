@@ -1707,6 +1707,10 @@
           Solo con imagen
         </label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cat-generica" style="accent-color:#4f8ef7">
+          Etiquetas genéricas
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
           <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
           Miniaturas
         </label>
@@ -5491,6 +5495,28 @@
 
   const catImagenDe = insumo => catImagenes.get(catNorm(insumo && insumo.cod_corto)) || null;
 
+  // "Etiquetas genéricas": sólo las etiquetas marcadas como genéricas en el maestro.
+  // Se compara normalizado (sin tildes ni mayúsculas) porque la base mezcla
+  // escrituras y una igualdad exacta haría desaparecer filas en silencio.
+  const CAT_GENERICA_CLASIF = recNormRubro("Generica");
+  const CAT_GENERICA_RUBROS = new Set(
+    ["ETIQUETA FR", "ETIQUETA Medallas y Stickers", "ETIQUETA CT", "ETIQUETA"].map(recNormRubro));
+
+  const catGenericasOn = () => document.getElementById("cat-generica").checked;
+  const catEsGenerica  = r =>
+    recNormRubro(r.clasificacion) === CAT_GENERICA_CLASIF &&
+    CAT_GENERICA_RUBROS.has(recNormRubro(r.rubro));
+
+  // Con el filtro activo la columna Descripción muestra el nombre sencillo del
+  // maestro; si ese campo está vacío, cae en la descripción de siempre.
+  const catDescripcion = r => catGenericasOn()
+    ? (String(r.nombre_sencillo ?? "").trim() || r.descripcion)
+    : r.descripcion;
+
+  // Buscar y ordenar por Descripción tienen que usar lo que se ve en pantalla,
+  // no el campo crudo: si no, el usuario tipea lo que lee y no encuentra nada.
+  const catValorOrden = (r, col) => (col === "descripcion" ? catDescripcion(r) : r[col]) ?? "";
+
   function catAjustarAlto() {
     const pane  = document.getElementById("tab-catalogo");
     const split = pane.querySelector(".cat-split");
@@ -5515,19 +5541,21 @@
     const soloImg = document.getElementById("cat-solo-img").checked;
     const enStock = document.getElementById("cat-en-stock").checked;
     const rubro = document.getElementById("cat-rubro").value;
+    const genericas = catGenericasOn();
     const contiene = (valor, q) => recNormRubro(valor).includes(q);
 
     let lista = catInsumos;
+    if (genericas) lista = lista.filter(catEsGenerica);
     if (rubro) lista = lista.filter(r => r.rubro === rubro);
     if (enStock) lista = lista.filter(r => (parseFloat(r.stock) || 0) > 0);
     if (soloImg) lista = lista.filter(catImagenDe);
     if (qCod)   lista = lista.filter(r => contiene(r.cod_corto, qCod));
     if (qLargo) lista = lista.filter(r => contiene(r.cod_largo, qLargo));
-    if (qDesc)  lista = lista.filter(r => contiene(r.descripcion, qDesc));
+    if (qDesc)  lista = lista.filter(r => contiene(catDescripcion(r), qDesc));
 
     const signo = catSort.dir === "desc" ? -1 : 1;
     catVisibles = [...lista].sort((a, b) => {
-      const va = a[catSort.col] ?? "", vb = b[catSort.col] ?? "";
+      const va = catValorOrden(a, catSort.col), vb = catValorOrden(b, catSort.col);
       // Los códigos son texto pero suelen ser numéricos: así 9 va antes que 10
       const na = parseFloat(va), nb = parseFloat(vb);
       if (!isNaN(na) && !isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "")
@@ -5590,7 +5618,7 @@
         ${mini}
         <td class="cat-mono">${nsEsc(r.cod_corto)}</td>
         <td class="cat-mono">${nsEsc(r.cod_largo)}</td>
-        <td title="${nsEsc(r.descripcion)}">${nsEsc(r.descripcion)}</td>
+        <td title="${nsEsc(catDescripcion(r))}">${nsEsc(catDescripcion(r))}</td>
         <td style="color:var(--muted)" title="${nsEsc(r.rubro)}">${nsEsc(r.rubro)}</td>
         <td class="cat-mono" style="text-align:right${(parseFloat(r.stock) || 0) > 0 ? "" : ";color:var(--muted)"}">${fmtNum(r.stock)}</td>
       </tr>`;
@@ -5666,7 +5694,7 @@
       return;
     }
 
-    titulo.textContent = `${catActual.cod_corto} · ${catActual.descripcion || ""}`.trim();
+    titulo.textContent = `${catActual.cod_corto} · ${catDescripcion(catActual) || ""}`.trim();
     meta.textContent = catActual.rubro || "";
 
     const dato = (etiqueta, valor) => valor
@@ -5699,7 +5727,7 @@
       return;
     }
 
-    visor.innerHTML = `<img id="cat-img" src="${catUrl(key)}" alt="${nsEsc(catActual.descripcion || catActual.cod_corto)}">`;
+    visor.innerHTML = `<img id="cat-img" src="${catUrl(key)}" alt="${nsEsc(catDescripcion(catActual) || catActual.cod_corto)}">`;
     const img = document.getElementById("cat-img");
     img.addEventListener("error", () => {
       visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
@@ -5764,6 +5792,7 @@
     document.getElementById("cat-rubro").value   = "";
     document.getElementById("cat-en-stock").checked   = false;
     document.getElementById("cat-solo-img").checked   = false;
+    document.getElementById("cat-generica").checked   = false;
     document.getElementById("cat-miniaturas").checked = true;
 
     catSort   = { col: "cod_corto", dir: "asc" };
@@ -5785,6 +5814,7 @@
     document.getElementById(id).addEventListener("input", catFiltrarYOrdenar);
   });
   document.getElementById("cat-solo-img").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-generica").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-en-stock").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);

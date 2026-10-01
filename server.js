@@ -957,6 +957,8 @@ app.get("/api/pg/maestro-insumos", async (req, res) => {
              btrim(m.cod_corto::text)   AS cod_corto,
              btrim(m.cod_largo::text)   AS cod_largo,
              btrim(m.descripcion::text) AS descripcion,
+             btrim(coalesce(m.nombre_sencillo::text, '')) AS nombre_sencillo,
+             btrim(coalesce(m.clasificacion::text, ''))   AS clasificacion,
              btrim(m.rubro::text)       AS rubro,
              COALESCE(s.stock, 0)       AS stock
       FROM bd_maestro_insumos m
