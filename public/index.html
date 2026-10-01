@@ -4807,6 +4807,9 @@
   let bomSugIdx    = -1;       // opción resaltada con el teclado
   let bomDebounce  = null;
   let bomChartRubro = null;
+  // col null = se respeta el orden que trae el servidor (rubro, código).
+  // Las columnas de planta se identifican por nombre: "planta:CM".
+  let bomSort = { col: null, dir: "asc" };
 
   const bomEsc = s => nsEsc(s);
 
@@ -4999,6 +5002,43 @@
               plantas.length > 1 ? "filas que no coinciden entre plantas" : "una sola planta en el filtro");
   }
 
+  function bomTh(label, col, alinearDerecha) {
+    const activa = bomSort.col === col;
+    const flecha = activa ? (bomSort.dir === "desc" ? "▼" : "▲") : "▾";
+    return `<th class="sortable${activa ? " sort-active" : ""}" onclick="bomOrdenar('${col.replace(/'/g, "\\'")}')"
+      style="cursor:pointer;user-select:none${alinearDerecha ? ";text-align:right" : ""}">${bomEsc(label)} <span style="opacity:${activa ? 1 : .4}">${flecha}</span></th>`;
+  }
+
+  // Las columnas de texto arrancan ascendente y las de cantidad descendente,
+  // que es lo que uno suele querer ver primero en cada caso.
+  function bomOrdenar(col) {
+    if (bomSort.col === col) bomSort.dir = bomSort.dir === "asc" ? "desc" : "asc";
+    else bomSort = { col, dir: col.startsWith("planta:") ? "desc" : "asc" };
+    bomRenderTodo();
+  }
+
+  function bomOrdenarFilas(filas, plantas) {
+    if (!bomSort.col) return filas;
+    const iPlanta = bomSort.col.startsWith("planta:")
+      ? plantas.indexOf(bomSort.col.slice(7))
+      : -1;
+    const valor = f => iPlanta >= 0 ? f.valores[iPlanta] : f[bomSort.col];
+    const signo = bomSort.dir === "desc" ? -1 : 1;
+    return [...filas].sort((a, b) => {
+      const va = valor(a), vb = valor(b);
+      // Los faltantes van siempre al final, ordene como ordene
+      const na = va === null || va === undefined || va === "";
+      const nb = vb === null || vb === undefined || vb === "";
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      if (iPlanta >= 0) return signo * (va - vb);
+      const fa = parseFloat(va), fb = parseFloat(vb);
+      if (!isNaN(fa) && !isNaN(fb)) return signo * (fa - fb);
+      return signo * String(va).localeCompare(String(vb), "es");
+    });
+  }
+
   function bomRenderTabla(plantas, filas) {
     const wrap  = document.getElementById("bom-tabla-wrap");
     const esPpal = bomModo === "ppal";
@@ -5008,7 +5048,7 @@
       : "";
 
     const soloDif = document.getElementById("bom-solo-difieren").checked;
-    const visibles = soloDif ? filas.filter(f => f.difiere) : filas;
+    const visibles = bomOrdenarFilas(soloDif ? filas.filter(f => f.difiere) : filas, plantas);
 
     if (!visibles.length) {
       wrap.innerHTML = `<div class="empty"><div class="big">🧩</div>${
@@ -5016,16 +5056,15 @@
       return;
     }
 
-    const colsPlanta = plantas.map(pl =>
-      `<th style="text-align:right">${bomEsc(pl)}</th>`).join("");
+    const colsPlanta = plantas.map(pl => bomTh(pl, `planta:${pl}`, true)).join("");
 
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>${esPpal ? "Cód. componente" : "Cód. producto"}</th>
-          <th>Descripción</th>
-          ${esPpal ? "<th>Rubro</th>" : ""}
-          <th>Unidad</th>
+          ${bomTh(esPpal ? "Cód. componente" : "Cód. producto", "cod")}
+          ${bomTh("Descripción", "desc")}
+          ${esPpal ? bomTh("Rubro", "rubro") : ""}
+          ${bomTh("Unidad", "unidad")}
           ${colsPlanta}
         </tr></thead>
         <tbody>${visibles.map(f => `
@@ -5106,6 +5145,7 @@
       bomSeleccion = null;
       bomFilas = [];
       bomSugs = [];
+      bomSort = { col: null, dir: "asc" };
       bomCerrarSugerencias();
       document.getElementById("bom-buscar").value = "";
       document.getElementById("bom-cabecera").style.display = "none";
