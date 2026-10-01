@@ -257,31 +257,53 @@
     }
 
     /* ── Catálogo: dos paneles ── */
-    .cat-split { display: flex; gap: 16px; align-items: stretch; }
-    .cat-izq   { width: 380px; flex: 0 0 380px; display: flex; flex-direction: column; }
-    .cat-der   { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    @media (max-width: 1000px) {
-      .cat-split { flex-direction: column; }
-      .cat-izq   { width: auto; flex: 1 1 auto; }
+    /* La pestaña entra en una pantalla: el alto del split lo calcula
+       catAjustarAlto() con el espacio que sobra, y adentro todo es flex con
+       min-height 0 para que scrollee la lista y no la página. */
+    #tab-catalogo.active { display: flex; flex-direction: column; }
+    #tab-catalogo .card { margin-bottom: 0; }
+    #tab-catalogo > .card:first-child { margin-bottom: 14px; padding: 14px 20px; }
+    .cat-split { display: flex; gap: 16px; align-items: stretch; min-height: 0; }
+    /* Mitad y mitad: las dos columnas parten del mismo ancho base */
+    .cat-izq, .cat-der {
+      flex: 1 1 0; min-width: 0; min-height: 0;
+      display: flex; flex-direction: column;
+      padding: 16px;
     }
+    @media (max-width: 1000px) {
+      .cat-split { flex-direction: column; height: auto !important; }
+      .cat-izq   { min-height: 320px; }
+      .cat-der   { min-height: 420px; }
+    }
+    /* .search-input trae flex:1 para repartirse el ancho en las filas de
+       filtros; dentro de esta columna flex eso la estiraba a lo ALTO y se
+       comía el espacio de la lista. Acá nada crece salvo la lista y el visor. */
+    #tab-catalogo .cat-izq > *,
+    #tab-catalogo .cat-der > * { flex: 0 0 auto; }
     /* La lista scrollea sola para que el visor quede siempre a la vista */
-    .cat-lista { overflow-y: auto; max-height: 62vh; margin: 0 -8px; }
+    #tab-catalogo .cat-lista { overflow-y: auto; flex: 1 1 auto; min-height: 0; margin: 0 -6px; }
+    #tab-catalogo .cat-visor { flex: 1 1 auto; min-height: 0; }
     .cat-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 7px 8px; border-radius: 7px; cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 6px; border-radius: 5px; cursor: pointer;
     }
     .cat-item:hover { background: rgba(255,255,255,.04); }
     .cat-item.activo { background: rgba(79,142,247,.16); }
     .cat-item-mini {
-      width: 34px; height: 34px; flex: 0 0 34px;
-      border-radius: 5px; object-fit: cover;
+      width: 26px; height: 26px; flex: 0 0 26px;
+      border-radius: 4px; object-fit: cover;
       background: var(--bg); border: 1px solid var(--border);
     }
-    .cat-item-nom  { flex: 1; min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
-    .cat-item-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    /* Una sola línea con puntos suspensivos: si el nombre envuelve, la fila
+       crece y se pierde justamente la densidad que se busca. */
+    .cat-item-nom {
+      flex: 1; min-width: 0; font-size: 12px; line-height: 1.35;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cat-item-meta { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
     /* Fondo a cuadros: deja ver la transparencia de los PNG */
     .cat-visor {
-      flex: 1; min-height: 420px;
+      flex: 1; min-height: 0;
       display: grid; place-items: center;
       border: 1px solid var(--border); border-radius: var(--radius);
       overflow: auto;
@@ -293,7 +315,7 @@
       background-position: 0 0, 11px 11px;
     }
     .cat-visor img { display: block; transition: transform .12s ease; }
-    .cat-visor img.ajustada { max-width: 100%; max-height: 72vh; }
+    .cat-visor img.ajustada { max-width: 100%; max-height: 100%; }
 
     /* ── BOM: autocompletado ── */
     .bom-combo { position: relative; }
@@ -1580,11 +1602,10 @@
         </label>
       </div>
 
-      <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar archivo…"
-             style="width:100%;min-width:0;margin-top:12px" />
-
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
-        <select class="search-input" id="cat-orden" style="flex:1;min-width:0;padding:6px 10px;font-size:12px">
+        <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar archivo…"
+               style="flex:1;min-width:0;padding:6px 10px;font-size:12px" />
+        <select class="search-input" id="cat-orden" style="width:140px;min-width:0;padding:6px 10px;font-size:12px">
           <option value="nombre">Nombre (A-Z)</option>
           <option value="nombre-desc">Nombre (Z-A)</option>
           <option value="fecha">Más recientes</option>
@@ -1592,9 +1613,9 @@
         </select>
       </div>
 
-      <div style="font-size:11px;color:var(--muted);margin-top:10px" id="cat-resumen">—</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px" id="cat-resumen">—</div>
 
-      <div class="cat-lista" id="cat-lista" style="margin-top:6px">
+      <div class="cat-lista" id="cat-lista" style="margin-top:4px">
         <div class="empty" style="padding:30px 10px"><div class="big">🖼️</div>Cargando…</div>
       </div>
     </div>
@@ -5496,6 +5517,7 @@
       document.getElementById("cat-origen").innerHTML =
         `Bucket <strong style="color:var(--text);font-family:var(--mono)">${nsEsc(data.bucket || "")}</strong> en Cloudflare R2. Las imágenes se sirven a través de la app, así que siguen protegidas por el login.`;
       catFiltrarYOrdenar();
+      catAjustarAlto();
     } catch (e) {
       catArchivos = [];
       catVisibles = [];
@@ -5534,9 +5556,27 @@
     if (sig >= 0 && sig < catVisibles.length) catAbrir(sig);
   });
 
+  // El split toma el alto que sobra hasta el pie de la ventana, así la pestaña
+  // entra en una pantalla sin barra de desplazamiento. Se mide en vez de
+  // calcularse con vh porque arriba hay encabezado, solapas y una tarjeta.
+  function catAjustarAlto() {
+    const pane  = document.getElementById("tab-catalogo");
+    const split = pane.querySelector(".cat-split");
+    if (!pane.classList.contains("active")) return;
+    split.style.height = "";                       // se mide sin el alto anterior
+    const arriba = split.getBoundingClientRect().top;
+    split.style.height = Math.max(320, window.innerHeight - arriba - 28) + "px";
+  }
+
+  window.addEventListener("resize", catAjustarAlto);
+
   function initCatalogo() {
-    if (catLoaded) return;
+    if (catLoaded) {
+      catAjustarAlto();
+      return;
+    }
     catLoaded = true;
+    catAjustarAlto();
     catCargar(false);
   }
 
