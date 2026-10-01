@@ -1639,10 +1639,14 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
-        <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar por código, descripción o rubro…"
-               style="flex:1;min-width:0;padding:6px 10px;font-size:12px" />
-        <select class="search-input" id="cat-rubro" style="flex:0 0 190px;width:190px;min-width:0;padding:6px 10px;font-size:12px">
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <input type="text" class="search-input" id="cat-q-cod" placeholder="Cód. corto…"
+               style="flex:0 0 92px;width:92px;min-width:0;padding:6px 10px;font-size:12px" />
+        <input type="text" class="search-input" id="cat-q-largo" placeholder="Cód. largo…"
+               style="flex:0 0 112px;width:112px;min-width:0;padding:6px 10px;font-size:12px" />
+        <input type="text" class="search-input" id="cat-q-desc" placeholder="Descripción…"
+               style="flex:1 1 120px;min-width:0;padding:6px 10px;font-size:12px" />
+        <select class="search-input" id="cat-rubro" style="flex:0 0 150px;width:150px;min-width:0;padding:6px 10px;font-size:12px">
           <option value="">Todos los rubros</option>
         </select>
       </div>
@@ -5444,16 +5448,20 @@
   // 7 después de filtrar deja la tabla vacía sin explicación.
   function catFiltrarYOrdenar() {
     catOffset = 0;
-    const q = document.getElementById("cat-buscar").value.trim().toLowerCase();
+    // recNormRubro saca tildes y mayúsculas: buscar "capsula" encuentra "CÁPSULA"
+    const qCod   = recNormRubro(document.getElementById("cat-q-cod").value);
+    const qLargo = recNormRubro(document.getElementById("cat-q-largo").value);
+    const qDesc  = recNormRubro(document.getElementById("cat-q-desc").value);
     const soloImg = document.getElementById("cat-solo-img").checked;
     const rubro = document.getElementById("cat-rubro").value;
+    const contiene = (valor, q) => recNormRubro(valor).includes(q);
 
     let lista = catInsumos;
     if (rubro) lista = lista.filter(r => r.rubro === rubro);
     if (soloImg) lista = lista.filter(catImagenDe);
-    if (q) lista = lista.filter(r =>
-      [r.cod_corto, r.cod_largo, r.descripcion, r.rubro]
-        .some(v => String(v ?? "").toLowerCase().includes(q)));
+    if (qCod)   lista = lista.filter(r => contiene(r.cod_corto, qCod));
+    if (qLargo) lista = lista.filter(r => contiene(r.cod_largo, qLargo));
+    if (qDesc)  lista = lista.filter(r => contiene(r.descripcion, qDesc));
 
     const signo = catSort.dir === "desc" ? -1 : 1;
     catVisibles = [...lista].sort((a, b) => {
@@ -5689,7 +5697,9 @@
     if (fila) catAbrir(parseInt(fila.dataset.i, 10));
   });
 
-  document.getElementById("cat-buscar").addEventListener("input", catFiltrarYOrdenar);
+  ["cat-q-cod", "cat-q-largo", "cat-q-desc"].forEach(id => {
+    document.getElementById(id).addEventListener("input", catFiltrarYOrdenar);
+  });
   document.getElementById("cat-solo-img").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
