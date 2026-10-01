@@ -946,16 +946,25 @@ app.get("/api/pg/maestro-insumos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const r = await pgPool.query(`
-      SELECT DISTINCT ON (btrim(cod_corto::text))
-             btrim(cod_corto::text)   AS cod_corto,
-             btrim(cod_largo::text)   AS cod_largo,
-             btrim(descripcion::text) AS descripcion,
-             btrim(rubro::text)       AS rubro
-      FROM bd_maestro_insumos
-      WHERE cod_corto IS NOT NULL AND btrim(cod_corto::text) <> ''
-        AND ${CAT_SIN_TILDES("rubro::text")} = ANY(
+      WITH stock AS (
+        SELECT btrim(cod_corto::text)                AS cod_corto,
+               SUM(COALESCE(existencias_fisicas, 0)) AS stock
+        FROM bd_stock_x_sucursales
+        WHERE cod_corto IS NOT NULL
+        GROUP BY 1
+      )
+      SELECT DISTINCT ON (btrim(m.cod_corto::text))
+             btrim(m.cod_corto::text)   AS cod_corto,
+             btrim(m.cod_largo::text)   AS cod_largo,
+             btrim(m.descripcion::text) AS descripcion,
+             btrim(m.rubro::text)       AS rubro,
+             COALESCE(s.stock, 0)       AS stock
+      FROM bd_maestro_insumos m
+      LEFT JOIN stock s ON s.cod_corto = btrim(m.cod_corto::text)
+      WHERE m.cod_corto IS NOT NULL AND btrim(m.cod_corto::text) <> ''
+        AND ${CAT_SIN_TILDES("m.rubro::text")} = ANY(
               SELECT ${CAT_SIN_TILDES("x")} FROM unnest($1::text[]) AS x)
-      ORDER BY btrim(cod_corto::text)`, [CAT_RUBROS]);
+      ORDER BY btrim(m.cod_corto::text)`, [CAT_RUBROS]);
     res.json({ insumos: r.rows, rubros: CAT_RUBROS });
   } catch (e) {
     console.error("PG maestro-insumos error:", e.message);

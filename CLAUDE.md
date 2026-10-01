@@ -56,7 +56,9 @@ negocio**, solo la consulta y la presenta.
   `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
   `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`),
   `bd_bom_m_multiplanta` (lista de piezas; una fila por planta + producto +
-  componente, con sufijo `_ppal` para el padre y `_comp` para el componente)
+  componente, con sufijo `_ppal` para el padre y `_comp` para el componente),
+  `bd_stock_x_sucursales` (existencias por sucursal; se agrega por `cod_corto`
+  **antes** de unir al maestro, si no multiplica las filas)
 - **Tablas propias de la app**: `app_users` (login; se crea sola al arrancar),
   `registro_nivel_servicio` (histórico que se inserta al generar el PDF)
 

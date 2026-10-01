@@ -1629,6 +1629,10 @@
         <div class="card-title" style="margin-bottom:0">Archivos</div>
         <div style="display:flex;gap:14px">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+            <input type="checkbox" id="cat-en-stock" style="accent-color:#4f8ef7">
+            En stock
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
             <input type="checkbox" id="cat-solo-img" style="accent-color:#4f8ef7">
             Solo con imagen
           </label>
@@ -5453,11 +5457,13 @@
     const qLargo = recNormRubro(document.getElementById("cat-q-largo").value);
     const qDesc  = recNormRubro(document.getElementById("cat-q-desc").value);
     const soloImg = document.getElementById("cat-solo-img").checked;
+    const enStock = document.getElementById("cat-en-stock").checked;
     const rubro = document.getElementById("cat-rubro").value;
     const contiene = (valor, q) => recNormRubro(valor).includes(q);
 
     let lista = catInsumos;
     if (rubro) lista = lista.filter(r => r.rubro === rubro);
+    if (enStock) lista = lista.filter(r => (parseFloat(r.stock) || 0) > 0);
     if (soloImg) lista = lista.filter(catImagenDe);
     if (qCod)   lista = lista.filter(r => contiene(r.cod_corto, qCod));
     if (qLargo) lista = lista.filter(r => contiene(r.cod_largo, qLargo));
@@ -5505,9 +5511,10 @@
     // "con imagen" se cuenta sobre lo que se está viendo: si contara todo el
     // maestro, con un rubro filtrado el número no tendría que ver con la lista.
     const conImagen = catVisibles.filter(catImagenDe).length;
+    const conStock  = catVisibles.filter(r => (parseFloat(r.stock) || 0) > 0).length;
 
     document.getElementById("cat-resumen").textContent = catInsumos.length
-      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catInsumos.length.toLocaleString("es-AR")} insumos · ${conImagen.toLocaleString("es-AR")} con imagen`
+      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catInsumos.length.toLocaleString("es-AR")} insumos · ${conImagen.toLocaleString("es-AR")} con imagen · ${conStock.toLocaleString("es-AR")} con stock`
       : "—";
 
     if (!catVisibles.length) {
@@ -5536,6 +5543,7 @@
         <td class="cat-mono">${nsEsc(r.cod_largo)}</td>
         <td title="${nsEsc(r.descripcion)}">${nsEsc(r.descripcion)}</td>
         <td style="color:var(--muted)" title="${nsEsc(r.rubro)}">${nsEsc(r.rubro)}</td>
+        <td class="cat-mono" style="text-align:right${(parseFloat(r.stock) || 0) > 0 ? "" : ";color:var(--muted)"}">${fmtNum(r.stock)}</td>
       </tr>`;
     }).join("");
 
@@ -5543,7 +5551,7 @@
       <table class="cat-tabla">
         <colgroup>
           ${conMini ? '<col style="width:38px">' : ""}
-          <col style="width:76px"><col style="width:96px"><col><col style="width:22%">
+          <col style="width:76px"><col style="width:96px"><col><col style="width:20%"><col style="width:74px">
         </colgroup>
         <thead><tr>
           ${conMini ? '<th class="cat-no-ord"></th>' : ""}
@@ -5551,6 +5559,7 @@
           ${catTh("Cód. largo", "cod_largo")}
           ${catTh("Descripción", "descripcion")}
           ${catTh("Rubro", "rubro")}
+          ${catTh("Stock", "stock", ' style="text-align:right"')}
         </tr></thead>
         <tbody>${filas}</tbody>
       </table>`;
@@ -5701,6 +5710,7 @@
     document.getElementById(id).addEventListener("input", catFiltrarYOrdenar);
   });
   document.getElementById("cat-solo-img").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-en-stock").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
