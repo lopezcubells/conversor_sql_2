@@ -17,6 +17,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 | **Nivel de servicio** | Indicador de NS por planta, faltantes por causa y reporte exportable a PDF. |
 | **Necesidad Final** | Necesidad de compra por insumo, con criticidad ABC en semáforo. |
 | **Consumo Histórico** | Tablero de consumos por insumo y producto, con evolución anual/mensual/diaria. |
+| **BOM** | Lista de piezas por producto, comparada entre plantas, y vista inversa por insumo. |
 
 Cada pestaña tiene su propio bloque de parámetros; lo que se ingresa queda
 guardado en el navegador para la próxima visita.
@@ -66,7 +67,7 @@ La app no calcula lógica de negocio: consulta y presenta.
 `view_stock_x_rubro`
 
 **Tablas de datos**: `consumos_im_if_consolidado`, `bd_articulos_x_rubro`,
-`bd_maestro_insumos`
+`bd_maestro_insumos`, `bd_bom_m_multiplanta`
 
 **Tablas propias**: `app_users` (usuarios; se crea sola al arrancar) y
 `registro_nivel_servicio` (histórico que se graba al generar el PDF de nivel de

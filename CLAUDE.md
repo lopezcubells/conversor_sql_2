@@ -33,6 +33,7 @@ sus identificadores** (ids de HTML, funciones y variables de JS).
 | Nivel de servicio | `ns*` | `initNivelServicio()` |
 | Necesidad Final | `nf*` | `initNecesidadFinal()` |
 | Consumo Histórico | `ch*` | `initConsumoHistorico()` |
+| BOM | `bom*` | `initBom()` |
 
 **Respetar el prefijo al agregar código.** Es lo único que evita colisiones de
 nombres en un archivo de este tamaño. El router de pestañas está en el listener
@@ -52,7 +53,9 @@ negocio**, solo la consulta y la presenta.
   `view_stock_x_rubro`
 - **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos),
   `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
-  `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`)
+  `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`),
+  `bd_bom_m_multiplanta` (lista de piezas; una fila por planta + producto +
+  componente, con sufijo `_ppal` para el padre y `_comp` para el componente)
 - **Tablas propias de la app**: `app_users` (login; se crea sola al arrancar),
   `registro_nivel_servicio` (histórico que se inserta al generar el PDF)
 

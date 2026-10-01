@@ -801,3 +801,123 @@ app.post("/api/pg/consumo-historico/detalle", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── BOM (lista de piezas multiplanta) ──
+
+// bd_bom_m_multiplanta tiene una fila por (planta, producto, componente).
+// Las columnas con sufijo _ppal son del padre y las _comp del componente.
+const BOM_TABLA = "bd_bom_m_multiplanta";
+
+// Mismo criterio tolerante que en consumo histórico: el valor viene del propio
+// listado, pero un espacio de más en el dato haría fallar la igualdad sin avisar.
+const bomIgual = (col, param) => `upper(btrim(${col}::text)) = upper(btrim(${param}::text))`;
+const bomEnLista = (col, param) =>
+  `upper(btrim(${col}::text)) = ANY(SELECT upper(btrim(x)) FROM unnest(${param}::text[]) AS x)`;
+
+// Valores de los filtros de corte
+app.get("/api/pg/bom/filtros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const col = c => pgPool.query(
+      `SELECT DISTINCT btrim(${c}::text) AS v FROM ${BOM_TABLA} WHERE ${c} IS NOT NULL AND btrim(${c}::text) <> '' ORDER BY 1`
+    );
+    const [pl, me, su] = await Promise.all([col("planta"), col("mercado"), col("sucursal")]);
+    const vals = r => r.rows.map(x => x.v);
+    res.json({ plantas: vals(pl), mercados: vals(me), sucursales: vals(su) });
+  } catch (e) {
+    console.error("PG bom/filtros error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Autocompletado. modo=ppal busca productos (padre); modo=comp busca insumos.
+app.get("/api/pg/bom/buscar", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const q    = String(req.query.q || "").trim();
+    const modo = req.query.modo === "comp" ? "comp" : "ppal";
+    if (q.length < 2) return res.json({ opciones: [] });
+
+    const patron = `%${q}%`;
+    // El otro extremo de la relación es lo que se cuenta: para un producto,
+    // cuántos componentes lleva; para un insumo, en cuántos productos entra.
+    const sql = modo === "ppal"
+      ? `SELECT btrim(cod_corto_ppal::text)        AS cod,
+                MAX(btrim(cod_largo_ppal::text))   AS cod_largo,
+                MAX(btrim(descripcion_ppal::text)) AS descripcion,
+                MAX(btrim(unidad_ppal::text))      AS unidad,
+                NULL::text                         AS rubro,
+                COUNT(DISTINCT btrim(cod_corto_comp::text))::int AS relacionados,
+                COUNT(DISTINCT btrim(planta::text))::int         AS plantas
+         FROM ${BOM_TABLA}
+         WHERE cod_corto_ppal IS NOT NULL
+           AND (cod_corto_ppal ILIKE $1 OR cod_largo_ppal ILIKE $1 OR descripcion_ppal ILIKE $1)
+         GROUP BY 1
+         ORDER BY 1
+         LIMIT 40`
+      : `SELECT btrim(cod_corto_comp::text)        AS cod,
+                MAX(btrim(cod_largo_comp::text))   AS cod_largo,
+                MAX(btrim(descripcion_comp::text)) AS descripcion,
+                MAX(btrim(unidad_comp::text))      AS unidad,
+                MAX(btrim(rubro_comp::text))       AS rubro,
+                COUNT(DISTINCT btrim(cod_corto_ppal::text))::int AS relacionados,
+                COUNT(DISTINCT btrim(planta::text))::int         AS plantas
+         FROM ${BOM_TABLA}
+         WHERE cod_corto_comp IS NOT NULL
+           AND (cod_corto_comp ILIKE $1 OR cod_largo_comp ILIKE $1 OR descripcion_comp ILIKE $1)
+         GROUP BY 1
+         ORDER BY 1
+         LIMIT 40`;
+
+    const r = await pgPool.query(sql, [patron]);
+    res.json({ opciones: r.rows, modo });
+  } catch (e) {
+    console.error("PG bom/buscar error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Despiece de un código. En modo ppal devuelve sus componentes; en modo comp,
+// los productos que lo usan. El armado de la vista por planta se hace en el
+// navegador: un BOM son decenas de filas, no hace falta paginar.
+app.post("/api/pg/bom/despiece", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const { codigo, modo, plantas, mercados, sucursales } = req.body || {};
+    if (!codigo || !String(codigo).trim())
+      return res.status(400).json({ error: "Elegí un código." });
+
+    const col = (req.body.modo === "comp") ? "cod_corto_comp" : "cod_corto_ppal";
+    const arr = v => (Array.isArray(v) && v.length ? v : null);
+
+    const sql = `
+      SELECT btrim(planta::text)           AS planta,
+             btrim(sucursal::text)         AS sucursal,
+             btrim(mercado::text)          AS mercado,
+             btrim(cod_corto_ppal::text)   AS cod_corto_ppal,
+             btrim(cod_largo_ppal::text)   AS cod_largo_ppal,
+             btrim(descripcion_ppal::text) AS descripcion_ppal,
+             btrim(unidad_ppal::text)      AS unidad_ppal,
+             btrim(cod_corto_comp::text)   AS cod_corto_comp,
+             btrim(cod_largo_comp::text)   AS cod_largo_comp,
+             btrim(descripcion_comp::text) AS descripcion_comp,
+             btrim(rubro_comp::text)       AS rubro_comp,
+             btrim(unidad_comp::text)      AS unidad_comp,
+             btrim(unidad_comp_ppal::text) AS unidad_comp_ppal,
+             cantidad
+      FROM ${BOM_TABLA}
+      WHERE ${bomIgual(col, "$1")}
+        AND ($2::text[] IS NULL OR ${bomEnLista("planta",   "$2")})
+        AND ($3::text[] IS NULL OR ${bomEnLista("mercado",  "$3")})
+        AND ($4::text[] IS NULL OR ${bomEnLista("sucursal", "$4")})
+      ORDER BY rubro_comp NULLS LAST, cod_corto_comp, cod_corto_ppal, planta`;
+
+    const r = await pgPool.query(sql, [
+      String(codigo).trim(), arr(plantas), arr(mercados), arr(sucursales),
+    ]);
+    res.json({ filas: r.rows, modo: (modo === "comp" ? "comp" : "ppal") });
+  } catch (e) {
+    console.error("PG bom/despiece error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});

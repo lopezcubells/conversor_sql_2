@@ -214,6 +214,35 @@
       border-color: #265139;
     }
 
+    /* ── BOM: autocompletado ── */
+    .bom-combo { position: relative; }
+    .bom-sugerencias {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      z-index: 50;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 28px rgba(0,0,0,.45);
+      max-height: 340px;
+      overflow-y: auto;
+    }
+    .bom-sug {
+      padding: 9px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .bom-sug:last-child { border-bottom: none; }
+    .bom-sug:hover, .bom-sug.activa { background: rgba(79,142,247,.14); }
+    .bom-sug-cod { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); min-width: 78px; }
+    .bom-sug-desc { flex: 1; font-size: 13px; color: var(--text); }
+    .bom-sug-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .bom-vacio { padding: 12px; font-size: 13px; color: var(--muted); }
+    /* Fila cuya cantidad no es igual en todas las plantas */
+    .bom-difiere td { background: rgba(247,135,79,.10); }
+
     /* ── Search ── */
     .search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
     .search-input {
@@ -567,6 +596,7 @@
   <div class="tab" data-tab="nivel-servicio">Nivel de servicio</div>
   <div class="tab" data-tab="necesidad-final">Necesidad Final</div>
   <div class="tab" data-tab="consumo-historico">Consumo Histórico</div>
+  <div class="tab" data-tab="bom">BOM</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1380,6 +1410,73 @@
 
 </div>
 
+<!-- ═══ BOM ═══ -->
+<div class="pane" id="tab-bom">
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:6px">Lista de piezas (BOM)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      Sale de <strong style="color:var(--text);font-family:var(--mono)">bd_bom_m_multiplanta</strong>.
+      Buscá por código o descripción y elegí del desplegable.
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn btn-primary bom-modo" data-modo="ppal" style="font-size:12px">🔎 Buscar producto</button>
+      <button class="btn btn-outline bom-modo" data-modo="comp" style="font-size:12px">↩ ¿Dónde se usa un insumo?</button>
+    </div>
+
+    <div class="bom-combo" id="bom-combo" style="max-width:720px">
+      <input type="text" class="search-input" id="bom-buscar" autocomplete="off"
+             placeholder="Escribí código o descripción…" style="width:100%;min-width:0" />
+      <div class="bom-sugerencias" id="bom-sugerencias" hidden></div>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Planta</label>
+        <select class="search-input" id="bom-planta" style="min-width:0"><option value="">Todas</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Mercado</label>
+        <select class="search-input" id="bom-mercado" style="min-width:0"><option value="">Todos</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Sucursal</label>
+        <select class="search-input" id="bom-sucursal" style="min-width:0"><option value="">Todas</option></select>
+      </div>
+      <span id="bom-estado" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- Cabecera de lo seleccionado -->
+  <div class="card" id="bom-cabecera" style="display:none"></div>
+
+  <!-- Tarjetas -->
+  <div class="kpi-row" id="bom-kpis"></div>
+
+  <!-- Lista de piezas, con una columna por planta -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div class="card-title" style="margin-bottom:0" id="bom-tabla-titulo">Lista de piezas</div>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="bom-solo-difieren" style="accent-color:#4f8ef7">
+        Solo diferencias entre plantas
+      </label>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px" id="bom-tabla-nota"></div>
+    <div class="table-wrap" id="bom-tabla-wrap" style="margin-top:10px">
+      <div class="empty"><div class="big">🧩</div>Buscá un código para ver su lista de piezas</div>
+    </div>
+  </div>
+
+  <!-- Composición por rubro -->
+  <div class="card" id="bom-card-rubro" style="display:none">
+    <div class="card-title" style="text-align:center">Componentes por rubro</div>
+    <div style="position:relative;height:260px"><canvas id="bom-chart-rubro"></canvas></div>
+  </div>
+
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1499,6 +1596,7 @@
       if (tab.dataset.tab === "nivel-servicio") initNivelServicio();
       if (tab.dataset.tab === "necesidad-final") initNecesidadFinal();
       if (tab.dataset.tab === "consumo-historico") initConsumoHistorico();
+      if (tab.dataset.tab === "bom") initBom();
     });
   });
 
@@ -4694,6 +4792,374 @@
     chMarcarGrano();
     await chCargarFiltros();
     chCargar();
+  }
+
+
+  // ── BOM (lista de piezas multiplanta) ──
+
+  const BOM_STORAGE_KEY = "bom-params";
+
+  let bomLoaded    = false;
+  let bomModo      = "ppal";   // ppal = buscar producto; comp = dónde se usa
+  let bomSeleccion = null;     // opción elegida en el desplegable
+  let bomFilas     = [];       // filas crudas del despiece
+  let bomSugs      = [];       // sugerencias visibles
+  let bomSugIdx    = -1;       // opción resaltada con el teclado
+  let bomDebounce  = null;
+  let bomChartRubro = null;
+
+  const bomEsc = s => nsEsc(s);
+
+  // Cantidad con hasta 2 decimales, sin ceros de relleno
+  function bomCant(n) {
+    const v = parseFloat(n);
+    if (!Number.isFinite(v)) return "";
+    return v.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+  }
+
+  function bomCerrarSugerencias() {
+    document.getElementById("bom-sugerencias").hidden = true;
+    bomSugIdx = -1;
+  }
+
+  function bomMarcarModo() {
+    document.querySelectorAll(".bom-modo").forEach(b => {
+      b.className = "btn bom-modo " + (b.dataset.modo === bomModo ? "btn-primary" : "btn-outline");
+    });
+    document.getElementById("bom-buscar").placeholder = bomModo === "ppal"
+      ? "Escribí código o descripción del producto…"
+      : "Escribí código o descripción del insumo…";
+  }
+
+  // ── Autocompletado ──
+
+  function bomRenderSugerencias() {
+    const caja = document.getElementById("bom-sugerencias");
+    if (!bomSugs.length) {
+      caja.innerHTML = `<div class="bom-vacio">Sin coincidencias</div>`;
+      caja.hidden = false;
+      return;
+    }
+    caja.innerHTML = bomSugs.map((o, i) => {
+      const meta = bomModo === "ppal"
+        ? `${o.relacionados} comp. · ${o.plantas} planta${o.plantas === 1 ? "" : "s"}`
+        : `${o.relacionados} producto${o.relacionados === 1 ? "" : "s"} · ${o.plantas} planta${o.plantas === 1 ? "" : "s"}`;
+      return `<div class="bom-sug${i === bomSugIdx ? " activa" : ""}" data-i="${i}">
+        <span class="bom-sug-cod">${bomEsc(o.cod)}</span>
+        <span class="bom-sug-desc">${bomEsc(o.descripcion)}</span>
+        <span class="bom-sug-meta">${meta}</span>
+      </div>`;
+    }).join("");
+    caja.hidden = false;
+  }
+
+  async function bomBuscar(q) {
+    if (q.trim().length < 2) { bomSugs = []; bomCerrarSugerencias(); return; }
+    try {
+      const res = await fetch(`${API}/api/pg/bom/buscar?modo=${bomModo}&q=${encodeURIComponent(q.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      bomSugs   = data.opciones || [];
+      bomSugIdx = bomSugs.length ? 0 : -1;
+      bomRenderSugerencias();
+    } catch (e) {
+      bomSugs = [];
+      bomCerrarSugerencias();
+      toast("❌ " + e.message, "err");
+    }
+  }
+
+  function bomElegir(i) {
+    const o = bomSugs[i];
+    if (!o) return;
+    bomSeleccion = o;
+    document.getElementById("bom-buscar").value = `${o.cod} · ${o.descripcion ?? ""}`.trim();
+    bomCerrarSugerencias();
+    localStorage.setItem(BOM_STORAGE_KEY, JSON.stringify({ modo: bomModo, seleccion: o }));
+    bomCargarDespiece();
+  }
+
+  // ── Despiece ──
+
+  async function bomCargarDespiece() {
+    if (!bomSeleccion) return;
+    const estado = document.getElementById("bom-estado");
+    estado.textContent = "Consultando PostgreSQL…";
+    const lista = id => { const v = document.getElementById(id).value; return v ? [v] : []; };
+    try {
+      const res = await fetch(`${API}/api/pg/bom/despiece`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigo: bomSeleccion.cod,
+          modo:   bomModo,
+          plantas:    lista("bom-planta"),
+          mercados:   lista("bom-mercado"),
+          sucursales: lista("bom-sucursal"),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      bomFilas = data.filas || [];
+      bomRenderTodo();
+      estado.textContent = `✓ ${bomFilas.length} fila${bomFilas.length === 1 ? "" : "s"}`;
+    } catch (e) {
+      estado.textContent = "⚠ " + e.message;
+      toast("❌ " + e.message, "err");
+    }
+  }
+
+  // Arma la vista: una fila por contraparte y una columna por planta.
+  // En modo ppal la contraparte es el componente; en modo comp, el producto.
+  function bomAgrupar() {
+    const esPpal = bomModo === "ppal";
+    const plantas = [...new Set(bomFilas.map(f => f.planta || "(sin planta)"))].sort((a, b) => a.localeCompare(b, "es"));
+    const mapa = new Map();
+    bomFilas.forEach(f => {
+      const clave = esPpal ? f.cod_corto_comp : f.cod_corto_ppal;
+      if (!mapa.has(clave)) {
+        mapa.set(clave, {
+          cod:    clave,
+          desc:   esPpal ? f.descripcion_comp : f.descripcion_ppal,
+          rubro:  esPpal ? f.rubro_comp : null,
+          unidad: esPpal ? f.unidad_comp : f.unidad_ppal,
+          porPlanta: new Map(),
+        });
+      }
+      // Si una planta repitiera la combinación, se suman las cantidades
+      const g = mapa.get(clave);
+      const pl = f.planta || "(sin planta)";
+      g.porPlanta.set(pl, (g.porPlanta.get(pl) || 0) + (parseFloat(f.cantidad) || 0));
+    });
+
+    const filas = [...mapa.values()].map(g => {
+      const valores = plantas.map(pl => g.porPlanta.has(pl) ? g.porPlanta.get(pl) : null);
+      const presentes = valores.filter(v => v !== null);
+      // Difiere si falta en alguna planta o si las cantidades no coinciden
+      const difiere = plantas.length > 1 &&
+        (presentes.length !== plantas.length || new Set(presentes.map(v => v.toFixed(4))).size > 1);
+      return { ...g, valores, difiere };
+    });
+    return { plantas, filas };
+  }
+
+  function bomRenderTodo() {
+    const { plantas, filas } = bomAgrupar();
+    bomRenderCabecera();
+    bomRenderKpis(plantas, filas);
+    bomRenderTabla(plantas, filas);
+    bomRenderRubro(filas);
+  }
+
+  function bomRenderCabecera() {
+    const cab = document.getElementById("bom-cabecera");
+    if (!bomSeleccion || !bomFilas.length) { cab.style.display = "none"; return; }
+    const f = bomFilas[0];
+    const esPpal = bomModo === "ppal";
+    const cod    = esPpal ? f.cod_corto_ppal : f.cod_corto_comp;
+    const largo  = esPpal ? f.cod_largo_ppal : f.cod_largo_comp;
+    const desc   = esPpal ? f.descripcion_ppal : f.descripcion_comp;
+    const unidad = esPpal ? f.unidad_ppal : f.unidad_comp;
+    const rubro  = esPpal ? null : f.rubro_comp;
+    const dato = (etq, v) => v
+      ? `<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${etq}</span>
+           <div style="font-family:var(--mono);font-size:13px;margin-top:2px">${bomEsc(v)}</div></div>`
+      : "";
+    cab.style.display = "";
+    cab.innerHTML = `
+      <div style="display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${esPpal ? "Producto" : "Insumo"}</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${bomEsc(cod)}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">${bomEsc(desc)}</div>
+        </div>
+        ${dato("Código largo", largo)}
+        ${dato("Unidad", unidad)}
+        ${dato("Rubro", rubro)}
+        ${dato("Mercado", f.mercado)}
+      </div>`;
+  }
+
+  function bomRenderKpis(plantas, filas) {
+    const esPpal = bomModo === "ppal";
+    const rubros = new Set(filas.map(f => f.rubro).filter(Boolean));
+    const difieren = filas.filter(f => f.difiere).length;
+    const tarjeta = (color, etq, valor, sub) => `
+      <div class="kpi-card" style="--kpi-accent:${color}">
+        <div class="kpi-label">${etq}</div>
+        <div class="kpi-value">${valor}</div>
+        <div class="kpi-sub">${sub}</div>
+      </div>`;
+    document.getElementById("bom-kpis").innerHTML =
+      tarjeta("#4f8ef7", esPpal ? "Componentes" : "Productos", fmtNum(filas.length),
+              esPpal ? "piezas distintas" : "lo llevan en su receta") +
+      tarjeta("#34c97e", "Plantas", fmtNum(plantas.length), plantas.join(" · ") || "—") +
+      (esPpal ? tarjeta("#a78bfa", "Rubros", fmtNum(rubros.size), "de los componentes") : "") +
+      tarjeta(difieren ? "#f7874f" : "#34c97e", "Diferencias", fmtNum(difieren),
+              plantas.length > 1 ? "filas que no coinciden entre plantas" : "una sola planta en el filtro");
+  }
+
+  function bomRenderTabla(plantas, filas) {
+    const wrap  = document.getElementById("bom-tabla-wrap");
+    const esPpal = bomModo === "ppal";
+    document.getElementById("bom-tabla-titulo").textContent = esPpal ? "Lista de piezas" : "Productos que lo usan";
+    document.getElementById("bom-tabla-nota").textContent = plantas.length > 1
+      ? "Una columna por planta. Las filas resaltadas no llevan la misma cantidad en todas."
+      : "";
+
+    const soloDif = document.getElementById("bom-solo-difieren").checked;
+    const visibles = soloDif ? filas.filter(f => f.difiere) : filas;
+
+    if (!visibles.length) {
+      wrap.innerHTML = `<div class="empty"><div class="big">🧩</div>${
+        soloDif ? "No hay diferencias entre plantas" : "Sin filas para este filtro"}</div>`;
+      return;
+    }
+
+    const colsPlanta = plantas.map(pl =>
+      `<th style="text-align:right">${bomEsc(pl)}</th>`).join("");
+
+    wrap.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>${esPpal ? "Cód. componente" : "Cód. producto"}</th>
+          <th>Descripción</th>
+          ${esPpal ? "<th>Rubro</th>" : ""}
+          <th>Unidad</th>
+          ${colsPlanta}
+        </tr></thead>
+        <tbody>${visibles.map(f => `
+          <tr class="${f.difiere ? "bom-difiere" : ""}">
+            <td style="font-family:var(--mono)">${bomEsc(f.cod)}</td>
+            <td>${bomEsc(f.desc)}</td>
+            ${esPpal ? `<td style="color:var(--muted)">${bomEsc(f.rubro)}</td>` : ""}
+            <td style="color:var(--muted)">${bomEsc(f.unidad)}</td>
+            ${f.valores.map(v => `<td style="text-align:right;font-family:var(--mono)${
+              v === null ? ";color:var(--muted)" : ""}">${v === null ? "—" : bomCant(v)}</td>`).join("")}
+          </tr>`).join("")}</tbody>
+      </table>`;
+  }
+
+  function bomRenderRubro(filas) {
+    const card = document.getElementById("bom-card-rubro");
+    if (bomModo !== "ppal") { card.style.display = "none"; return; }
+    const porRubro = new Map();
+    filas.forEach(f => {
+      const r = f.rubro || "(sin rubro)";
+      porRubro.set(r, (porRubro.get(r) || 0) + 1);
+    });
+    const datos = [...porRubro.entries()].sort((a, b) => b[1] - a[1]);
+    if (!datos.length) { card.style.display = "none"; return; }
+    card.style.display = "";
+    if (bomChartRubro) bomChartRubro.destroy();
+    bomChartRubro = new Chart(document.getElementById("bom-chart-rubro").getContext("2d"), {
+      type: "doughnut",
+      data: { labels: datos.map(d => d[0]), datasets: [{
+        data: datos.map(d => d[1]),
+        backgroundColor: datos.map((_, i) => colorForRank(i, datos.length)),
+        borderWidth: 0,
+      }] },
+      options: {
+        cutout: "58%", responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "right", labels: { color: "#7b7f99", font: { size: 11 }, boxWidth: 12, padding: 8 } },
+          datalabels: { display: false },
+          tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed} componente${c.parsed === 1 ? "" : "s"}` } },
+        },
+      },
+    });
+  }
+
+  // ── Eventos ──
+
+  document.getElementById("bom-buscar").addEventListener("input", e => {
+    clearTimeout(bomDebounce);
+    const q = e.target.value;
+    bomDebounce = setTimeout(() => bomBuscar(q), 250);
+  });
+
+  document.getElementById("bom-buscar").addEventListener("keydown", e => {
+    const caja = document.getElementById("bom-sugerencias");
+    if (caja.hidden || !bomSugs.length) return;
+    if (e.key === "ArrowDown")      { e.preventDefault(); bomSugIdx = (bomSugIdx + 1) % bomSugs.length; bomRenderSugerencias(); }
+    else if (e.key === "ArrowUp")   { e.preventDefault(); bomSugIdx = (bomSugIdx - 1 + bomSugs.length) % bomSugs.length; bomRenderSugerencias(); }
+    else if (e.key === "Enter")     { e.preventDefault(); bomElegir(bomSugIdx); }
+    else if (e.key === "Escape")    { bomCerrarSugerencias(); }
+  });
+
+  document.getElementById("bom-sugerencias").addEventListener("click", e => {
+    const item = e.target.closest(".bom-sug");
+    if (item) bomElegir(parseInt(item.dataset.i, 10));
+  });
+
+  // Un clic afuera cierra el desplegable
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#bom-combo")) bomCerrarSugerencias();
+  });
+
+  document.querySelectorAll(".bom-modo").forEach(b => {
+    b.addEventListener("click", () => {
+      if (bomModo === b.dataset.modo) return;
+      bomModo = b.dataset.modo;
+      bomMarcarModo();
+      // la selección anterior es de la otra punta de la relación: se descarta
+      bomSeleccion = null;
+      bomFilas = [];
+      bomSugs = [];
+      bomCerrarSugerencias();
+      document.getElementById("bom-buscar").value = "";
+      document.getElementById("bom-cabecera").style.display = "none";
+      document.getElementById("bom-kpis").innerHTML = "";
+      document.getElementById("bom-card-rubro").style.display = "none";
+      document.getElementById("bom-estado").textContent = "";
+      document.getElementById("bom-tabla-wrap").innerHTML =
+        `<div class="empty"><div class="big">🧩</div>Buscá un código para ver su lista de piezas</div>`;
+    });
+  });
+
+  ["bom-planta", "bom-mercado", "bom-sucursal"].forEach(id => {
+    document.getElementById(id).addEventListener("change", bomCargarDespiece);
+  });
+
+  document.getElementById("bom-solo-difieren").addEventListener("change", () => {
+    if (bomFilas.length) bomRenderTodo();
+  });
+
+  async function bomCargarFiltros() {
+    try {
+      const res  = await fetch(`${API}/api/pg/bom/filtros`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      const llenar = (id, valores, todos) => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = `<option value="">${todos}</option>` +
+          (valores || []).map(v => `<option value="${bomEsc(v)}">${bomEsc(v)}</option>`).join("");
+      };
+      llenar("bom-planta",   data.plantas,    "Todas");
+      llenar("bom-mercado",  data.mercados,   "Todos");
+      llenar("bom-sucursal", data.sucursales, "Todas");
+    } catch (e) {
+      toast("❌ No se pudieron cargar los filtros: " + e.message, "err");
+    }
+  }
+
+  async function initBom() {
+    if (bomLoaded) return;
+    bomLoaded = true;
+    bomMarcarModo();
+    await bomCargarFiltros();
+    // Vuelve a abrir lo último que se miró
+    try {
+      const g = JSON.parse(localStorage.getItem(BOM_STORAGE_KEY) || "null");
+      if (g && g.seleccion && g.seleccion.cod) {
+        bomModo = g.modo === "comp" ? "comp" : "ppal";
+        bomMarcarModo();
+        bomSeleccion = g.seleccion;
+        document.getElementById("bom-buscar").value =
+          `${g.seleccion.cod} · ${g.seleccion.descripcion ?? ""}`.trim();
+        bomCargarDespiece();
+      }
+    } catch (e) {}
   }
 
   // ── Necesidad final ──
