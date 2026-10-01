@@ -1652,6 +1652,7 @@
       <div class="cat-lista" id="cat-lista" style="margin-top:4px">
         <div class="empty" style="padding:30px 10px"><div class="big">🖼️</div>Cargando…</div>
       </div>
+      <div class="pagination" id="cat-pagination" style="margin-top:10px"></div>
     </div>
 
     <!-- Panel derecho: visor -->
@@ -5414,6 +5415,8 @@
   let catActual   = null;   // insumo abierto en el visor
   let catZoom     = null;   // null = ajustar a la pantalla; número = escala
   let catSort     = { col: "cod_corto", dir: "asc" };
+  let catOffset   = 0;      // primer registro de la página que se está viendo
+  const CAT_PAGE_SIZE = 100;
 
   const catUrl = key => `${API}/api/r2/imagen?key=${encodeURIComponent(key)}`;
 
@@ -5437,7 +5440,10 @@
 
   // ── Listado ──
 
+  // Cualquier cambio de filtro u orden vuelve a la página 1: quedarse en la
+  // 7 después de filtrar deja la tabla vacía sin explicación.
   function catFiltrarYOrdenar() {
+    catOffset = 0;
     const q = document.getElementById("cat-buscar").value.trim().toLowerCase();
     const soloImg = document.getElementById("cat-solo-img").checked;
     const rubro = document.getElementById("cat-rubro").value;
@@ -5499,11 +5505,19 @@
     if (!catVisibles.length) {
       cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">🔍</div>${
         catInsumos.length ? "Sin coincidencias" : "El maestro está vacío"}</div>`;
+      document.getElementById("cat-pagination").innerHTML = "";
       return;
     }
 
+    // Si un filtro achicó la lista, la página actual puede haber quedado afuera
+    if (catOffset >= catVisibles.length) catOffset = 0;
+    const pagina = catVisibles.slice(catOffset, catOffset + CAT_PAGE_SIZE);
+
+    // data-i es el índice en la lista completa, no en la página: así el visor y
+    // las flechas siguen funcionando igual al cambiar de página.
     // loading="lazy": las miniaturas se bajan recién cuando entran en pantalla
-    const filas = catVisibles.map((r, i) => {
+    const filas = pagina.map((r, pos) => {
+      const i = catOffset + pos;
       const key = catImagenDe(r);
       const mini = !conMini ? "" : `<td class="cat-td-mini">${
         key ? `<img class="cat-item-mini" loading="lazy" src="${catUrl(key)}" alt="">`
@@ -5532,6 +5546,14 @@
         </tr></thead>
         <tbody>${filas}</tbody>
       </table>`;
+
+    renderPagination("cat-pagination", catVisibles.length, catOffset, CAT_PAGE_SIZE, "catIrA");
+  }
+
+  function catIrA(offset) {
+    catOffset = Math.max(0, Math.min(offset, Math.max(0, catVisibles.length - 1)));
+    catRenderLista();
+    document.getElementById("cat-lista").scrollTop = 0;
   }
 
   function catAbrir(i) {
@@ -5539,6 +5561,9 @@
     if (!r) return;
     catActual = r;
     catZoom = null;
+    // Si el elegido cayó en otra página (p. ej. con las flechas), se salta a ella
+    const paginaDe = Math.floor(i / CAT_PAGE_SIZE) * CAT_PAGE_SIZE;
+    if (paginaDe !== catOffset) catOffset = paginaDe;
     catRenderLista();
     catRenderVisor();
     const fila = document.querySelector(`#cat-lista tbody tr[data-i="${i}"]`);
