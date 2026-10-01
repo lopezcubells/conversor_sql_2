@@ -326,6 +326,44 @@
     .cat-refrescar:disabled { opacity: .4; cursor: default; }
     .cat-det-campo { font-size: 11px; color: var(--muted); }
     .cat-det-valor { font-family: var(--mono); font-size: 12px; color: var(--text); }
+    /* Encabezado del panel de filtros. */
+    .cat-titulo {
+      font-size: 13px; font-weight: 700;
+      letter-spacing: .2em; text-transform: uppercase;
+      margin-bottom: 14px; color: var(--text);
+    }
+    /* El brillo es un degradado más ancho que el texto, recortado contra las
+       letras y desplazado por la animación. La pausa entre pasadas (el 55%)
+       es lo que lo hace acompañar en vez de distraer. Va dentro de @supports
+       porque sin recorte contra el texto quedaría un título invisible: así
+       cae en el color sólido de arriba. */
+    @supports (-webkit-background-clip: text) or (background-clip: text) {
+      .cat-titulo {
+        background: linear-gradient(90deg,
+          var(--muted) 0%, var(--muted) 40%,
+          #eaf1ff 47%, var(--accent) 53%,
+          var(--muted) 60%, var(--muted) 100%);
+        background-size: 220% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        animation: cat-brillo 5s ease-in-out infinite;
+      }
+    }
+    /* 110% y -10% dejan el reflejo justo afuera del texto en los extremos: si
+       no, al reiniciar el ciclo se ve un salto de color en el borde. */
+    @keyframes cat-brillo {
+      0%        { background-position: 110% 0; }
+      55%, 100% { background-position: -10% 0; }
+    }
+    /* Con el sistema en "menos movimiento" el título queda quieto y legible. */
+    @media (prefers-reduced-motion: reduce) {
+      .cat-titulo {
+        animation: none; background: none;
+        -webkit-text-fill-color: var(--text); color: var(--text);
+      }
+    }
     .cat-split { display: flex; gap: 16px; align-items: stretch; min-height: 0; }
     /* Mitad y mitad: las dos columnas parten del mismo ancho base */
     /* Con flex-basis 0 y box-sizing border-box, el relleno se suma al reparto:
@@ -1684,6 +1722,7 @@
 
     <!-- Filtros: viven acá para que el panel de abajo sea solo la tabla -->
     <div class="card">
+      <div class="cat-titulo">Catálogo</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="text" class="search-input" id="cat-q-cod" placeholder="Cód. corto…"
                style="flex:0 0 92px;width:92px;min-width:0;padding:6px 10px;font-size:12px" />
