@@ -256,6 +256,45 @@
       border-color: #265139;
     }
 
+    /* ── Catálogo: dos paneles ── */
+    .cat-split { display: flex; gap: 16px; align-items: stretch; }
+    .cat-izq   { width: 380px; flex: 0 0 380px; display: flex; flex-direction: column; }
+    .cat-der   { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    @media (max-width: 1000px) {
+      .cat-split { flex-direction: column; }
+      .cat-izq   { width: auto; flex: 1 1 auto; }
+    }
+    /* La lista scrollea sola para que el visor quede siempre a la vista */
+    .cat-lista { overflow-y: auto; max-height: 62vh; margin: 0 -8px; }
+    .cat-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 8px; border-radius: 7px; cursor: pointer;
+    }
+    .cat-item:hover { background: rgba(255,255,255,.04); }
+    .cat-item.activo { background: rgba(79,142,247,.16); }
+    .cat-item-mini {
+      width: 34px; height: 34px; flex: 0 0 34px;
+      border-radius: 5px; object-fit: cover;
+      background: var(--bg); border: 1px solid var(--border);
+    }
+    .cat-item-nom  { flex: 1; min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+    .cat-item-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    /* Fondo a cuadros: deja ver la transparencia de los PNG */
+    .cat-visor {
+      flex: 1; min-height: 420px;
+      display: grid; place-items: center;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: auto;
+      background-color: #14161f;
+      background-image:
+        linear-gradient(45deg, rgba(255,255,255,.028) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.028) 75%),
+        linear-gradient(45deg, rgba(255,255,255,.028) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.028) 75%);
+      background-size: 22px 22px;
+      background-position: 0 0, 11px 11px;
+    }
+    .cat-visor img { display: block; transition: transform .12s ease; }
+    .cat-visor img.ajustada { max-width: 100%; max-height: 72vh; }
+
     /* ── BOM: autocompletado ── */
     .bom-combo { position: relative; }
     .bom-sugerencias {
@@ -645,6 +684,7 @@
   <div class="tab" data-tab="necesidad-final">Necesidad Final</div>
   <div class="tab" data-tab="consumo-historico">Consumo Histórico</div>
   <div class="tab" data-tab="bom">BOM</div>
+  <div class="tab" data-tab="catalogo">Catálogo</div>
 </div>
 
 <!-- ═══ DASHBOARD ═══ -->
@@ -1515,6 +1555,74 @@
 
 </div>
 
+<!-- ═══ CATÁLOGO ═══ -->
+<div class="pane" id="tab-catalogo">
+
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div>
+      <div class="card-title" style="margin-bottom:6px">Catálogo de imágenes</div>
+      <div style="font-size:12px;color:var(--muted)" id="cat-origen">
+        Las imágenes se sirven desde el bucket de Cloudflare R2.
+      </div>
+    </div>
+    <button class="btn btn-primary" id="cat-btn-actualizar">🔄 Actualizar</button>
+  </div>
+
+  <div class="cat-split">
+
+    <!-- Panel izquierdo: listado -->
+    <div class="card cat-izq">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div class="card-title" style="margin-bottom:0">Archivos</div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
+          Miniaturas
+        </label>
+      </div>
+
+      <input type="text" class="search-input" id="cat-buscar" placeholder="Buscar archivo…"
+             style="width:100%;min-width:0;margin-top:12px" />
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+        <select class="search-input" id="cat-orden" style="flex:1;min-width:0;padding:6px 10px;font-size:12px">
+          <option value="nombre">Nombre (A-Z)</option>
+          <option value="nombre-desc">Nombre (Z-A)</option>
+          <option value="fecha">Más recientes</option>
+          <option value="tamano">Más pesadas</option>
+        </select>
+      </div>
+
+      <div style="font-size:11px;color:var(--muted);margin-top:10px" id="cat-resumen">—</div>
+
+      <div class="cat-lista" id="cat-lista" style="margin-top:6px">
+        <div class="empty" style="padding:30px 10px"><div class="big">🖼️</div>Cargando…</div>
+      </div>
+    </div>
+
+    <!-- Panel derecho: visor -->
+    <div class="card cat-der">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div class="card-title" style="margin-bottom:2px" id="cat-visor-titulo">Visor</div>
+          <div style="font-size:11px;color:var(--muted)" id="cat-visor-meta"></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-outline" id="cat-zoom-menos" style="font-size:12px" title="Alejar">−</button>
+          <span id="cat-zoom-valor" style="font-size:12px;color:var(--muted);min-width:46px;text-align:center">Ajustar</span>
+          <button class="btn btn-outline" id="cat-zoom-mas" style="font-size:12px" title="Acercar">+</button>
+          <button class="btn btn-outline" id="cat-zoom-ajustar" style="font-size:12px">Ajustar</button>
+          <a class="btn btn-outline" id="cat-abrir" style="font-size:12px;display:none" target="_blank" rel="noopener">Abrir ↗</a>
+        </div>
+      </div>
+
+      <div class="cat-visor" id="cat-visor" style="margin-top:12px">
+        <div class="empty"><div class="big">🖼️</div>Elegí un archivo de la lista</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1635,6 +1743,7 @@
       if (tab.dataset.tab === "necesidad-final") initNecesidadFinal();
       if (tab.dataset.tab === "consumo-historico") initConsumoHistorico();
       if (tab.dataset.tab === "bom") initBom();
+      if (tab.dataset.tab === "catalogo") initCatalogo();
     });
   });
 
@@ -5238,6 +5347,197 @@
         bomCargarDespiece();
       }
     } catch (e) {}
+  }
+
+
+  // ── Catálogo de imágenes (Cloudflare R2) ──
+
+  let catLoaded   = false;
+  let catArchivos = [];     // todo el bucket
+  let catVisibles = [];     // lo que pasa el buscador, ya ordenado
+  let catActual   = null;   // archivo abierto en el visor
+  let catZoom     = null;   // null = ajustar a la pantalla; número = escala
+
+  const catUrl = key => `${API}/api/r2/imagen?key=${encodeURIComponent(key)}`;
+
+  function catTamano(bytes) {
+    const b = parseFloat(bytes) || 0;
+    if (b >= 1048576) return (b / 1048576).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " MB";
+    if (b >= 1024)    return (b / 1024).toLocaleString("es-AR", { maximumFractionDigits: 0 }) + " kB";
+    return b + " B";
+  }
+
+  function catFecha(v) {
+    if (!v) return "";
+    const d = new Date(v);
+    return isNaN(d) ? "" : d.toLocaleDateString("es-AR");
+  }
+
+  // Nombre sin la "carpeta" ni la extensión, que es lo que se quiere leer
+  function catNombre(key) {
+    const hoja = String(key).split("/").pop();
+    return hoja.replace(/\.[^.]+$/, "");
+  }
+
+  function catFiltrarYOrdenar() {
+    const q = document.getElementById("cat-buscar").value.trim().toLowerCase();
+    const orden = document.getElementById("cat-orden").value;
+    let lista = q ? catArchivos.filter(a => a.key.toLowerCase().includes(q)) : [...catArchivos];
+    const cmp = {
+      "nombre":      (a, b) => a.key.localeCompare(b.key, "es"),
+      "nombre-desc": (a, b) => b.key.localeCompare(a.key, "es"),
+      "fecha":       (a, b) => new Date(b.modificado || 0) - new Date(a.modificado || 0),
+      "tamano":      (a, b) => (b.tamano || 0) - (a.tamano || 0),
+    }[orden] || ((a, b) => a.key.localeCompare(b.key, "es"));
+    catVisibles = lista.sort(cmp);
+    catRenderLista();
+  }
+
+  function catRenderLista() {
+    const cont = document.getElementById("cat-lista");
+    const resumen = document.getElementById("cat-resumen");
+    const conMini = document.getElementById("cat-miniaturas").checked;
+
+    const total = catVisibles.reduce((a, f) => a + (f.tamano || 0), 0);
+    resumen.textContent = catArchivos.length
+      ? `${catVisibles.length.toLocaleString("es-AR")} de ${catArchivos.length.toLocaleString("es-AR")} archivos · ${catTamano(total)}`
+      : "—";
+
+    if (!catVisibles.length) {
+      cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">🔍</div>${
+        catArchivos.length ? "Sin coincidencias" : "El bucket está vacío"}</div>`;
+      return;
+    }
+
+    // loading="lazy": las miniaturas se bajan recién cuando entran en pantalla
+    cont.innerHTML = catVisibles.map((f, i) => `
+      <div class="cat-item${catActual && catActual.key === f.key ? " activo" : ""}" data-i="${i}" title="${nsEsc(f.key)}">
+        ${conMini ? `<img class="cat-item-mini" loading="lazy" src="${catUrl(f.key)}" alt="">` : ""}
+        <span class="cat-item-nom">${nsEsc(catNombre(f.key))}</span>
+        <span class="cat-item-meta">${catTamano(f.tamano)}</span>
+      </div>`).join("");
+  }
+
+  function catAbrir(i) {
+    const f = catVisibles[i];
+    if (!f) return;
+    catActual = f;
+    catZoom = null;
+    catRenderLista();
+    catRenderVisor();
+    // mantiene a la vista el elemento elegido cuando se navega con el teclado
+    const el = document.querySelector(`#cat-lista .cat-item[data-i="${i}"]`);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }
+
+  function catRenderVisor() {
+    const visor = document.getElementById("cat-visor");
+    const abrir = document.getElementById("cat-abrir");
+    if (!catActual) {
+      visor.innerHTML = `<div class="empty"><div class="big">🖼️</div>Elegí un archivo de la lista</div>`;
+      document.getElementById("cat-visor-titulo").textContent = "Visor";
+      document.getElementById("cat-visor-meta").textContent = "";
+      abrir.style.display = "none";
+      return;
+    }
+    document.getElementById("cat-visor-titulo").textContent = catNombre(catActual.key);
+    document.getElementById("cat-visor-meta").textContent =
+      `${catActual.key} · ${catTamano(catActual.tamano)}${catActual.modificado ? " · " + catFecha(catActual.modificado) : ""}`;
+    abrir.href = catUrl(catActual.key);
+    abrir.style.display = "";
+
+    visor.innerHTML = `<img id="cat-img" class="ajustada" src="${catUrl(catActual.key)}" alt="${nsEsc(catNombre(catActual.key))}">`;
+    const img = document.getElementById("cat-img");
+    img.addEventListener("error", () => {
+      visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
+    });
+    // Al terminar de cargar se informa el tamaño real, que es dato útil del catálogo
+    img.addEventListener("load", () => {
+      document.getElementById("cat-visor-meta").textContent +=
+        ` · ${img.naturalWidth}×${img.naturalHeight} px`;
+    });
+    catAplicarZoom();
+  }
+
+  function catAplicarZoom() {
+    const img = document.getElementById("cat-img");
+    const etiqueta = document.getElementById("cat-zoom-valor");
+    if (!img) { etiqueta.textContent = "Ajustar"; return; }
+    if (catZoom === null) {
+      img.classList.add("ajustada");
+      img.style.transform = "";
+      etiqueta.textContent = "Ajustar";
+    } else {
+      img.classList.remove("ajustada");
+      img.style.transform = `scale(${catZoom})`;
+      img.style.transformOrigin = "center center";
+      etiqueta.textContent = Math.round(catZoom * 100) + "%";
+    }
+  }
+
+  function catZoomPaso(factor) {
+    // El primer paso sale del tamaño real, no del ajustado a pantalla
+    catZoom = Math.min(8, Math.max(0.1, (catZoom === null ? 1 : catZoom) * factor));
+    catAplicarZoom();
+  }
+
+  // ── Carga ──
+
+  async function catCargar(refrescar) {
+    const cont = document.getElementById("cat-lista");
+    const btn  = document.getElementById("cat-btn-actualizar");
+    btn.disabled = true;
+    cont.innerHTML = `<div class="empty" style="padding:30px 10px"><div class="big">⏳</div>Leyendo el bucket…</div>`;
+    try {
+      const res  = await fetch(`${API}/api/r2/catalogo${refrescar ? "?refresh=1" : ""}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      catArchivos = data.archivos || [];
+      document.getElementById("cat-origen").innerHTML =
+        `Bucket <strong style="color:var(--text);font-family:var(--mono)">${nsEsc(data.bucket || "")}</strong> en Cloudflare R2. Las imágenes se sirven a través de la app, así que siguen protegidas por el login.`;
+      catFiltrarYOrdenar();
+    } catch (e) {
+      catArchivos = [];
+      catVisibles = [];
+      document.getElementById("cat-resumen").textContent = "—";
+      cont.innerHTML = `<div class="empty" style="padding:24px 10px"><div class="big">⚠️</div>${nsEsc(e.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Eventos ──
+
+  document.getElementById("cat-lista").addEventListener("click", e => {
+    const item = e.target.closest(".cat-item");
+    if (item) catAbrir(parseInt(item.dataset.i, 10));
+  });
+
+  document.getElementById("cat-buscar").addEventListener("input", catFiltrarYOrdenar);
+  document.getElementById("cat-orden").addEventListener("change", catFiltrarYOrdenar);
+  document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
+  document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
+
+  document.getElementById("cat-zoom-mas").addEventListener("click", () => catZoomPaso(1.25));
+  document.getElementById("cat-zoom-menos").addEventListener("click", () => catZoomPaso(0.8));
+  document.getElementById("cat-zoom-ajustar").addEventListener("click", () => { catZoom = null; catAplicarZoom(); });
+
+  // Flechas para recorrer el catálogo sin soltar el teclado
+  document.addEventListener("keydown", e => {
+    const pane = document.getElementById("tab-catalogo");
+    if (!pane.classList.contains("active")) return;
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const i = catActual ? catVisibles.findIndex(f => f.key === catActual.key) : -1;
+    const sig = e.key === "ArrowDown" ? i + 1 : i - 1;
+    if (sig >= 0 && sig < catVisibles.length) catAbrir(sig);
+  });
+
+  function initCatalogo() {
+    if (catLoaded) return;
+    catLoaded = true;
+    catCargar(false);
   }
 
   // ── Necesidad final ──

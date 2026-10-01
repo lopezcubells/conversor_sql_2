@@ -921,3 +921,93 @@ app.post("/api/pg/bom/despiece", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── Catálogo de imágenes (Cloudflare R2) ──
+
+// R2 habla el protocolo S3, así que alcanza con el cliente de S3 apuntado al
+// endpoint de la cuenta. Las imágenes NO se sirven con URL pública: las
+// proxea este servidor, así quedan detrás del login como el resto de la app.
+const { S3Client, ListObjectsV2Command, GetObjectCommand } = require("@aws-sdk/client-s3");
+
+const R2_BUCKET = process.env.R2_BUCKET || "imagenes-insumos";
+let r2Client = null;
+if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) {
+  r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId:     process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+  });
+  console.log(`R2 configurado (bucket "${R2_BUCKET}")`);
+} else {
+  console.log("R2 no configurado: faltan R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY");
+}
+
+const CAT_EXT = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+  ".gif": "image/gif",  ".webp": "image/webp", ".bmp": "image/bmp",
+  ".svg": "image/svg+xml", ".avif": "image/avif",
+};
+const catTipo = key => CAT_EXT[(String(key).match(/\.[^.]+$/) || [""])[0].toLowerCase()] || null;
+
+// Listar el bucket entero cuesta una vuelta por cada 1000 objetos, así que se
+// cachea un rato. El botón Actualizar de la pestaña fuerza el refresco.
+let catCache = { ts: 0, items: [] };
+const CAT_TTL_MS = 10 * 60 * 1000;
+
+app.get("/api/r2/catalogo", async (req, res) => {
+  if (!r2Client) return res.status(503).json({
+    error: "R2 no configurado. Faltan las variables R2_ACCOUNT_ID, R2_ACCESS_KEY_ID y R2_SECRET_ACCESS_KEY.",
+  });
+  try {
+    const refrescar = req.query.refresh === "1";
+    if (!refrescar && catCache.items.length && Date.now() - catCache.ts < CAT_TTL_MS)
+      return res.json({ archivos: catCache.items, bucket: R2_BUCKET, cacheado: true });
+
+    const items = [];
+    let token = undefined;
+    do {
+      const out = await r2Client.send(new ListObjectsV2Command({
+        Bucket: R2_BUCKET, ContinuationToken: token, MaxKeys: 1000,
+      }));
+      (out.Contents || []).forEach(o => {
+        if (!o.Key || o.Key.endsWith("/")) return;   // las "carpetas" no son archivos
+        if (!catTipo(o.Key)) return;                 // solo imágenes
+        items.push({ key: o.Key, tamano: o.Size, modificado: o.LastModified });
+      });
+      token = out.IsTruncated ? out.NextContinuationToken : undefined;
+    } while (token && items.length < 20000);
+
+    items.sort((a, b) => a.key.localeCompare(b.key, "es"));
+    catCache = { ts: Date.now(), items };
+    res.json({ archivos: items, bucket: R2_BUCKET, cacheado: false });
+  } catch (e) {
+    console.error("R2 catalogo error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Devuelve los bytes de una imagen. La clave viaja como query para no pelear
+// con las barras de las "carpetas" del bucket.
+app.get("/api/r2/imagen", async (req, res) => {
+  if (!r2Client) return res.status(503).json({ error: "R2 no configurado." });
+  try {
+    const key = String(req.query.key || "");
+    if (!key) return res.status(400).json({ error: "Falta la clave del archivo." });
+    const tipo = catTipo(key);
+    if (!tipo) return res.status(400).json({ error: "El archivo no es una imagen." });
+
+    const out = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    res.setHeader("Content-Type", tipo);
+    if (out.ContentLength) res.setHeader("Content-Length", String(out.ContentLength));
+    // Privado: la imagen queda en el navegador del usuario, no en proxies
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    out.Body.pipe(res);
+  } catch (e) {
+    const code = (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) ? 404 : 500;
+    if (code === 500) console.error("R2 imagen error:", e.message);
+    res.status(code).json({ error: code === 404 ? "No se encontró la imagen." : e.message });
+  }
+});

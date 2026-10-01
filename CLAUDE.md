@@ -34,6 +34,7 @@ sus identificadores** (ids de HTML, funciones y variables de JS).
 | Necesidad Final | `nf*` | `initNecesidadFinal()` |
 | Consumo Histórico | `ch*` | `initConsumoHistorico()` |
 | BOM | `bom*` | `initBom()` |
+| Catálogo | `cat*` | `initCatalogo()` |
 
 **Respetar el prefijo al agregar código.** Es lo único que evita colisiones de
 nombres en un archivo de este tamaño. El router de pestañas está en el listener
@@ -65,6 +66,17 @@ multiplica las filas de consumo e infla todos los totales sin avisar.
 
 Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`.
 `ADMIN_USER`/`ADMIN_PASS` solo se usan la primera vez, cuando `app_users` está vacía.
+
+## Catálogo de imágenes (Cloudflare R2)
+
+La pestaña Catálogo no usa PostgreSQL: lee un bucket de **Cloudflare R2**, que
+habla el protocolo S3. Variables: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY` y `R2_BUCKET` (por defecto `imagenes-insumos`). Sin
+ellas la pestaña explica qué falta en vez de romperse.
+
+Las imágenes **no se exponen con URL pública**: las proxea `/api/r2/imagen`,
+así quedan detrás del login como el resto de la app. El listado se cachea en
+memoria 10 minutos; el botón Actualizar lo fuerza con `?refresh=1`.
 
 ## Cómo verificar cambios (importante)
 

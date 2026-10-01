@@ -18,6 +18,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 | **Necesidad Final** | Necesidad de compra por insumo, con criticidad ABC en semáforo. |
 | **Consumo Histórico** | Tablero de consumos por insumo y producto, con evolución anual/mensual/diaria. |
 | **BOM** | Lista de piezas por producto, comparada entre plantas, y vista inversa por insumo. |
+| **Catálogo** | Imágenes de insumos alojadas en Cloudflare R2, con listado y visor. |
 
 Cada pestaña tiene su propio bloque de parámetros; lo que se ingresa queda
 guardado en el navegador para la próxima visita.
@@ -55,6 +56,10 @@ DATABASE_URL="postgres://..." npm start
 | `ADMIN_USER` | `admin` | Usuario inicial. Solo se usa si `app_users` está vacía. |
 | `ADMIN_PASS` | `admin` | Contraseña inicial. Solo se usa si `app_users` está vacía. |
 | `PORT` | `3000` | Puerto del servidor. |
+| `R2_ACCOUNT_ID` | — | Cuenta de Cloudflare R2. Sin ella, la pestaña Catálogo avisa que falta configurarla. |
+| `R2_ACCESS_KEY_ID` | — | Access Key del token de R2. |
+| `R2_SECRET_ACCESS_KEY` | — | Secret Access Key del token de R2. |
+| `R2_BUCKET` | `imagenes-insumos` | Bucket de donde salen las imágenes. |
 
 ## Objetos de PostgreSQL que consume
 
