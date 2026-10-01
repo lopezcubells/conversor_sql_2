@@ -1,0 +1,15 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno: nunca van al repo.
+# En producción se cargan desde Railway, no desde un archivo.
+.env
+.env.*
+!.env.example
+
+# Archivos temporales del harness de pruebas (ver CLAUDE.md)
+__*.html
+
+# Sistema
+.DS_Store
+Thumbs.db
