@@ -362,10 +362,15 @@
       border: 1px dashed var(--border); display: grid; place-items: center;
       font-size: 10px; color: var(--muted);
     }
-    /* Fondo a cuadros: deja ver la transparencia de los PNG */
+    /* Fondo a cuadros: deja ver la transparencia de los PNG.
+       Centrado con flex + margin auto en el hijo, no con grid: una grilla de
+       fila automática crece hasta el alto natural de la imagen, y entonces el
+       max-height:100% no limita nada y el visor termina con scroll. Además
+       margin:auto permite desplazarse hasta el borde cuando se hace zoom,
+       cosa que align-items:center impide. */
     .cat-visor {
       flex: 1; min-height: 0;
-      display: grid; place-items: center;
+      display: flex;
       border: 1px solid var(--border); border-radius: var(--radius);
       overflow: auto;
       background-color: #14161f;
@@ -375,7 +380,9 @@
       background-size: 22px 22px;
       background-position: 0 0, 11px 11px;
     }
-    .cat-visor img { display: block; transition: transform .12s ease; }
+    .cat-visor > * { margin: auto; }
+    .cat-visor img { display: block; }
+    /* Por defecto entra entera: se achica hasta caber en los dos ejes */
     .cat-visor img.ajustada { max-width: 100%; max-height: 100%; }
 
     /* ── BOM: autocompletado ── */
@@ -5686,6 +5693,7 @@
     // detalle en vez de concatenarse al texto, que al re-renderizar se duplicaba.
     img.addEventListener("load", () => {
       catRenderDetalle(`${img.naturalWidth}×${img.naturalHeight} px`);
+      catAplicarZoom();   // recién acá se conoce el tamaño real
     });
     catAplicarZoom();
   }
@@ -5696,12 +5704,18 @@
     if (!img) { etiqueta.textContent = "Ajustar"; return; }
     if (catZoom === null) {
       img.classList.add("ajustada");
-      img.style.transform = "";
+      img.style.width = "";
+      img.style.maxWidth = "";
+      img.style.maxHeight = "";
       etiqueta.textContent = "Ajustar";
     } else {
+      // Se cambia el ancho real, no un transform: así el visor puede
+      // desplazarse y se llega a ver los bordes de la imagen ampliada.
+      const base = img.naturalWidth || img.width;
       img.classList.remove("ajustada");
-      img.style.transform = `scale(${catZoom})`;
-      img.style.transformOrigin = "center center";
+      img.style.maxWidth = "none";
+      img.style.maxHeight = "none";
+      img.style.width = Math.round(base * catZoom) + "px";
       etiqueta.textContent = Math.round(catZoom * 100) + "%";
     }
   }
