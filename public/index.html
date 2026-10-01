@@ -5706,19 +5706,24 @@
     if (!catActual) {
       titulo.textContent = "Detalle";
       meta.textContent = "Elegí un insumo de la lista";
+      meta.style.display = "";
       campos.innerHTML = "";
       catAjustarAlto();
       return;
     }
 
     titulo.textContent = `${catActual.cod_corto} · ${catDescripcion(catActual) || ""}`.trim();
-    meta.textContent = catActual.rubro || "";
+    // El subtítulo queda sólo para la ayuda del estado vacío: el rubro pasó a
+    // mostrarse como un campo más, al lado de Cód. largo y Stock.
+    meta.textContent = "";
+    meta.style.display = "none";
 
     const dato = (etiqueta, valor) => valor
       ? `<div><div class="cat-det-campo">${etiqueta}</div><div class="cat-det-valor">${nsEsc(valor)}</div></div>`
       : "";
     campos.innerHTML =
       dato("Cód. largo", catActual.cod_largo) +
+      dato("Rubro", catActual.rubro) +
       dato("Stock", fmtNum(catActual.stock));
 
     // El panel crece al llenarse, así que el bloque de abajo tiene que volver
