@@ -396,9 +396,8 @@
       background-position: 0 0, 11px 11px;
     }
     .cat-visor > * { margin: auto; }
-    .cat-visor img { display: block; }
-    /* Por defecto entra entera: se achica hasta caber en los dos ejes */
-    .cat-visor img.ajustada { max-width: 100%; max-height: 100%; }
+    /* Entra entera siempre: se achica hasta caber en los dos ejes */
+    .cat-visor img { display: block; max-width: 100%; max-height: 100%; }
 
     /* ── BOM: autocompletado ── */
     .bom-combo { position: relative; }
@@ -1675,18 +1674,9 @@
 
     <!-- Detalle de lo seleccionado: queda arriba del visor, que solo muestra la imagen -->
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-        <div style="min-width:0;flex:1">
-          <div style="font-size:14px;font-weight:600;color:var(--text)" id="cat-visor-titulo">Detalle</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:3px" id="cat-visor-meta">Elegí un insumo de la lista</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex:0 0 auto">
-          <button class="btn btn-outline" id="cat-zoom-menos" style="font-size:12px" title="Alejar">−</button>
-          <span id="cat-zoom-valor" style="font-size:12px;color:var(--muted);min-width:46px;text-align:center">Ajustar</span>
-          <button class="btn btn-outline" id="cat-zoom-mas" style="font-size:12px" title="Acercar">+</button>
-          <button class="btn btn-outline" id="cat-zoom-ajustar" style="font-size:12px">Ajustar</button>
-          <a class="btn btn-outline" id="cat-abrir" style="font-size:12px;display:none" target="_blank" rel="noopener">Abrir ↗</a>
-        </div>
+      <div style="min-width:0">
+        <div style="font-size:14px;font-weight:600;color:var(--text)" id="cat-visor-titulo">Detalle</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:3px" id="cat-visor-meta">Elegí un insumo de la lista</div>
       </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px" id="cat-det-campos"></div>
     </div>
@@ -5479,7 +5469,6 @@
   let catVisibles = [];     // lo que pasa el filtro, ya ordenado
   let catImagenes = new Map();  // cod_corto normalizado -> clave en el bucket
   let catActual   = null;   // insumo abierto en el visor
-  let catZoom     = null;   // null = ajustar a la pantalla; número = escala
   let catSort     = { col: "cod_corto", dir: "asc" };
   let catOffset   = 0;      // primer registro de la página que se está viendo
   const CAT_PAGE_SIZE = 100;
@@ -5635,7 +5624,6 @@
     const r = catVisibles[i];
     if (!r) return;
     catActual = r;
-    catZoom = null;
     // Si el elegido cayó en otra página (p. ej. con las flechas), se salta a ella
     const paginaDe = Math.floor(i / CAT_PAGE_SIZE) * CAT_PAGE_SIZE;
     if (paginaDe !== catOffset) catOffset = paginaDe;
@@ -5653,13 +5641,12 @@
     const titulo = document.getElementById("cat-visor-titulo");
     const meta   = document.getElementById("cat-visor-meta");
     const campos = document.getElementById("cat-det-campos");
-    const abrir  = document.getElementById("cat-abrir");
 
     if (!catActual) {
       titulo.textContent = "Detalle";
       meta.textContent = "Elegí un insumo de la lista";
       campos.innerHTML = "";
-      abrir.style.display = "none";
+      catAjustarAlto();
       return;
     }
 
@@ -5676,8 +5663,10 @@
       dato("Archivo", key || "sin imagen") +
       dato("Medidas", dimensiones || "");
 
-    abrir.href = key ? catUrl(key) : "#";
-    abrir.style.display = key ? "" : "none";
+    // El panel crece al llenarse (y de nuevo cuando llegan las medidas), así
+    // que el bloque de abajo tiene que volver a medir: si no, lo que sobra
+    // empuja la página y aparece la barra de desplazamiento.
+    catAjustarAlto();
   }
 
   function catRenderVisor() {
@@ -5697,7 +5686,7 @@
       return;
     }
 
-    visor.innerHTML = `<img id="cat-img" class="ajustada" src="${catUrl(key)}" alt="${nsEsc(catActual.descripcion || catActual.cod_corto)}">`;
+    visor.innerHTML = `<img id="cat-img" src="${catUrl(key)}" alt="${nsEsc(catActual.descripcion || catActual.cod_corto)}">`;
     const img = document.getElementById("cat-img");
     img.addEventListener("error", () => {
       visor.innerHTML = `<div class="empty"><div class="big">⚠️</div>No se pudo cargar la imagen</div>`;
@@ -5706,37 +5695,7 @@
     // detalle en vez de concatenarse al texto, que al re-renderizar se duplicaba.
     img.addEventListener("load", () => {
       catRenderDetalle(`${img.naturalWidth}×${img.naturalHeight} px`);
-      catAplicarZoom();   // recién acá se conoce el tamaño real
     });
-    catAplicarZoom();
-  }
-
-  function catAplicarZoom() {
-    const img = document.getElementById("cat-img");
-    const etiqueta = document.getElementById("cat-zoom-valor");
-    if (!img) { etiqueta.textContent = "Ajustar"; return; }
-    if (catZoom === null) {
-      img.classList.add("ajustada");
-      img.style.width = "";
-      img.style.maxWidth = "";
-      img.style.maxHeight = "";
-      etiqueta.textContent = "Ajustar";
-    } else {
-      // Se cambia el ancho real, no un transform: así el visor puede
-      // desplazarse y se llega a ver los bordes de la imagen ampliada.
-      const base = img.naturalWidth || img.width;
-      img.classList.remove("ajustada");
-      img.style.maxWidth = "none";
-      img.style.maxHeight = "none";
-      img.style.width = Math.round(base * catZoom) + "px";
-      etiqueta.textContent = Math.round(catZoom * 100) + "%";
-    }
-  }
-
-  function catZoomPaso(factor) {
-    // El primer paso sale del tamaño real, no del ajustado a pantalla
-    catZoom = Math.min(8, Math.max(0.1, (catZoom === null ? 1 : catZoom) * factor));
-    catAplicarZoom();
   }
 
   // ── Carga ──
@@ -5806,10 +5765,6 @@
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", () => catCargar(true));
-
-  document.getElementById("cat-zoom-mas").addEventListener("click", () => catZoomPaso(1.25));
-  document.getElementById("cat-zoom-menos").addEventListener("click", () => catZoomPaso(0.8));
-  document.getElementById("cat-zoom-ajustar").addEventListener("click", () => { catZoom = null; catAplicarZoom(); });
 
   // Flechas para recorrer el catálogo sin soltar el teclado
   document.addEventListener("keydown", e => {
