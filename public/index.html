@@ -328,16 +328,16 @@
     .cat-vista.activa { color: var(--text); background: var(--surface); border-color: var(--accent); }
 
     /* Miniatura dentro de la tabla (vista 2) */
-    .cat-td-mini { width: 40px; padding: 2px 4px !important; }
+    .cat-td-mini { width: 56px; padding: 3px 4px !important; }
     .cat-mini {
-      width: 30px; height: 30px; border-radius: 4px; object-fit: cover; display: block;
-      background: var(--bg); border: 1px solid var(--border);
+      width: 48px; height: 48px; border-radius: 5px; object-fit: contain; display: block;
+      background: #14161f; border: 1px solid var(--border);
     }
     /* Hueco del mismo tamaño: sin esto las filas sin imagen miden distinto */
     .cat-mini-vacia {
-      width: 30px; height: 30px; border-radius: 4px;
+      width: 48px; height: 48px; border-radius: 5px;
       border: 1px dashed var(--border); display: grid; place-items: center;
-      font-size: 10px; color: var(--muted);
+      font-size: 12px; color: var(--muted);
     }
 
     /* Galería (vista 3) */
@@ -5916,12 +5916,14 @@
       const celdaMini = !conMini ? "" : `<td class="cat-td-mini">${
         key ? `<img class="cat-mini" loading="lazy" src="${catUrl(key)}" alt="">`
             : `<div class="cat-mini-vacia">—</div>`}</td>`;
+      // Con la miniatura al lado, el código largo y el rubro sobran: la imagen
+      // ya identifica el artículo y lo que se quiere leer es la descripción.
       return `<tr class="${catActual && catActual.cod_corto === r.cod_corto ? "activo" : ""}" data-i="${i}">
         ${celdaMini}
         <td class="cat-mono">${nsEsc(r.cod_corto)}</td>
-        <td class="cat-mono">${nsEsc(r.cod_largo)}</td>
+        ${conMini ? "" : `<td class="cat-mono">${nsEsc(r.cod_largo)}</td>`}
         <td title="${nsEsc(catDescripcion(r))}">${nsEsc(catDescripcion(r))}</td>
-        <td style="color:var(--muted)" title="${nsEsc(r.rubro)}">${nsEsc(r.rubro)}</td>
+        ${conMini ? "" : `<td style="color:var(--muted)" title="${nsEsc(r.rubro)}">${nsEsc(r.rubro)}</td>`}
         <td class="cat-mono" style="text-align:right${(parseFloat(r.stock) || 0) > 0 ? "" : ";color:var(--muted)"}">${fmtNum(r.stock)}</td>
       </tr>`;
     }).join("");
@@ -5929,15 +5931,19 @@
     return `
       <table class="cat-tabla">
         <colgroup>
-          ${conMini ? '<col style="width:40px">' : ""}
-          <col style="width:76px"><col style="width:96px"><col><col style="width:20%"><col style="width:74px">
+          ${conMini ? '<col style="width:56px">' : ""}
+          <col style="width:76px">
+          ${conMini ? "" : '<col style="width:96px">'}
+          <col>
+          ${conMini ? "" : '<col style="width:20%">'}
+          <col style="width:74px">
         </colgroup>
         <thead><tr>
           ${conMini ? '<th class="cat-no-ord"></th>' : ""}
           ${catTh("Cód. corto", "cod_corto")}
-          ${catTh("Cód. largo", "cod_largo")}
+          ${conMini ? "" : catTh("Cód. largo", "cod_largo")}
           ${catTh("Descripción", "descripcion")}
-          ${catTh("Rubro", "rubro")}
+          ${conMini ? "" : catTh("Rubro", "rubro")}
           ${catTh("Stock", "stock", ' style="text-align:right"')}
         </tr></thead>
         <tbody>${filas}</tbody>
