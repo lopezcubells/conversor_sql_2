@@ -660,6 +660,26 @@
     #tab-recepciones tr:hover td { background: rgba(37,99,235,.05); }
     #tab-recepciones input[type="range"] { accent-color: #2563eb; }
 
+    /* ── Gama azul/violeta: solo pestaña Catálogo ── */
+    /* Mismo recurso que Recepciones: se redefinen los tokens dentro de la
+       pestaña y todo lo que ya usa var(--…) se recolorea solo, sin tocar una
+       sola regla de estructura. Los tonos se eligieron midiendo contraste:
+       texto 13.3:1 y secundario 6.8:1 sobre los paneles, los dos por encima
+       de AA (el secundario del tema general se queda en 4.3:1). */
+    #tab-catalogo {
+      --bg:      #141734;
+      --surface: #1c1f44;
+      --border:  #343a73;
+      --text:    #e9eaff;
+      --muted:   #a3a7d4;
+      --accent:  #7c8cff;
+      background: linear-gradient(135deg, #171a3d 0%, #1d1b44 45%, #141733 100%);
+      color: var(--text);
+    }
+    /* Dos colores que estaban fijos en el azul viejo y no siguen a los tokens. */
+    #tab-catalogo .cat-tabla tbody tr.activo td { background: rgba(124,140,255,.20); }
+    #tab-catalogo .cat-visor { background-color: #11142e; }
+
     /* ── Rubros Detallado: KPI hero row ── */
     .kpi-row {
       display: grid;
@@ -1745,19 +1765,19 @@
 
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-en-stock" style="accent-color:#4f8ef7">
+          <input type="checkbox" id="cat-en-stock" style="accent-color:#7c8cff">
           En stock
         </label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-solo-img" style="accent-color:#4f8ef7">
+          <input type="checkbox" id="cat-solo-img" style="accent-color:#7c8cff">
           Solo con imagen
         </label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-generica" style="accent-color:#4f8ef7">
+          <input type="checkbox" id="cat-generica" style="accent-color:#7c8cff">
           Etiquetas genéricas
         </label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#4f8ef7">
+          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#7c8cff">
           Miniaturas
         </label>
       </div>
