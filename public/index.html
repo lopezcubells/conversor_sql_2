@@ -327,22 +327,26 @@
     .cat-det-campo { font-size: 11px; color: var(--muted); }
     .cat-det-valor { font-family: var(--mono); font-size: 12px; color: var(--text); }
     /* Encabezado del panel de filtros. */
+    /* inline-block a propósito: como bloque, el degradado abarcaría todo el
+       ancho de la tarjeta y el reflejo cruzaría casi todo fuera de la palabra. */
     .cat-titulo {
-      font-size: 13px; font-weight: 700;
+      display: inline-block;
+      font-size: 13px; font-weight: 800;
       letter-spacing: .2em; text-transform: uppercase;
-      margin-bottom: 14px; color: var(--text);
+      margin-bottom: 14px; color: #ffffff;
     }
-    /* El brillo es un degradado más ancho que el texto, recortado contra las
-       letras y desplazado por la animación. La pausa entre pasadas (el 55%)
-       es lo que lo hace acompañar en vez de distraer. Va dentro de @supports
-       porque sin recorte contra el texto quedaría un título invisible: así
-       cae en el color sólido de arriba. */
+    /* El reflejo es un degradado más ancho que el texto, recortado contra las
+       letras y desplazado por la animación. Sobre blanco puro no hay nada más
+       claro con qué destellar, así que la pasada es una banda del azul de la
+       app. La pausa entre pasadas (el 55%) la hace acompañar en vez de
+       distraer. Va dentro de @supports porque sin recorte contra el texto
+       quedaría un título invisible: así cae en el blanco sólido de arriba. */
     @supports (-webkit-background-clip: text) or (background-clip: text) {
       .cat-titulo {
         background: linear-gradient(90deg,
-          var(--muted) 0%, var(--muted) 40%,
-          #eaf1ff 47%, var(--accent) 53%,
-          var(--muted) 60%, var(--muted) 100%);
+          #ffffff 0%, #ffffff 42%,
+          #bcd4ff 47%, var(--accent) 50%, #bcd4ff 53%,
+          #ffffff 58%, #ffffff 100%);
         background-size: 220% 100%;
         -webkit-background-clip: text;
         background-clip: text;
@@ -361,7 +365,7 @@
     @media (prefers-reduced-motion: reduce) {
       .cat-titulo {
         animation: none; background: none;
-        -webkit-text-fill-color: var(--text); color: var(--text);
+        -webkit-text-fill-color: #ffffff; color: #ffffff;
       }
     }
     .cat-split { display: flex; gap: 16px; align-items: stretch; min-height: 0; }
