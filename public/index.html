@@ -328,14 +328,14 @@
     .cat-vista.activa { color: var(--text); background: var(--surface); border-color: var(--accent); }
 
     /* Miniatura dentro de la tabla (vista 2) */
-    .cat-td-mini { width: 56px; padding: 3px 4px !important; }
+    .cat-td-mini { width: 74px; padding: 3px 5px !important; }
     .cat-mini {
-      width: 48px; height: 48px; border-radius: 5px; object-fit: contain; display: block;
+      width: 64px; height: 64px; border-radius: 5px; object-fit: contain; display: block;
       background: #14161f; border: 1px solid var(--border);
     }
     /* Hueco del mismo tamaño: sin esto las filas sin imagen miden distinto */
     .cat-mini-vacia {
-      width: 48px; height: 48px; border-radius: 5px;
+      width: 64px; height: 64px; border-radius: 5px;
       border: 1px dashed var(--border); display: grid; place-items: center;
       font-size: 12px; color: var(--muted);
     }
@@ -5931,7 +5931,7 @@
     return `
       <table class="cat-tabla">
         <colgroup>
-          ${conMini ? '<col style="width:56px">' : ""}
+          ${conMini ? '<col style="width:74px">' : ""}
           <col style="width:76px">
           ${conMini ? "" : '<col style="width:96px">'}
           <col>
