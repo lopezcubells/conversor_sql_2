@@ -5759,11 +5759,12 @@
   let catVisibles = [];     // lo que pasa el filtro, ya ordenado
   let catImagenes = new Map();  // cod_corto normalizado -> clave en el bucket
   let catActual   = null;   // insumo abierto en el visor
-  let catSort     = { col: "cod_corto", dir: "asc" };
-  let catVista    = "lista";   // lista | miniatura | galeria
+  // La pestaña abre en galería ordenada por stock de mayor a menor: es la
+  // entrada natural al catálogo, lo que mas hay se ve primero y con la foto.
+  let catSort     = { col: "stock", dir: "desc" };
+  let catVista    = "galeria";   // lista | miniatura | galeria
   let catOffset   = 0;      // primer registro de la página que se está viendo
   const CAT_PAGE_SIZE = 100;
-  const CAT_VISTA_KEY = "catalogo-vista";
 
   const catUrl = key => `${API}/api/r2/imagen?key=${encodeURIComponent(key)}`;
 
@@ -5974,7 +5975,6 @@
   function catCambiarVista(vista) {
     if (catVista === vista) return;
     catVista = vista;
-    try { localStorage.setItem(CAT_VISTA_KEY, vista); } catch (e) {}
     catMarcarVista();
     catRenderLista();
     document.getElementById("cat-lista").scrollTop = 0;
@@ -6184,10 +6184,6 @@
       return;
     }
     catLoaded = true;
-    try {
-      const guardada = localStorage.getItem(CAT_VISTA_KEY);
-      if (["lista", "miniatura", "galeria"].includes(guardada)) catVista = guardada;
-    } catch (e) {}
     catMarcarVista();
     catAjustarAlto();
     catCargar(false);
