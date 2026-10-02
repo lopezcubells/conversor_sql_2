@@ -1822,8 +1822,9 @@
     <div id="users-permisos-lista" style="display:flex;flex-direction:column;gap:6px;margin-top:12px;padding-left:24px"></div>
 
     <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">
-      Dashboard siempre queda visible: es la pantalla de inicio. Los administradores
-      ven todas las pestañas, sin importar lo que se marque acá.
+      El Dashboard es exclusivo de los administradores, así que no figura en la
+      lista. Los administradores ven todas las pestañas, sin importar lo que se
+      marque acá.
     </div>
 
     <div class="btn-row" style="margin-top:16px">
@@ -1849,7 +1850,7 @@
     const { usuario, es_admin, pestanas } = await r.json();
     document.getElementById("hdr-usuario").textContent = `👤 ${usuario}`;
     document.getElementById("btn-logout").style.display = "";
-    aplicarPermisos(pestanas);
+    aplicarPermisos(pestanas, es_admin);
     if (es_admin) {
       document.getElementById("users-card").style.display = "";
       usersLoad();
@@ -1861,21 +1862,38 @@
   // cual los escuchas ya quedaron enganchados y no falla ninguno.
   // El servidor igual responde 403 a los datos de esas pestañas; esto es la
   // mitad visible del permiso, no el permiso en sí.
-  function aplicarPermisos(permitidas) {
-    if (!Array.isArray(permitidas)) return;
-    const puede = new Set(permitidas);
+  function aplicarPermisos(permitidas, esAdmin) {
+    if (esAdmin) return;                       // el admin ve todo, incluido Dashboard
+    const puede = new Set(Array.isArray(permitidas) ? permitidas : []);
+    // Dashboard es solo para administradores; para el resto se va como cualquier otra
+    const sinAcceso = clave => clave === "dashboard" || !puede.has(clave);
+
+    let habiaActiva = false;
     document.querySelectorAll(".tab").forEach(tab => {
       const clave = tab.dataset.tab;
-      if (clave === "dashboard" || puede.has(clave)) return;
+      if (!sinAcceso(clave)) return;
+      if (tab.classList.contains("active")) habiaActiva = true;
       const pane = document.getElementById("tab-" + clave);
-      const eraActiva = tab.classList.contains("active");
       tab.remove();
       if (pane) pane.remove();
-      if (eraActiva) {
-        const primera = document.querySelector(".tab");
-        if (primera) primera.click();
-      }
     });
+
+    const primera = document.querySelector(".tab");
+    if (primera) {
+      if (habiaActiva) primera.click();
+    } else {
+      // Sin Dashboard de respaldo, un usuario sin ninguna pestaña se quedaba
+      // ante una pantalla en blanco sin explicación.
+      document.querySelector(".tabs").style.display = "none";
+      document.body.insertAdjacentHTML("beforeend", `
+        <div class="pane active" id="tab-sin-acceso">
+          <div class="card"><div class="empty">
+            <div class="big">🔒</div>
+            No tenés acceso a ninguna sección todavía.<br>
+            Pedile a un administrador que te habilite las pestañas que necesitás.
+          </div></div>
+        </div>`);
+    }
   }
 
   document.getElementById("btn-logout").addEventListener("click", async () => {

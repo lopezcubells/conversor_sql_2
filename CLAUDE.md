@@ -71,7 +71,9 @@ multiplica las filas de consumo e infla todos los totales sin avisar.
 `app_users.pestanas` es un `TEXT[]` con las claves de `data-tab` que el usuario
 puede ver. **`NULL` significa todas** — es lo que tienen los usuarios que ya
 existían y los que se crean sin elegir nada. Los administradores ven todo
-siempre, y **Dashboard nunca se restringe** (es la pantalla de inicio).
+siempre; **Dashboard es exclusivo de ellos** y por eso no está en `PESTANAS`.
+Un usuario sin ninguna pestaña habilitada ve un cartel explicándolo, no una
+pantalla en blanco.
 
 El permiso vive en dos lugares y los dos hacen falta:
 

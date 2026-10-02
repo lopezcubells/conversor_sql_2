@@ -8,7 +8,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 
 | Pestaña | Para qué sirve |
 |---|---|
-| **Dashboard** | Pantalla de inicio y administración de usuarios. |
+| **Dashboard** | Pantalla de inicio y administración de usuarios. Solo para administradores. |
 | **Avance** | Avance de abastecimiento por rubro y por artículo, contra el PMP. |
 | **Rotación** | Rotación en días por rubro, con objetivo, y stock vs. consumo mensual. |
 | **Cobertura y faltantes** | Tablero diario de cobertura por insumo, con quiebres y programado. |
@@ -34,7 +34,7 @@ con bcrypt en la tabla `app_users`.
 
 Un usuario con pestañas restringidas no ve su nombre en la barra ni su contenido,
 y el servidor tampoco le entrega los datos de esas secciones. Los administradores
-ven todas las pestañas, y el Dashboard siempre queda visible.
+ven todas las pestañas; el **Dashboard es exclusivo de ellos**.
 
 El primer usuario se crea solo al arrancar, cuando la tabla está vacía, tomando
 `ADMIN_USER` y `ADMIN_PASS`. Si no están definidas, crea `admin` / `admin`.
