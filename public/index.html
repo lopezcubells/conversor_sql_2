@@ -396,11 +396,6 @@
     }
     .cat-item:hover { background: rgba(255,255,255,.04); }
     .cat-item.activo { background: rgba(79,142,247,.16); }
-    .cat-item-mini {
-      width: 26px; height: 26px; flex: 0 0 26px;
-      border-radius: 4px; object-fit: cover;
-      background: var(--bg); border: 1px solid var(--border);
-    }
     /* Una sola línea con puntos suspensivos: si el nombre envuelve, la fila
        crece y se pierde justamente la densidad que se busca. */
     .cat-item-nom {
@@ -422,7 +417,6 @@
       box-shadow: inset 0 -1px 0 var(--border);
       cursor: pointer; user-select: none;
     }
-    .cat-tabla thead th.cat-no-ord { cursor: default; }
     .cat-tabla tbody td {
       padding: 2px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -430,15 +424,7 @@
     .cat-tabla tbody tr { cursor: pointer; }
     .cat-tabla tbody tr:hover td { background: rgba(255,255,255,.04); }
     .cat-tabla tbody tr.activo td { background: rgba(79,142,247,.16); }
-    .cat-td-mini { width: 38px; padding: 1px 4px !important; }
     .cat-mono { font-family: var(--mono); font-size: 11px; }
-    /* Hueco del mismo tamaño que la miniatura: sin esto las filas sin imagen
-       miden distinto y la lista queda despareja. */
-    .cat-sin-img {
-      width: 26px; height: 26px; border-radius: 4px;
-      border: 1px dashed var(--border); display: grid; place-items: center;
-      font-size: 10px; color: var(--muted);
-    }
     /* Fondo a cuadros: deja ver la transparencia de los PNG.
        Centrado con flex + margin auto en el hijo, no con grid: una grilla de
        fila automática crece hasta el alto natural de la imagen, y entonces el
@@ -1775,10 +1761,6 @@
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
           <input type="checkbox" id="cat-generica" style="accent-color:#7c8cff">
           Etiquetas genéricas
-        </label>
-        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--muted)">
-          <input type="checkbox" id="cat-miniaturas" checked style="accent-color:#7c8cff">
-          Miniaturas
         </label>
       </div>
     </div>
@@ -5671,7 +5653,6 @@
 
   function catRenderLista() {
     const cont = document.getElementById("cat-lista");
-    const conMini = document.getElementById("cat-miniaturas").checked;
     // "con imagen" se cuenta sobre lo que se está viendo: si contara todo el
     // maestro, con un rubro filtrado el número no tendría que ver con la lista.
     if (!catVisibles.length) {
@@ -5687,15 +5668,9 @@
 
     // data-i es el índice en la lista completa, no en la página: así el visor y
     // las flechas siguen funcionando igual al cambiar de página.
-    // loading="lazy": las miniaturas se bajan recién cuando entran en pantalla
     const filas = pagina.map((r, pos) => {
       const i = catOffset + pos;
-      const key = catImagenDe(r);
-      const mini = !conMini ? "" : `<td class="cat-td-mini">${
-        key ? `<img class="cat-item-mini" loading="lazy" src="${catUrl(key)}" alt="">`
-            : `<div class="cat-sin-img">—</div>`}</td>`;
       return `<tr class="${catActual && catActual.cod_corto === r.cod_corto ? "activo" : ""}" data-i="${i}">
-        ${mini}
         <td class="cat-mono">${nsEsc(r.cod_corto)}</td>
         <td class="cat-mono">${nsEsc(r.cod_largo)}</td>
         <td title="${nsEsc(catDescripcion(r))}">${nsEsc(catDescripcion(r))}</td>
@@ -5707,11 +5682,9 @@
     cont.innerHTML = `
       <table class="cat-tabla">
         <colgroup>
-          ${conMini ? '<col style="width:38px">' : ""}
           <col style="width:76px"><col style="width:96px"><col><col style="width:20%"><col style="width:74px">
         </colgroup>
         <thead><tr>
-          ${conMini ? '<th class="cat-no-ord"></th>' : ""}
           ${catTh("Cód. corto", "cod_corto")}
           ${catTh("Cód. largo", "cod_largo")}
           ${catTh("Descripción", "descripcion")}
@@ -5880,7 +5853,6 @@
     document.getElementById("cat-en-stock").checked   = false;
     document.getElementById("cat-solo-img").checked   = false;
     document.getElementById("cat-generica").checked   = false;
-    document.getElementById("cat-miniaturas").checked = true;
 
     catSort   = { col: "cod_corto", dir: "asc" };
     catOffset = 0;
@@ -5905,7 +5877,6 @@
   document.getElementById("cat-en-stock").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-rubro").addEventListener("change", catFiltrarYOrdenar);
   document.getElementById("cat-familia").addEventListener("change", catFiltrarYOrdenar);
-  document.getElementById("cat-miniaturas").addEventListener("change", catRenderLista);
   document.getElementById("cat-btn-actualizar").addEventListener("click", catReiniciar);
 
   // Flechas para recorrer el catálogo sin soltar el teclado
