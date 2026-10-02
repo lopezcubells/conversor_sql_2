@@ -28,8 +28,13 @@ guardado en el navegador para la próxima visita.
 La app está protegida por usuario y contraseña, con sesiones de 8 horas.
 
 Los usuarios se administran desde el **Dashboard**, visible solo para usuarios con
-rol de administrador: permite crear usuarios, cambiar contraseñas y eliminar. Las
-contraseñas se guardan hasheadas con bcrypt en la tabla `app_users`.
+rol de administrador: permite crear usuarios, cambiar contraseñas, eliminar y
+**elegir a qué pestañas accede cada uno**. Las contraseñas se guardan hasheadas
+con bcrypt en la tabla `app_users`.
+
+Un usuario con pestañas restringidas no ve su nombre en la barra ni su contenido,
+y el servidor tampoco le entrega los datos de esas secciones. Los administradores
+ven todas las pestañas, y el Dashboard siempre queda visible.
 
 El primer usuario se crea solo al arrancar, cuando la tabla está vacía, tomando
 `ADMIN_USER` y `ADMIN_PASS`. Si no están definidas, crea `admin` / `admin`.

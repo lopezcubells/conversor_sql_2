@@ -23,6 +23,52 @@ if (process.env.DATABASE_URL) {
   console.log("DATABASE_URL no definida");
 }
 
+// ── Permisos por pestaña ──
+
+// Las claves son las mismas que usa data-tab en el frontend.
+const PESTANAS = [
+  { clave: "avance",            nombre: "Avance" },
+  { clave: "rotacion",          nombre: "Rotación" },
+  { clave: "cobertura",         nombre: "Cobertura y faltantes" },
+  { clave: "inmovilizados",     nombre: "Inmovilizados" },
+  { clave: "recepciones",       nombre: "Recepciones" },
+  { clave: "nivel-servicio",    nombre: "Nivel de servicio" },
+  { clave: "necesidad-final",   nombre: "Necesidad Final" },
+  { clave: "consumo-historico", nombre: "Consumo Histórico" },
+  { clave: "bom",               nombre: "BOM" },
+  { clave: "catalogo",          nombre: "Catálogo" },
+];
+const PESTANAS_VALIDAS = new Set(PESTANAS.map(p => p.clave));
+
+// Dashboard no se restringe: es la pantalla de inicio y, si se pudiera sacar,
+// un usuario sin ninguna otra pestaña se quedaría sin ningún lado donde caer.
+
+// Qué pestaña protege cada endpoint. Esconder la solapa en el navegador no
+// alcanza: sin esto, un usuario restringido todavía podría pedir los datos a
+// mano. El orden importa, se toma la primera coincidencia por prefijo.
+const RUTA_PESTANA = [
+  ["/api/pg/avance",            "avance"],
+  ["/api/pg/rotacion",          "rotacion"],
+  ["/api/pg/cobertura",         "cobertura"],
+  ["/api/pg/inmovilizados",     "inmovilizados"],
+  ["/api/pg/recepciones",       "recepciones"],
+  ["/api/pg/nivel-servicio",    "nivel-servicio"],
+  ["/api/pg/necesidad-final",   "necesidad-final"],
+  ["/api/pg/consumo-historico", "consumo-historico"],
+  ["/api/pg/maestro-insumos",   "catalogo"],
+  ["/api/pg/bom",               "bom"],
+  ["/api/r2",                   "catalogo"],
+];
+
+// pestanas en NULL significa "todas": es lo que queda al crear un usuario sin
+// elegir nada, y lo que tienen los usuarios que ya existían.
+function puedeVer(user, clave) {
+  if (!user) return false;
+  if (user.es_admin) return true;
+  if (!Array.isArray(user.pestanas)) return true;
+  return user.pestanas.includes(clave);
+}
+
 // ── Autenticación ──
 
 app.use(session({
@@ -49,6 +95,7 @@ async function initAuth() {
         creado_en TIMESTAMPTZ DEFAULT now()
       )`);
     await pgPool.query("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS es_admin BOOLEAN DEFAULT false");
+    await pgPool.query("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS pestanas TEXT[]");
     const { rows } = await pgPool.query("SELECT COUNT(*)::int AS c FROM app_users");
     if (rows[0].c === 0) {
       const usuario = process.env.ADMIN_USER || "admin";
@@ -73,7 +120,10 @@ app.post("/api/login", async (req, res) => {
     const user = rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash)))
       return res.status(401).json({ error: "Usuario o contraseña incorrectos." });
-    req.session.user = { id: user.id, usuario: user.usuario, es_admin: !!user.es_admin };
+    req.session.user = {
+      id: user.id, usuario: user.usuario, es_admin: !!user.es_admin,
+      pestanas: Array.isArray(user.pestanas) ? user.pestanas : null,
+    };
     res.json({ success: true, usuario: user.usuario });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -82,9 +132,30 @@ app.post("/api/logout", (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
-app.get("/api/me", (req, res) => {
-  if (req.session.user) res.json({ usuario: req.session.user.usuario, es_admin: !!req.session.user.es_admin });
-  else res.status(401).json({ error: "No autenticado." });
+app.get("/api/me", async (req, res) => {
+  const u = req.session.user;
+  if (!u) return res.status(401).json({ error: "No autenticado." });
+
+  // Se releen los permisos de la base: si no, un cambio del admin recién se
+  // aplicaría cuando el usuario vuelva a entrar. Es una consulta por carga de
+  // página, y de paso corta la sesión si el usuario fue eliminado.
+  if (pgPool) {
+    try {
+      const { rows } = await pgPool.query(
+        "SELECT es_admin, pestanas FROM app_users WHERE id = $1", [u.id]);
+      if (!rows.length) return req.session.destroy(() => res.status(401).json({ error: "No autenticado." }));
+      u.es_admin = !!rows[0].es_admin;
+      u.pestanas = Array.isArray(rows[0].pestanas) ? rows[0].pestanas : null;
+    } catch (e) { console.error("PG me error:", e.message); }
+  }
+
+  res.json({
+    usuario: u.usuario,
+    es_admin: !!u.es_admin,
+    // Se devuelve la lista ya resuelta: el navegador no tiene que saber que
+    // null significa "todas", ni repetir la regla.
+    pestanas: PESTANAS.filter(p => puedeVer(u, p.clave)).map(p => p.clave),
+  });
 });
 
 // ── Administración de usuarios (solo admin) ──
@@ -98,27 +169,43 @@ function requireAdmin(req, res, next) {
 app.get("/api/users", requireAdmin, async (req, res) => {
   try {
     const { rows } = await pgPool.query(
-      "SELECT id, usuario, es_admin, creado_en FROM app_users ORDER BY usuario"
+      "SELECT id, usuario, es_admin, pestanas, creado_en FROM app_users ORDER BY usuario"
     );
-    res.json({ users: rows });
+    res.json({ users: rows, pestanas: PESTANAS });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/api/users", requireAdmin, async (req, res) => {
   try {
-    const { usuario, password, es_admin } = req.body || {};
+    const { usuario, password, es_admin, pestanas } = req.body || {};
     if (!usuario || !usuario.trim()) return res.status(400).json({ error: "Ingresá un nombre de usuario." });
     if (!password || password.length < 4) return res.status(400).json({ error: "La contraseña debe tener al menos 4 caracteres." });
     const hash = await bcrypt.hash(password, 10);
     await pgPool.query(
-      "INSERT INTO app_users (usuario, password_hash, es_admin) VALUES ($1, $2, $3)",
-      [usuario.trim(), hash, !!es_admin]
+      "INSERT INTO app_users (usuario, password_hash, es_admin, pestanas) VALUES ($1, $2, $3, $4)",
+      [usuario.trim(), hash, !!es_admin, normalizarPestanas(pestanas)]
     );
     res.json({ success: true });
   } catch (e) {
     if (e.code === "23505") return res.status(409).json({ error: "Ese usuario ya existe." });
     res.status(500).json({ error: e.message });
   }
+});
+
+// null = todas las pestañas; un array se filtra contra las claves conocidas
+function normalizarPestanas(v) {
+  if (!Array.isArray(v)) return null;
+  const limpias = [...new Set(v.filter(x => PESTANAS_VALIDAS.has(x)))];
+  return limpias.length ? limpias : [];
+}
+
+app.put("/api/users/:id/pestanas", requireAdmin, async (req, res) => {
+  try {
+    const r = await pgPool.query("UPDATE app_users SET pestanas = $1 WHERE id = $2",
+      [normalizarPestanas(req.body && req.body.pestanas), req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: "Usuario no encontrado." });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put("/api/users/:id/password", requireAdmin, async (req, res) => {
@@ -148,6 +235,14 @@ app.use((req, res, next) => {
   if (req.session.user || AUTH_EXENTOS.has(req.path)) return next();
   if (req.path.startsWith("/api/")) return res.status(401).json({ error: "No autenticado." });
   return res.redirect("/login.html");
+});
+
+// Los datos de una pestaña restringida tampoco se entregan por la API
+app.use((req, res, next) => {
+  const regla = RUTA_PESTANA.find(([prefijo]) => req.path.startsWith(prefijo));
+  if (!regla) return next();
+  if (puedeVer(req.session.user, regla[1])) return next();
+  res.status(403).json({ error: "No tenés acceso a esta sección." });
 });
 
 app.use(express.static(path.join(__dirname, "public")));

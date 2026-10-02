@@ -66,6 +66,28 @@ Las dos tablas de referencia pueden traer más de una fila por `cod_corto`. Al
 unirlas hay que deduplicarlas antes (`DISTINCT ON`): un `LEFT JOIN` directo
 multiplica las filas de consumo e infla todos los totales sin avisar.
 
+## Permisos por pestaña
+
+`app_users.pestanas` es un `TEXT[]` con las claves de `data-tab` que el usuario
+puede ver. **`NULL` significa todas** — es lo que tienen los usuarios que ya
+existían y los que se crean sin elegir nada. Los administradores ven todo
+siempre, y **Dashboard nunca se restringe** (es la pantalla de inicio).
+
+El permiso vive en dos lugares y los dos hacen falta:
+
+- **Frontend**: `aplicarPermisos()` saca del DOM la solapa y el panel de cada
+  pestaña restringida, después de que `/api/me` responde. Como corre después
+  del script principal, los escuchas ya quedaron enganchados. **Ojo con los
+  escuchas globales** (`document`/`window`): esos sí se ejecutan aunque el panel
+  no exista, así que tienen que chequear el elemento antes de usarlo.
+- **Servidor**: el middleware que mapea `RUTA_PESTANA` responde 403 a los datos
+  de una pestaña restringida. Esconder la solapa es cosmético; esto es el
+  permiso real. **Al agregar una pestaña con endpoints propios, sumarla a
+  `PESTANAS` y a `RUTA_PESTANA`.**
+
+`/api/me` relee los permisos de la base en cada carga, así un cambio del admin
+se aplica cuando el usuario refresca, sin necesidad de volver a entrar.
+
 Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`.
 `ADMIN_USER`/`ADMIN_PASS` solo se usan la primera vez, cuando `app_users` está vacía.
 

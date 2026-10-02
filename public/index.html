@@ -886,6 +886,13 @@
       <button class="btn btn-primary" id="btn-user-create">＋ Crear usuario</button>
     </div>
 
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+        Pestañas del usuario nuevo <span style="text-transform:none;letter-spacing:0">— sin marcar nada, se crea con acceso a todas</span>
+      </div>
+      <div id="new-user-pestanas" style="display:flex;gap:14px;flex-wrap:wrap"></div>
+    </div>
+
     <div class="table-wrap" id="users-table-wrap"></div>
   </div>
 </div>
@@ -1796,6 +1803,36 @@
   </div>
 </div>
 
+<!-- Permisos por pestaña: se abre desde la administración de usuarios -->
+<div id="users-permisos" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:20px">
+  <div class="card" style="width:min(460px,94vw);max-height:84vh;overflow:auto;margin:0">
+    <div class="card-title" id="users-permisos-titulo">Pestañas</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="radio" name="users-permisos-modo" value="todas" style="accent-color:#4f8ef7">
+        Todas las pestañas
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="radio" name="users-permisos-modo" value="algunas" style="accent-color:#4f8ef7">
+        Solo las que marque
+      </label>
+    </div>
+
+    <div id="users-permisos-lista" style="display:flex;flex-direction:column;gap:6px;margin-top:12px;padding-left:24px"></div>
+
+    <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">
+      Dashboard siempre queda visible: es la pantalla de inicio. Los administradores
+      ven todas las pestañas, sin importar lo que se marque acá.
+    </div>
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-success" id="users-permisos-guardar">Guardar</button>
+      <button class="btn btn-outline" id="users-permisos-cerrar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1809,14 +1846,37 @@
   // ── Sesión ──
   fetch(`${API}/api/me`).then(async r => {
     if (!r.ok) { window.location.href = "/login.html"; return; }
-    const { usuario, es_admin } = await r.json();
+    const { usuario, es_admin, pestanas } = await r.json();
     document.getElementById("hdr-usuario").textContent = `👤 ${usuario}`;
     document.getElementById("btn-logout").style.display = "";
+    aplicarPermisos(pestanas);
     if (es_admin) {
       document.getElementById("users-card").style.display = "";
       usersLoad();
     }
   }).catch(() => {});
+
+  // Saca del DOM la solapa y el panel de cada pestaña restringida: así no queda
+  // ni el nombre ni el contenido. Corre después del script principal, con lo
+  // cual los escuchas ya quedaron enganchados y no falla ninguno.
+  // El servidor igual responde 403 a los datos de esas pestañas; esto es la
+  // mitad visible del permiso, no el permiso en sí.
+  function aplicarPermisos(permitidas) {
+    if (!Array.isArray(permitidas)) return;
+    const puede = new Set(permitidas);
+    document.querySelectorAll(".tab").forEach(tab => {
+      const clave = tab.dataset.tab;
+      if (clave === "dashboard" || puede.has(clave)) return;
+      const pane = document.getElementById("tab-" + clave);
+      const eraActiva = tab.classList.contains("active");
+      tab.remove();
+      if (pane) pane.remove();
+      if (eraActiva) {
+        const primera = document.querySelector(".tab");
+        if (primera) primera.click();
+      }
+    });
+  }
 
   document.getElementById("btn-logout").addEventListener("click", async () => {
     await fetch(`${API}/api/logout`, { method: "POST" });
@@ -1825,44 +1885,143 @@
 
   // ── Administración de usuarios ──
 
+  let usersPestanas = [];   // catálogo de pestañas que informa el servidor
+
+  // Resumen de permisos para la tabla: null = todas
+  function usersResumenPestanas(u) {
+    if (u.es_admin) return '<span style="color:var(--muted)">Todas (admin)</span>';
+    if (!Array.isArray(u.pestanas)) return "Todas";
+    if (!u.pestanas.length) return '<span style="color:#f7874f">Ninguna</span>';
+    const nombres = u.pestanas
+      .map(c => (usersPestanas.find(p => p.clave === c) || {}).nombre || c)
+      .join(", ");
+    return `<span title="${nsEsc(nombres)}">${u.pestanas.length} de ${usersPestanas.length}</span>`;
+  }
+
   async function usersLoad() {
     const wrap = document.getElementById("users-table-wrap");
     try {
       const res = await fetch(`${API}/api/users`);
       if (!res.ok) throw new Error((await res.json()).error);
-      const { users } = await res.json();
+      const { users, pestanas } = await res.json();
+      usersPestanas = pestanas || [];
+      usersRenderNuevoUsuario();
       wrap.innerHTML = `<table>
         <thead><tr>
           <th>Usuario</th>
           <th>Rol</th>
+          <th>Pestañas</th>
           <th>Creado</th>
           <th style="text-align:right">Acciones</th>
         </tr></thead>
         <tbody>${users.map(u => `<tr>
           <td>${u.usuario}</td>
           <td>${u.es_admin ? '<span style="color:var(--accent);font-weight:600">Admin</span>' : "Usuario"}</td>
+          <td>${usersResumenPestanas(u)}</td>
           <td style="white-space:nowrap">${u.creado_en ? new Date(u.creado_en).toLocaleDateString("es-AR") : ""}</td>
           <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" ${u.es_admin ? "disabled title='Los administradores ven todas las pestañas'" : ""} onclick="usersPermisos(${u.id}, '${u.usuario.replace(/'/g,"\\'")}')">🗂 Pestañas</button>
             <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="usersChangePass(${u.id}, '${u.usuario.replace(/'/g,"\\'")}')">🔑 Contraseña</button>
             <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;border-color:rgba(247,96,96,.4);color:#f76060" onclick="usersDelete(${u.id}, '${u.usuario.replace(/'/g,"\\'")}')">🗑 Eliminar</button>
           </td>
         </tr>`).join("")}</tbody>
       </table>`;
+      // Se guarda para que el modal sepa qué tiene marcado cada uno
+      usersDatos = users;
     } catch (e) {
       wrap.innerHTML = `<div class="empty"><div class="big">⚠</div>${e.message}</div>`;
     }
   }
+
+  let usersDatos = [];
+  let usersEditando = null;
+
+  // Las casillas del alta salen del catálogo que informa el servidor, así que
+  // una pestaña nueva aparece sola sin tocar esta pantalla.
+  function usersRenderNuevoUsuario() {
+    const cont = document.getElementById("new-user-pestanas");
+    if (cont.children.length) return;   // se arma una sola vez
+    cont.innerHTML = usersPestanas.map(p => `
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--muted)">
+        <input type="checkbox" value="${p.clave}" style="accent-color:#4f8ef7">
+        ${nsEsc(p.nombre)}
+      </label>`).join("");
+  }
+
+  // ── Modal de permisos ──
+
+  function usersModoSeleccionado() {
+    const r = document.querySelector('input[name="users-permisos-modo"]:checked');
+    return r ? r.value : "todas";
+  }
+
+  function usersRefrescarModo() {
+    const algunas = usersModoSeleccionado() === "algunas";
+    document.getElementById("users-permisos-lista").style.opacity = algunas ? "1" : ".45";
+    document.querySelectorAll("#users-permisos-lista input").forEach(c => c.disabled = !algunas);
+  }
+
+  function usersPermisos(id, usuario) {
+    const u = usersDatos.find(x => x.id === id);
+    if (!u) return;
+    usersEditando = id;
+    document.getElementById("users-permisos-titulo").textContent = `Pestañas de "${usuario}"`;
+    const actuales = Array.isArray(u.pestanas) ? new Set(u.pestanas) : null;
+    document.querySelector(`input[name="users-permisos-modo"][value="${actuales ? "algunas" : "todas"}"]`).checked = true;
+    document.getElementById("users-permisos-lista").innerHTML = usersPestanas.map(p => `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" value="${p.clave}" style="accent-color:#4f8ef7" ${actuales && actuales.has(p.clave) ? "checked" : ""}>
+        ${nsEsc(p.nombre)}
+      </label>`).join("");
+    usersRefrescarModo();
+    document.getElementById("users-permisos").style.display = "flex";
+  }
+
+  function usersCerrarPermisos() {
+    document.getElementById("users-permisos").style.display = "none";
+    usersEditando = null;
+  }
+
+  document.getElementById("users-permisos-cerrar").addEventListener("click", usersCerrarPermisos);
+  document.getElementById("users-permisos").addEventListener("click", e => {
+    if (e.target.id === "users-permisos") usersCerrarPermisos();   // clic afuera
+  });
+  document.querySelectorAll('input[name="users-permisos-modo"]').forEach(r => {
+    r.addEventListener("change", usersRefrescarModo);
+  });
+
+  document.getElementById("users-permisos-guardar").addEventListener("click", async () => {
+    if (usersEditando === null) return;
+    const todas = usersModoSeleccionado() === "todas";
+    const marcadas = [...document.querySelectorAll("#users-permisos-lista input:checked")].map(c => c.value);
+    if (!todas && !marcadas.length) return toast("Marcá al menos una pestaña.", "err");
+    try {
+      const res = await fetch(`${API}/api/users/${usersEditando}/pestanas`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pestanas: todas ? null : marcadas }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error desconocido");
+      toast("✅ Pestañas actualizadas", "ok");
+      usersCerrarPermisos();
+      usersLoad();
+    } catch (e) { toast("❌ " + e.message, "err"); }
+  });
 
   document.getElementById("btn-user-create").addEventListener("click", async () => {
     const usuario  = document.getElementById("new-user-name").value.trim();
     const password = document.getElementById("new-user-pass").value;
     const es_admin = document.getElementById("new-user-admin").checked;
     if (!usuario || !password) return toast("Completá usuario y contraseña.", "err");
+    const marcadas = [...document.querySelectorAll("#new-user-pestanas input:checked")].map(c => c.value);
+    // Sin ninguna marcada se crea con todas, que es el comportamiento de siempre
+    const pestanas = marcadas.length ? marcadas : null;
     try {
       const res = await fetch(`${API}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuario, password, es_admin }),
+        body: JSON.stringify({ usuario, password, es_admin, pestanas }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error desconocido");
@@ -1870,6 +2029,7 @@
       document.getElementById("new-user-name").value = "";
       document.getElementById("new-user-pass").value = "";
       document.getElementById("new-user-admin").checked = false;
+      document.querySelectorAll("#new-user-pestanas input").forEach(c => c.checked = false);
       usersLoad();
     } catch (e) { toast("❌ " + e.message, "err"); }
   });
@@ -5141,7 +5301,11 @@
   }
 
   function bomCerrarSugerencias() {
-    document.getElementById("bom-sugerencias").hidden = true;
+    // El escucha de clic es global: si la pestaña está restringida para este
+    // usuario, su panel no está en el DOM y acá no hay nada que cerrar.
+    const caja = document.getElementById("bom-sugerencias");
+    if (!caja) return;
+    caja.hidden = true;
     bomSugIdx = -1;
   }
 
@@ -5567,6 +5731,7 @@
 
   function catAjustarAlto() {
     const pane  = document.getElementById("tab-catalogo");
+    if (!pane) return;   // la pestaña puede estar restringida para este usuario
     const split = pane.querySelector(".cat-split");
     if (!pane.classList.contains("active")) return;
     split.style.height = "";                       // se mide sin el alto anterior
@@ -5882,7 +6047,7 @@
   // Flechas para recorrer el catálogo sin soltar el teclado
   document.addEventListener("keydown", e => {
     const pane = document.getElementById("tab-catalogo");
-    if (!pane.classList.contains("active")) return;
+    if (!pane || !pane.classList.contains("active")) return;
     if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
