@@ -5802,9 +5802,17 @@
     if (!pane) return;   // la pestaña puede estar restringida para este usuario
     const split = pane.querySelector(".cat-split");
     if (!pane.classList.contains("active")) return;
+    // Al borrar el alto para medir, el bloque se colapsa un instante y el
+    // listado deja de desbordar: ahí el navegador descarta su scroll. Hay que
+    // guardarlo y reponerlo, si no cada cambio de selección saltaba al tope.
+    const lista = document.getElementById("cat-lista");
+    const scrollPrevio = lista ? lista.scrollTop : 0;
+
     split.style.height = "";                       // se mide sin el alto anterior
     const arriba = split.getBoundingClientRect().top;
     split.style.height = Math.max(320, window.innerHeight - arriba - 28) + "px";
+
+    if (lista && lista.scrollTop !== scrollPrevio) lista.scrollTop = scrollPrevio;
   }
 
   window.addEventListener("resize", catAjustarAlto);
@@ -6000,17 +6008,42 @@
     document.getElementById("cat-lista").scrollTop = 0;
   }
 
-  function catAbrir(i) {
+  // Mover el resaltado NO redibuja la lista: innerHTML deja el scroll en 0 y
+  // después scrollIntoView empujaba la fila contra el borde de abajo. Cambiar
+  // la clase conserva la posición exacta de la barra.
+  function catMarcarSeleccion(i) {
+    const cont = document.getElementById("cat-lista");
+    cont.querySelectorAll(".activo").forEach(el => el.classList.remove("activo"));
+    const el = cont.querySelector(`[data-i="${i}"]`);
+    if (el) el.classList.add("activo");
+    return el;
+  }
+
+  // acercar=true solo cuando el movimiento vino del teclado: ahí sí hay que
+  // seguir a la fila si se fue de la vista. Con el mouse, la fila ya está
+  // visible —se acaba de clickear— y mover la barra sería desconcertante.
+  function catAbrir(i, acercar) {
     const r = catVisibles[i];
     if (!r) return;
     catActual = r;
+
     // Si el elegido cayó en otra página (p. ej. con las flechas), se salta a ella
     const paginaDe = Math.floor(i / CAT_PAGE_SIZE) * CAT_PAGE_SIZE;
-    if (paginaDe !== catOffset) catOffset = paginaDe;
-    catRenderLista();
+    const cambiaPagina = paginaDe !== catOffset;
+    if (cambiaPagina) {
+      catOffset = paginaDe;
+      catRenderLista();           // acá sí hay que redibujar
+    } else {
+      catMarcarSeleccion(i);
+    }
+
     catRenderVisor();
-    const item = document.querySelector(`#cat-lista [data-i="${i}"]`);
-    if (item) item.scrollIntoView({ block: "nearest" });
+
+    if (acercar || cambiaPagina) {
+      const el = document.querySelector(`#cat-lista [data-i="${i}"]`);
+      // "nearest" no hace nada si la fila ya se ve entera; solo corrige los bordes
+      if (el) el.scrollIntoView({ block: "nearest" });
+    }
   }
 
   // ── Visor ──
@@ -6175,7 +6208,7 @@
     e.preventDefault();
     const i = catActual ? catVisibles.findIndex(r => r.cod_corto === catActual.cod_corto) : -1;
     const sig = e.key === "ArrowDown" ? i + 1 : i - 1;
-    if (sig >= 0 && sig < catVisibles.length) catAbrir(sig);
+    if (sig >= 0 && sig < catVisibles.length) catAbrir(sig, true);
   });
 
   function initCatalogo() {
