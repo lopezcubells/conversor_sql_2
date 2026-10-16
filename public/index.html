@@ -2424,10 +2424,11 @@
           ["Valor secundario (cantidad)", "SUM(obsoleto)"],
         ]},
         { titulo: "Pareto de costo obsoleto", origen: "view_avance_inmovilizados, última fecha · GROUP BY cod_corto", campos: [
-          ["Eje horizontal (artículo)", "cod_corto + \" - \" + descripcion (descripción abreviada)"],
-          ["Barras", "SUM(costo_obsoleto)"],
+          ["Eje horizontal (artículo)", "cod_corto + \" - \" + descripcion (descripción abreviada), solo clase A"],
+          ["Barras", "SUM(costo_obsoleto): una por artículo A + una sola barra con la suma de B y C"],
           ["Línea de % acumulado", "acumulado de costo_obsoleto / total"],
           ["Color y tarjetas A / B / C", "clase según el acumulado: A hasta 80 %, B hasta 95 %, C el resto"],
+          ["Tooltip de la barra B y C", "cantidad de artículos y SUM(costo_obsoleto) de cada clase"],
           ["Tooltip · Costo unitario", "MAX(costo_unitario)"],
           ["Tooltip · Stock al (fecha)", "SUM(obsoleto) · la fecha es MAX(fecha)"],
           ["Tooltip · Miniatura", "R2: archivo con nombre = cod_corto"],
@@ -2437,6 +2438,7 @@
         "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
         "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
         "El Pareto solo incluye artículos con costo obsoleto mayor a cero, y respeta el filtro de rubros. La clase de cada artículo se calcula en el navegador con el acumulado de los anteriores: el que cruza el 80 % todavía es A.",
+        "En el Pareto solo los artículos A van desplegados; B y C se suman en una barra final. Las tarjetas de abajo siguen mostrando A, B y C por separado.",
         "El gráfico no muestra etiquetas de datos: los valores están en el tooltip.",
       ],
     },
@@ -3775,7 +3777,7 @@
 
   // Umbrales ABC: las líneas punteadas del gráfico
   const INM_ABC_CORTES = { A: 80, B: 95 };
-  const INM_ABC_COLOR  = { A: "#f7873a", B: "#facc15", C: "#6b7280" };
+  const INM_ABC_COLOR  = { A: "#f7873a", B: "#facc15", C: "#6b7280", BC: "#9ca3af" };
   // Ancho por artículo: se prioriza el grosor de la barra y el gráfico scrollea
   const INM_PARETO_PASO = 26;
 
@@ -3834,24 +3836,50 @@
     }
 
     const filas = inmClasificar(inmParetoData);
-    inmParetoFilas = filas;
     const total = filas.reduce((a, r) => a + r.costo, 0);
+
+    // Solo los A van desplegados, uno por barra. B y C se suman en una sola
+    // barra al final: son muchos artículos que pesan poco, y así el gráfico
+    // pone el foco en los que importan.
+    const barras = filas.filter(r => r.clase === "A");
+    const resto  = filas.filter(r => r.clase !== "A");
+    if (resto.length) {
+      const deClase = c => resto.filter(r => r.clase === c);
+      const suma    = arr => arr.reduce((a, r) => a + r.costo, 0);
+      barras.push({
+        grupo: true, clase: "BC",
+        n: resto.length,
+        nB: deClase("B").length, costoB: suma(deClase("B")),
+        nC: deClase("C").length, costoC: suma(deClase("C")),
+        costo: suma(resto),
+        acumulado: 100,
+      });
+    }
+    inmParetoFilas = barras;
+    // Con datos nuevos el mismo índice puede ser otro artículo: que el tooltip
+    // se rearme la próxima vez en vez de mostrar el contenido anterior.
+    const tip = document.getElementById("inm-pareto-tip");
+    if (tip) delete tip.dataset.i;
 
     // El ancho de un canvas tiene un tope (~32.000 px reales). Con muchos
     // artículos se angosta la barra para no pasarlo, en vez de que el gráfico
     // directamente no se dibuje.
     const dpr      = window.devicePixelRatio || 1;
     const topeCss  = Math.floor(30000 / dpr) - 140;
-    const paso     = Math.max(6, Math.min(INM_PARETO_PASO, topeCss / filas.length));
-    const ancho    = Math.max(scroll.clientWidth, Math.round(filas.length * paso + 140));
+    const paso     = Math.max(6, Math.min(INM_PARETO_PASO, topeCss / barras.length));
+    const ancho    = Math.max(scroll.clientWidth, Math.round(barras.length * paso + 140));
     lienzo.style.width = ancho + "px";
 
-    info.textContent = `${filas.length.toLocaleString("es-AR")} artículos · $ ${Math.round(total).toLocaleString("es-AR")}` +
+    const nA = barras.length - (resto.length ? 1 : 0);
+    info.textContent = `${nA.toLocaleString("es-AR")} ${nA === 1 ? "artículo" : "artículos"} A` +
+      (resto.length ? ` + ${resto.length.toLocaleString("es-AR")} agrupados en B y C` : "") +
+      ` · $ ${Math.round(total).toLocaleString("es-AR")}` +
       (paso < INM_PARETO_PASO ? " · barras angostadas para que entren" : "");
 
     const pesos = v => "$" + Math.round(v).toLocaleString("es-AR");
 
-    // Líneas punteadas del 80 % y el 95 %, con su rótulo pegado al eje izquierdo
+    // Línea punteada del 80 %, con su rótulo pegado al eje izquierdo. La del
+    // 95 % ya no va: separa B de C, que ahora comparten una sola barra.
     const lineasAbc = {
       id: "inmLineasAbc",
       afterDatasetsDraw(chart) {
@@ -3862,14 +3890,14 @@
         ctx.fillStyle = "rgba(255,255,255,.55)";
         ctx.font = "11px sans-serif";
         ctx.lineWidth = 1;
-        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
+        [INM_ABC_CORTES.A].forEach(p => {
           const y = y1.getPixelForValue(p);
           ctx.beginPath(); ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
         });
         // Los rótulos caen sobre las primeras barras, que son las más altas:
         // van con un fondo oscuro para que se lean encima de ellas.
         ctx.setLineDash([]);
-        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
+        [INM_ABC_CORTES.A].forEach(p => {
           const y = y1.getPixelForValue(p);
           const texto = `${p} %`;
           const w = ctx.measureText(texto).width + 8;
@@ -3911,12 +3939,12 @@
 
     inmParetoChart = new Chart(document.getElementById("inm-pareto").getContext("2d"), {
       data: {
-        labels: filas.map(inmEtiquetaCorta),
+        labels: barras.map(r => r.grupo ? `Clase B y C (${r.n.toLocaleString("es-AR")} art.)` : inmEtiquetaCorta(r)),
         datasets: [
           {
             type: "line",
             label: "% acumulado",
-            data: filas.map(r => r.acumulado),
+            data: barras.map(r => r.acumulado),
             yAxisID: "y1",
             borderColor: "#93c5fd",
             backgroundColor: "#93c5fd",
@@ -3929,10 +3957,13 @@
           {
             type: "bar",
             label: "Costo obsoleto",
-            data: filas.map(r => r.costo),
+            data: barras.map(r => r.costo),
             yAxisID: "y",
-            backgroundColor: filas.map(r => INM_ABC_COLOR[r.clase]),
+            backgroundColor: barras.map(r => INM_ABC_COLOR[r.clase]),
             barPercentage: 0.85,
+            // Con pocos A el gráfico se estira a lo ancho de la tarjeta: sin
+            // tope, las barras quedarían como bloques.
+            maxBarThickness: 60,
             categoryPercentage: 0.9,
             order: 1,
           },
@@ -4004,23 +4035,37 @@
       const pesos = (v, dec) => "$ " + (parseFloat(v) || 0).toLocaleString("es-AR", { maximumFractionDigits: dec });
       const fila  = (k, v) => `<div class="inm-tip-fila"><span>${k}</span><span>${v}</span></div>`;
       const fecha = inmFechaCorta(inmParetoFecha);
-      el.innerHTML = `
-        <img class="inm-tip-img" alt="" src="${API}/api/r2/imagen-codigo?cod=${encodeURIComponent(r.cod_corto)}">
-        <div style="min-width:0">
-          <div class="inm-tip-titulo">${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)} <span style="color:${INM_ABC_COLOR[r.clase]}">(clase ${r.clase})</span></div>
-          ${fila("% acumulado", r.acumulado.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " %")}
-          ${fila("Costo obsoleto", pesos(r.costo, 0))}
-          ${fila("Costo unitario", r.costo_unitario != null ? pesos(r.costo_unitario, 2) : "—")}
-          ${fila(fecha ? `Stock al ${fecha}` : "Stock", r.obsoleto != null ? Math.round(parseFloat(r.obsoleto) || 0).toLocaleString("es-AR") : "—")}
-        </div>`;
-      // Sin imagen (o sin permiso, o R2 sin configurar) queda un recuadro vacío
-      // del mismo tamaño, para que el tooltip no cambie de forma al pasar.
-      el.querySelector("img").addEventListener("error", e => {
-        const sin = document.createElement("div");
-        sin.className = "inm-tip-sin";
-        sin.textContent = "📷";
-        e.target.replaceWith(sin);
-      });
+      const art   = n => n.toLocaleString("es-AR") + " art.";
+      if (r.grupo) {
+        // La barra de B y C no es un artículo: no lleva imagen ni stock (sumar
+        // unidades de artículos distintos no dice nada), sí el desglose.
+        el.innerHTML = `
+          <div style="min-width:0">
+            <div class="inm-tip-titulo">Clase B y C agrupadas</div>
+            ${fila("Artículos", art(r.n))}
+            ${fila("Costo obsoleto", pesos(r.costo, 0))}
+            ${fila(`<span style="color:${INM_ABC_COLOR.B}">Clase B</span> · ${art(r.nB)}`, pesos(r.costoB, 0))}
+            ${fila(`<span style="color:${INM_ABC_COLOR.C}">Clase C</span> · ${art(r.nC)}`, pesos(r.costoC, 0))}
+          </div>`;
+      } else {
+        el.innerHTML = `
+          <img class="inm-tip-img" alt="" src="${API}/api/r2/imagen-codigo?cod=${encodeURIComponent(r.cod_corto)}">
+          <div style="min-width:0">
+            <div class="inm-tip-titulo">${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)} <span style="color:${INM_ABC_COLOR[r.clase]}">(clase ${r.clase})</span></div>
+            ${fila("% acumulado", r.acumulado.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " %")}
+            ${fila("Costo obsoleto", pesos(r.costo, 0))}
+            ${fila("Costo unitario", r.costo_unitario != null ? pesos(r.costo_unitario, 2) : "—")}
+            ${fila(fecha ? `Stock al ${fecha}` : "Stock", r.obsoleto != null ? Math.round(parseFloat(r.obsoleto) || 0).toLocaleString("es-AR") : "—")}
+          </div>`;
+        // Sin imagen (o sin permiso, o R2 sin configurar) queda un recuadro vacío
+        // del mismo tamaño, para que el tooltip no cambie de forma al pasar.
+        el.querySelector("img").addEventListener("error", e => {
+          const sin = document.createElement("div");
+          sin.className = "inm-tip-sin";
+          sin.textContent = "📷";
+          e.target.replaceWith(sin);
+        });
+      }
     }
 
     // Junto al punto, del lado que tenga lugar, sin salirse de la ventana
