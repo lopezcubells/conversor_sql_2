@@ -534,6 +534,10 @@
       display: flex; align-items: flex-start; justify-content: center;
       padding: 70px 20px 20px;
     }
+    /* El atributo hidden del navegador es un display:none de baja prioridad:
+       el display:flex de arriba le gana y el panel queda visible siempre, y la
+       X no lo cierra. Esta regla es más específica y lo vuelve a respetar. */
+    .map-fondo[hidden] { display: none; }
     .map-panel {
       width: min(820px, 100%); max-height: calc(100vh - 100px);
       display: flex; flex-direction: column;

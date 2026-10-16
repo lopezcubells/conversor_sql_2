@@ -168,6 +168,12 @@ estático y no sirven para probar.
   también sea `auto`), el contenedor necesita `max-height` propio o el encabezado
   no se fija a nada. Además hay que usar `border-collapse: separate`, porque con
   `collapse` los bordes no acompañan a las celdas fijas.
+- **Atributo `hidden` + `display` en CSS**: `hidden` es solo un `display:none`
+  de baja prioridad del navegador. Si la clase del elemento fija `display`
+  (flex, grid, block), le gana y el elemento queda **siempre visible**, y
+  `el.hidden = true` no lo oculta. Agregar `.clase[hidden] { display: none; }`.
+  Al probar, medir `getComputedStyle(el).display`, no `el.hidden`: el atributo
+  cambia aunque el elemento siga en pantalla.
 - **Commits desde PowerShell**: los mensajes con `:` rompen los here-strings.
   Usar `git commit -F archivo`.
 
