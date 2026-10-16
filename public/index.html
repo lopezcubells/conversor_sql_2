@@ -2440,8 +2440,8 @@
         ]},
         { titulo: "Tarjetas de resumen (al lado del gráfico)", origen: "view_avance_inmovilizados, última fecha (MAX(fecha) global) · filtro de rubros", campos: [
           ["Costo Stock Obsoleto ($)", "SUM(costo_obsoleto)"],
-          ["Costo Stock Total ($) al (fecha)", "SUM(stock × costo_unitario) · la fecha es MAX(fecha)"],
-          ["% Obsoleto", "100 × SUM(costo_obsoleto) / SUM(stock × costo_unitario), calculado en la base"],
+          ["Costo Stock Total ($) al (fecha)", "SUM(stock × costo_unitario_actual) · la fecha es MAX(fecha)"],
+          ["% Obsoleto", "100 × SUM(costo_obsoleto) / SUM(stock × costo_unitario_actual), calculado en la base"],
         ]},
         { titulo: "Top 10 obsoletos · por cantidad", origen: "view_avance_inmovilizados, última fecha · ORDER BY obsoleto", campos: [
           ["Artículo", "cod_corto + descripcion"],
