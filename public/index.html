@@ -522,6 +522,16 @@
     /* ── Inmovilizados: Pareto ── */
     /* El gráfico scrollea por dentro; los dos ejes verticales son copias fijas
        superpuestas a los bordes, así siguen a la vista mientras se desplaza. */
+    /* Renglón 1: gráfico (70 %) y tarjetas de resumen (30 %) */
+    .inm-fila1 { display: flex; gap: 16px; align-items: stretch; margin-bottom: 20px; }
+    .inm-fila1 > .card { flex: 7 1 0; min-width: 0; margin-bottom: 0; }
+    .inm-kpis  { flex: 3 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+    .inm-kpis .kpi-card { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .inm-kpis .kpi-value { font-size: 26px; overflow-wrap: anywhere; }
+    @media (max-width: 1000px) {
+      .inm-fila1 { flex-direction: column; }
+      .inm-fila1 > .card, .inm-kpis { flex: none; }
+    }
     .inm-pareto-marco  { position: relative; }
     .inm-pareto-scroll { overflow-x: auto; overflow-y: hidden; }
     .inm-pareto-eje    { position: absolute; top: 0; pointer-events: none; }
@@ -1315,10 +1325,29 @@
   <!-- 2. Gráfico evolución + Top 10 -->
   <div class="section-heading"><h2>Evolución Costo Inmovilizados</h2></div>
   <div id="inm-chart-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
-  <!-- Renglón 1: el gráfico a lo ancho -->
-  <div class="card">
-    <div style="position:relative;height:420px">
-      <canvas id="inm-chart"></canvas>
+  <!-- Renglón 1: el gráfico (70 %) y las tarjetas de resumen (30 %) -->
+  <div class="inm-fila1">
+    <div class="card">
+      <div style="position:relative;height:420px">
+        <canvas id="inm-chart"></canvas>
+      </div>
+    </div>
+    <div class="inm-kpis" id="inm-kpis">
+      <div class="kpi-card" style="--kpi-accent:#f87171">
+        <div class="kpi-label">Costo Stock Obsoleto ($)</div>
+        <div class="kpi-value" id="inm-kpi-obsoleto">—</div>
+        <div class="kpi-sub" id="inm-kpi-obsoleto-sub"></div>
+      </div>
+      <div class="kpi-card" style="--kpi-accent:#4f8ef7">
+        <div class="kpi-label" id="inm-kpi-stock-titulo">Costo Stock Total ($)</div>
+        <div class="kpi-value" id="inm-kpi-stock">—</div>
+        <div class="kpi-sub" id="inm-kpi-stock-sub"></div>
+      </div>
+      <div class="kpi-card" style="--kpi-accent:#facc15">
+        <div class="kpi-label">% Obsoleto</div>
+        <div class="kpi-value" id="inm-kpi-pct">—</div>
+        <div class="kpi-sub">Costo obsoleto / costo stock total</div>
+      </div>
     </div>
   </div>
 
@@ -2396,7 +2425,7 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, los tres Top 10 y el Pareto de costo obsoleto"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, tarjetas de resumen, los tres Top 10 y el Pareto de costo obsoleto"],
         ["bucket", "Cloudflare R2 · imagenes-insumos", "Miniatura del tooltip del Pareto: nombre de archivo sin extensión = cod_corto"],
       ],
       parametros: [
@@ -2408,6 +2437,11 @@
           ["Obsoleto", "SUM(costo_obsoleto)"],
           ["Activo sin rotación", "SUM(costo_activo_sin_rotacion)"],
           ["Activo", "SUM(costo_activo)"],
+        ]},
+        { titulo: "Tarjetas de resumen (al lado del gráfico)", origen: "view_avance_inmovilizados, última fecha (MAX(fecha) global) · filtro de rubros", campos: [
+          ["Costo Stock Obsoleto ($)", "SUM(costo_obsoleto)"],
+          ["Costo Stock Total ($) al (fecha)", "SUM(stock) · la fecha es MAX(fecha)"],
+          ["% Obsoleto", "100 × SUM(costo_obsoleto) / SUM(stock), calculado en la base"],
         ]},
         { titulo: "Top 10 obsoletos · por cantidad", origen: "view_avance_inmovilizados, última fecha · ORDER BY obsoleto", campos: [
           ["Artículo", "cod_corto + descripcion"],
@@ -3773,7 +3807,43 @@
       pedirTop("costo",    "inm-top10-costo-wrap"),
       pedirRubros(),
       inmCargarPareto(params),
+      inmCargarResumen(params),
     ]);
+  }
+
+  // ── Tarjetas de resumen (renglón 1) ──
+
+  async function inmCargarResumen(params) {
+    const ids = ["inm-kpi-obsoleto", "inm-kpi-stock", "inm-kpi-pct"];
+    ids.forEach(id => { document.getElementById(id).textContent = "…"; });
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/resumen?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      inmRenderResumen(await res.json());
+    } catch (e) {
+      ids.forEach(id => { document.getElementById(id).textContent = "—"; });
+      document.getElementById("inm-kpi-obsoleto-sub").textContent = "⚠ " + e.message;
+    }
+  }
+
+  function inmRenderResumen(r) {
+    const pesos = v => "$ " + Math.round(parseFloat(v) || 0).toLocaleString("es-AR");
+    const fecha = inmFechaCorta(r.fecha);
+    const rubros = inmGetRubros().length;
+    const total  = document.querySelectorAll("#inm-rubro-checks input").length;
+    // Sin ninguno tildado el servidor no filtra, igual que en el resto de la pestaña
+    const alcance = !total || !rubros || rubros === total ? "todos los rubros"
+                  : `${rubros} de ${total} rubros`;
+    document.getElementById("inm-kpi-obsoleto").textContent = pesos(r.costo_obsoleto);
+    document.getElementById("inm-kpi-obsoleto-sub").textContent =
+      (fecha ? `Al ${fecha} · ` : "") + alcance;
+    document.getElementById("inm-kpi-stock-titulo").textContent =
+      fecha ? `Costo Stock Total ($) al ${fecha}` : "Costo Stock Total ($)";
+    document.getElementById("inm-kpi-stock").textContent = pesos(r.costo_stock);
+    document.getElementById("inm-kpi-stock-sub").textContent = alcance;
+    // Sin stock no hay porcentaje posible: la base devuelve null
+    document.getElementById("inm-kpi-pct").textContent = r.pct_obsoleto == null ? "—"
+      : (parseFloat(r.pct_obsoleto) || 0).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
   }
 
   // ── Pareto de costo obsoleto ──

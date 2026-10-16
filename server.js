@@ -613,6 +613,34 @@ app.get("/api/pg/inmovilizados/evolucion", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Tarjetas del renglón 1: costo obsoleto, costo del stock total y su relación.
+// Todo sobre la misma foto que el resto de la pestaña: la última fecha de la
+// vista (global, no la de cada rubro) y el filtro de rubros. El porcentaje sale
+// de la base para que la app no calcule nada de negocio.
+app.get("/api/pg/inmovilizados/resumen", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND v.rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    // LEFT JOIN desde la fecha: si el filtro no deja filas, igual vuelve la
+    // fecha, con los totales en cero.
+    const result = await pgPool.query(
+      `WITH ultima AS (SELECT MAX(fecha) AS fecha FROM view_avance_inmovilizados)
+       SELECT u.fecha,
+              COALESCE(SUM(v.costo_obsoleto), 0) AS costo_obsoleto,
+              COALESCE(SUM(v.stock), 0)          AS costo_stock,
+              100.0 * SUM(v.costo_obsoleto) / NULLIF(SUM(v.stock), 0) AS pct_obsoleto
+       FROM ultima u
+       LEFT JOIN view_avance_inmovilizados v ON v.fecha = u.fecha ${and}
+       GROUP BY u.fecha`,
+      params
+    );
+    res.json(result.rows[0] || { fecha: null, costo_obsoleto: 0, costo_stock: 0, pct_obsoleto: null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Ranking de obsoletos, cortado en 10 desde la base. Hay dos: por cantidad y por
 // costo. La columna sale de esta tabla y nunca del texto que mandó el navegador,
 // porque entra al SQL como identificador.
