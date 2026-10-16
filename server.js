@@ -659,6 +659,33 @@ app.get("/api/pg/inmovilizados/top-rubros", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Pareto de costo obsoleto: todos los artículos con costo de la última fecha,
+// de mayor a menor. Se agrupa por cod_corto por si la vista trajera un artículo
+// repetido: un duplicado partiría su barra en dos y falsearía el acumulado.
+// Los de costo cero no aportan nada al Pareto y solo ensancharían el gráfico.
+app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const result = await pgPool.query(
+      `SELECT cod_corto,
+              MAX(descripcion)    AS descripcion,
+              SUM(costo_obsoleto) AS costo_obsoleto
+       FROM view_avance_inmovilizados
+       WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+       ${and}
+       GROUP BY cod_corto
+       HAVING SUM(costo_obsoleto) > 0
+       ORDER BY SUM(costo_obsoleto) DESC`,
+      params
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Consumo histórico ──
 
 // Comparación tolerante para los filtros de valor exacto. El valor elegido sale

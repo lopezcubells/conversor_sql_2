@@ -519,6 +519,22 @@
     /* Fila cuya cantidad no es igual en todas las plantas */
     .bom-difiere td { background: rgba(247,135,79,.10); }
 
+    /* ── Inmovilizados: Pareto ── */
+    /* El gráfico scrollea por dentro; los dos ejes verticales son copias fijas
+       superpuestas a los bordes, así siguen a la vista mientras se desplaza. */
+    .inm-pareto-marco  { position: relative; }
+    .inm-pareto-scroll { overflow-x: auto; overflow-y: hidden; }
+    .inm-pareto-eje    { position: absolute; top: 0; pointer-events: none; }
+    .inm-abc-fila { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .inm-abc {
+      flex: 1 1 220px; border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; border-left-width: 4px;
+    }
+    .inm-abc-titulo { font-size: 13px; font-weight: 700; }
+    .inm-abc-num    { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
+    .inm-abc-num small { font-size: 12px; font-weight: 600; color: var(--muted); font-family: var(--sans); }
+    .inm-abc-pie    { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
     /* ── Mapeo y Dependencias ── */
     .map-btn {
       width: 28px; height: 28px; padding: 0; flex: 0 0 28px;
@@ -1316,6 +1332,24 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- Renglón 3: Pareto de costo obsoleto -->
+  <div class="card">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="card-title" style="margin-bottom:0">Pareto de costo obsoleto</div>
+      <span id="inm-pareto-info" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="inm-pareto-marco" id="inm-pareto-marco">
+      <div class="inm-pareto-scroll" id="inm-pareto-scroll">
+        <div id="inm-pareto-lienzo" style="position:relative;height:430px">
+          <canvas id="inm-pareto"></canvas>
+        </div>
+      </div>
+      <canvas class="inm-pareto-eje" id="inm-pareto-eje-izq" style="left:0"></canvas>
+      <canvas class="inm-pareto-eje" id="inm-pareto-eje-der" style="right:0"></canvas>
+    </div>
+    <div class="inm-abc-fila" id="inm-abc-fila"></div>
   </div>
 
 </div>
@@ -2339,7 +2373,7 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico de evolución y los tres Top 10 de obsoletos"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, los tres Top 10 y el Pareto de costo obsoleto"],
       ],
       parametros: [
         ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
@@ -2366,10 +2400,17 @@
           ["Valor principal (costo)", "SUM(costo_obsoleto)"],
           ["Valor secundario (cantidad)", "SUM(obsoleto)"],
         ]},
+        { titulo: "Pareto de costo obsoleto", origen: "view_avance_inmovilizados, última fecha · GROUP BY cod_corto", campos: [
+          ["Eje horizontal (artículo)", "cod_corto + \" - \" + descripcion (descripción abreviada)"],
+          ["Barras", "SUM(costo_obsoleto)"],
+          ["Línea de % acumulado", "acumulado de costo_obsoleto / total"],
+          ["Color y tarjetas A / B / C", "clase según el acumulado: A hasta 80 %, B hasta 95 %, C el resto"],
+        ]},
       ],
       notas: [
         "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
         "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
+        "El Pareto solo incluye artículos con costo obsoleto mayor a cero, y respeta el filtro de rubros. La clase de cada artículo se calcula en el navegador con el acumulado de los anteriores: el que cruza el 80 % todavía es A.",
         "El gráfico no muestra etiquetas de datos: los valores están en el tooltip.",
       ],
     },
@@ -3601,6 +3642,8 @@
   let inmTopCantidad  = [];
   let inmTopCosto     = [];
   let inmTopRubros    = [];
+  let inmParetoData   = [];
+  let inmParetoChart  = null;
 
   document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
     document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
@@ -3696,8 +3739,247 @@
       pedirTop("cantidad", "inm-top10-wrap"),
       pedirTop("costo",    "inm-top10-costo-wrap"),
       pedirRubros(),
+      inmCargarPareto(params),
     ]);
   }
+
+  // ── Pareto de costo obsoleto ──
+
+  // Umbrales ABC: las líneas punteadas del gráfico
+  const INM_ABC_CORTES = { A: 80, B: 95 };
+  const INM_ABC_COLOR  = { A: "#f7873a", B: "#facc15", C: "#6b7280" };
+  // Ancho por artículo: se prioriza el grosor de la barra y el gráfico scrollea
+  const INM_PARETO_PASO = 26;
+
+  async function inmCargarPareto(params) {
+    const info = document.getElementById("inm-pareto-info");
+    info.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/pareto?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
+      inmParetoData = rows;
+      inmRenderPareto();
+    } catch (e) {
+      info.textContent = "⚠ " + e.message;
+    }
+  }
+
+  // Clase de cada artículo según el acumulado de los que tiene ANTES: así el
+  // que cruza el 80 % todavía cuenta como A, y el primero siempre es A aunque
+  // por sí solo ya pase el umbral.
+  function inmClasificar(rows) {
+    const costos = rows.map(r => Math.max(0, parseFloat(r.costo_obsoleto) || 0));
+    const total  = costos.reduce((a, b) => a + b, 0) || 1;
+    let acum = 0;
+    return rows.map((r, i) => {
+      const previo = (acum / total) * 100;
+      acum += costos[i];
+      const clase = previo < INM_ABC_CORTES.A ? "A" : previo < INM_ABC_CORTES.B ? "B" : "C";
+      return { ...r, costo: costos[i], acumulado: (acum / total) * 100, clase };
+    });
+  }
+
+  // "1234 - ETIQUETA FRENTE MALBEC…": el código entero y la descripción corta
+  function inmEtiquetaCorta(r) {
+    const desc = String(r.descripcion ?? "").trim();
+    const corta = desc.length > 16 ? desc.slice(0, 16) + "…" : desc;
+    return corta ? `${r.cod_corto} - ${corta}` : String(r.cod_corto ?? "");
+  }
+
+  function inmRenderPareto() {
+    const info   = document.getElementById("inm-pareto-info");
+    const lienzo = document.getElementById("inm-pareto-lienzo");
+    const scroll = document.getElementById("inm-pareto-scroll");
+    if (!lienzo) return;
+
+    if (inmParetoChart) { inmParetoChart.destroy(); inmParetoChart = null; }
+    if (!inmParetoData.length) {
+      info.textContent = "Sin artículos con costo obsoleto";
+      lienzo.style.width = "";
+      document.getElementById("inm-abc-fila").innerHTML = "";
+      ["inm-pareto-eje-izq", "inm-pareto-eje-der"].forEach(id => {
+        const c = document.getElementById(id); c.width = 0; c.style.width = "0";
+      });
+      return;
+    }
+
+    const filas = inmClasificar(inmParetoData);
+    const total = filas.reduce((a, r) => a + r.costo, 0);
+
+    // El ancho de un canvas tiene un tope (~32.000 px reales). Con muchos
+    // artículos se angosta la barra para no pasarlo, en vez de que el gráfico
+    // directamente no se dibuje.
+    const dpr      = window.devicePixelRatio || 1;
+    const topeCss  = Math.floor(30000 / dpr) - 140;
+    const paso     = Math.max(6, Math.min(INM_PARETO_PASO, topeCss / filas.length));
+    const ancho    = Math.max(scroll.clientWidth, Math.round(filas.length * paso + 140));
+    lienzo.style.width = ancho + "px";
+
+    info.textContent = `${filas.length.toLocaleString("es-AR")} artículos · $ ${Math.round(total).toLocaleString("es-AR")}` +
+      (paso < INM_PARETO_PASO ? " · barras angostadas para que entren" : "");
+
+    const pesos = v => "$" + Math.round(v).toLocaleString("es-AR");
+
+    // Líneas punteadas del 80 % y el 95 %, con su rótulo pegado al eje izquierdo
+    const lineasAbc = {
+      id: "inmLineasAbc",
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea: area, scales: { y1 } } = chart;
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(255,255,255,.35)";
+        ctx.fillStyle = "rgba(255,255,255,.55)";
+        ctx.font = "11px sans-serif";
+        ctx.lineWidth = 1;
+        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
+          const y = y1.getPixelForValue(p);
+          ctx.beginPath(); ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
+        });
+        // Los rótulos caen sobre las primeras barras, que son las más altas:
+        // van con un fondo oscuro para que se lean encima de ellas.
+        ctx.setLineDash([]);
+        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
+          const y = y1.getPixelForValue(p);
+          const texto = `${p} %`;
+          const w = ctx.measureText(texto).width + 8;
+          ctx.fillStyle = "rgba(15,17,23,.82)";
+          ctx.fillRect(area.left + 4, y - 15, w, 14);
+          ctx.fillStyle = "rgba(255,255,255,.75)";
+          ctx.fillText(texto, area.left + 8, y - 4);
+        });
+        ctx.restore();
+      },
+    };
+
+    // Ejes fijos: después de cada dibujo se copia la franja de cada eje a un
+    // canvas superpuesto en el borde, con el fondo de la tarjeta para tapar las
+    // barras que pasan por debajo al desplazar.
+    const ejesFijos = {
+      id: "inmEjesFijos",
+      afterRender(chart) {
+        const fuente = chart.canvas;
+        const r      = chart.currentDevicePixelRatio || 1;
+        const area   = chart.chartArea;
+        const fondo  = getComputedStyle(fuente.closest(".card")).backgroundColor;
+        const copiar = (destinoId, desdeCss, anchoCss) => {
+          const dest = document.getElementById(destinoId);
+          dest.width  = Math.round(anchoCss * r);
+          dest.height = fuente.height;
+          dest.style.width  = anchoCss + "px";
+          dest.style.height = chart.height + "px";
+          const c = dest.getContext("2d");
+          c.fillStyle = fondo;
+          c.fillRect(0, 0, dest.width, dest.height);
+          c.drawImage(fuente, Math.round(desdeCss * r), 0, dest.width, dest.height,
+                              0, 0, dest.width, dest.height);
+        };
+        copiar("inm-pareto-eje-izq", 0, area.left);
+        copiar("inm-pareto-eje-der", area.right, chart.width - area.right);
+      },
+    };
+
+    inmParetoChart = new Chart(document.getElementById("inm-pareto").getContext("2d"), {
+      data: {
+        labels: filas.map(inmEtiquetaCorta),
+        datasets: [
+          {
+            type: "line",
+            label: "% acumulado",
+            data: filas.map(r => r.acumulado),
+            yAxisID: "y1",
+            borderColor: "#93c5fd",
+            backgroundColor: "#93c5fd",
+            borderWidth: 2,
+            pointRadius: 2.5,
+            pointHoverRadius: 4,
+            tension: 0.25,
+            order: 0,
+          },
+          {
+            type: "bar",
+            label: "Costo obsoleto",
+            data: filas.map(r => r.costo),
+            yAxisID: "y",
+            backgroundColor: filas.map(r => INM_ABC_COLOR[r.clase]),
+            barPercentage: 0.85,
+            categoryPercentage: 0.9,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        layout: { padding: { top: 6 } },
+        plugins: {
+          legend: { position: "top", labels: { color: "#e2e4ef", boxWidth: 14, padding: 16 } },
+          datalabels: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => {
+                const r = filas[items[0].dataIndex];
+                return `${r.cod_corto} - ${r.descripcion ?? ""}  (clase ${r.clase})`;
+              },
+              label: ctx => ctx.dataset.yAxisID === "y1"
+                ? ` % acumulado: ${ctx.parsed.y.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`
+                : ` Costo obsoleto: $ ${Math.round(ctx.parsed.y).toLocaleString("es-AR")}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#7b7f99", font: { size: 10 }, maxRotation: 70, minRotation: 70, autoSkip: false },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: "#7b7f99", callback: pesos },
+            grid: { color: "#2a2d3e" },
+          },
+          y1: {
+            position: "right",
+            min: 0, max: 100,
+            ticks: { color: "#7b7f99", stepSize: 10, callback: v => v + " %" },
+            grid: { display: false },
+          },
+        },
+      },
+      plugins: [lineasAbc, ejesFijos],
+    });
+
+    inmRenderAbc(filas, total);
+  }
+
+  function inmRenderAbc(filas, total) {
+    const n = filas.length;
+    const html = ["A", "B", "C"].map(clase => {
+      const de = filas.filter(r => r.clase === clase);
+      const costo = de.reduce((a, r) => a + r.costo, 0);
+      const pctArt = n ? (100 * de.length / n) : 0;
+      const pctCosto = total ? (100 * costo / total) : 0;
+      const f1 = v => v.toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      return `
+        <div class="inm-abc" style="border-left-color:${INM_ABC_COLOR[clase]}">
+          <div class="inm-abc-titulo">Clase ${clase}</div>
+          <div class="inm-abc-num">${de.length.toLocaleString("es-AR")} art. <small>(${f1(pctArt)} % de los artículos)</small></div>
+          <div class="inm-abc-pie">Costo obsoleto: $ ${Math.round(costo).toLocaleString("es-AR")} (${f1(pctCosto)} %)</div>
+        </div>`;
+    }).join("");
+    document.getElementById("inm-abc-fila").innerHTML = html;
+  }
+
+  // Al cambiar el tamaño de la ventana se recalcula el ancho. Es un escucha
+  // global: si la pestaña está restringida para este usuario, no hay nada que
+  // redibujar (ver CLAUDE.md, escuchas globales).
+  let inmParetoResize = null;
+  window.addEventListener("resize", () => {
+    if (!document.getElementById("inm-pareto-lienzo") || !inmParetoData.length) return;
+    clearTimeout(inmParetoResize);
+    inmParetoResize = setTimeout(inmRenderPareto, 200);
+  });
 
   function inmFmtFecha(str) {
     if (!str) return "";
