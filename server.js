@@ -681,6 +681,7 @@ app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
       pgPool.query(
         `SELECT cod_corto,
                 MAX(descripcion)    AS descripcion,
+                MAX(rubro)          AS rubro,
                 SUM(costo_obsoleto) AS costo_obsoleto,
                 MAX(costo_unitario) AS costo_unitario,
                 SUM(obsoleto)       AS obsoleto

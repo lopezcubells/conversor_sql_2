@@ -552,6 +552,7 @@
     }
     .inm-tip-img { object-fit: contain; display: block; }
     .inm-tip-sin { display: grid; place-items: center; font-size: 18px; color: var(--muted); border-style: dashed; }
+    .inm-tip-rubro  { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.3; margin-bottom: 2px; }
     .inm-tip-titulo { font-weight: 700; margin-bottom: 3px; }
     .inm-tip-fila { display: flex; justify-content: space-between; gap: 16px; }
     .inm-tip-fila span:first-child { color: #9aa0b8; }
@@ -2424,11 +2425,13 @@
           ["Valor secundario (cantidad)", "SUM(obsoleto)"],
         ]},
         { titulo: "Pareto de costo obsoleto", origen: "view_avance_inmovilizados, última fecha · GROUP BY cod_corto", campos: [
-          ["Eje horizontal (artículo)", "cod_corto + \" - \" + descripcion (descripción abreviada), solo clase A"],
-          ["Barras", "SUM(costo_obsoleto): una por artículo A + una sola barra con la suma de B y C"],
+          ["Eje horizontal (artículo)", "cod_corto, solo clase A"],
+          ["Barras", "SUM(costo_obsoleto): una por artículo A + una barra con la suma de los B + otra con la de los C"],
           ["Línea de % acumulado", "acumulado de costo_obsoleto / total"],
           ["Color y tarjetas A / B / C", "clase según el acumulado: A hasta 80 %, B hasta 95 %, C el resto"],
-          ["Tooltip de la barra B y C", "cantidad de artículos y SUM(costo_obsoleto) de cada clase"],
+          ["Tooltip de las barras B y C", "cantidad de artículos, SUM(costo_obsoleto) de la clase y % acumulado"],
+          ["Tooltip · Rubro", "MAX(rubro)"],
+          ["Tooltip · Artículo", "cod_corto + \" - \" + descripcion (MAX(descripcion))"],
           ["Tooltip · Costo unitario", "MAX(costo_unitario)"],
           ["Tooltip · Stock al (fecha)", "SUM(obsoleto) · la fecha es MAX(fecha)"],
           ["Tooltip · Miniatura", "R2: archivo con nombre = cod_corto"],
@@ -2438,7 +2441,7 @@
         "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
         "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
         "El Pareto solo incluye artículos con costo obsoleto mayor a cero, y respeta el filtro de rubros. La clase de cada artículo se calcula en el navegador con el acumulado de los anteriores: el que cruza el 80 % todavía es A.",
-        "En el Pareto solo los artículos A van desplegados; B y C se suman en una barra final. Las tarjetas de abajo siguen mostrando A, B y C por separado.",
+        "En el Pareto solo los artículos A van desplegados; los B se suman en una barra y los C en otra, al final.",
         "El gráfico no muestra etiquetas de datos: los valores están en el tooltip.",
       ],
     },
@@ -3777,7 +3780,7 @@
 
   // Umbrales ABC: las líneas punteadas del gráfico
   const INM_ABC_CORTES = { A: 80, B: 95 };
-  const INM_ABC_COLOR  = { A: "#f7873a", B: "#facc15", C: "#6b7280", BC: "#9ca3af" };
+  const INM_ABC_COLOR  = { A: "#f7873a", B: "#facc15", C: "#6b7280" };
   // Ancho por artículo: se prioriza el grosor de la barra y el gráfico scrollea
   const INM_PARETO_PASO = 26;
 
@@ -3811,13 +3814,6 @@
     });
   }
 
-  // "1234 - ETIQUETA FRENTE MALBEC…": el código entero y la descripción corta
-  function inmEtiquetaCorta(r) {
-    const desc = String(r.descripcion ?? "").trim();
-    const corta = desc.length > 16 ? desc.slice(0, 16) + "…" : desc;
-    return corta ? `${r.cod_corto} - ${corta}` : String(r.cod_corto ?? "");
-  }
-
   function inmRenderPareto() {
     const info   = document.getElementById("inm-pareto-info");
     const lienzo = document.getElementById("inm-pareto-lienzo");
@@ -3838,23 +3834,22 @@
     const filas = inmClasificar(inmParetoData);
     const total = filas.reduce((a, r) => a + r.costo, 0);
 
-    // Solo los A van desplegados, uno por barra. B y C se suman en una sola
-    // barra al final: son muchos artículos que pesan poco, y así el gráfico
-    // pone el foco en los que importan.
+    // Solo los A van desplegados, uno por barra. Los B se suman en una barra y
+    // los C en otra: son muchos artículos que pesan poco, y así el gráfico pone
+    // el foco en los que importan.
     const barras = filas.filter(r => r.clase === "A");
-    const resto  = filas.filter(r => r.clase !== "A");
-    if (resto.length) {
-      const deClase = c => resto.filter(r => r.clase === c);
-      const suma    = arr => arr.reduce((a, r) => a + r.costo, 0);
+    const grupos = { B: filas.filter(r => r.clase === "B"), C: filas.filter(r => r.clase === "C") };
+    ["B", "C"].forEach(clase => {
+      const de = grupos[clase];
+      if (!de.length) return;
       barras.push({
-        grupo: true, clase: "BC",
-        n: resto.length,
-        nB: deClase("B").length, costoB: suma(deClase("B")),
-        nC: deClase("C").length, costoC: suma(deClase("C")),
-        costo: suma(resto),
-        acumulado: 100,
+        grupo: true, clase,
+        n: de.length,
+        costo: de.reduce((a, r) => a + r.costo, 0),
+        // el acumulado de la barra es el del último artículo de la clase
+        acumulado: de[de.length - 1].acumulado,
       });
-    }
+    });
     inmParetoFilas = barras;
     // Con datos nuevos el mismo índice puede ser otro artículo: que el tooltip
     // se rearme la próxima vez en vez de mostrar el contenido anterior.
@@ -3870,16 +3865,17 @@
     const ancho    = Math.max(scroll.clientWidth, Math.round(barras.length * paso + 140));
     lienzo.style.width = ancho + "px";
 
-    const nA = barras.length - (resto.length ? 1 : 0);
-    info.textContent = `${nA.toLocaleString("es-AR")} ${nA === 1 ? "artículo" : "artículos"} A` +
-      (resto.length ? ` + ${resto.length.toLocaleString("es-AR")} agrupados en B y C` : "") +
+    const nA  = barras.filter(r => !r.grupo).length;
+    const art = n => `${n.toLocaleString("es-AR")} ${n === 1 ? "artículo" : "artículos"}`;
+    info.textContent = `${art(nA)} A` +
+      (grupos.B.length ? ` · ${art(grupos.B.length)} B en una barra` : "") +
+      (grupos.C.length ? ` · ${art(grupos.C.length)} C en otra` : "") +
       ` · $ ${Math.round(total).toLocaleString("es-AR")}` +
       (paso < INM_PARETO_PASO ? " · barras angostadas para que entren" : "");
 
     const pesos = v => "$" + Math.round(v).toLocaleString("es-AR");
 
-    // Línea punteada del 80 %, con su rótulo pegado al eje izquierdo. La del
-    // 95 % ya no va: separa B de C, que ahora comparten una sola barra.
+    // Líneas punteadas del 80 % y el 95 %, con su rótulo pegado al eje izquierdo
     const lineasAbc = {
       id: "inmLineasAbc",
       afterDatasetsDraw(chart) {
@@ -3890,14 +3886,14 @@
         ctx.fillStyle = "rgba(255,255,255,.55)";
         ctx.font = "11px sans-serif";
         ctx.lineWidth = 1;
-        [INM_ABC_CORTES.A].forEach(p => {
+        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
           const y = y1.getPixelForValue(p);
           ctx.beginPath(); ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
         });
         // Los rótulos caen sobre las primeras barras, que son las más altas:
         // van con un fondo oscuro para que se lean encima de ellas.
         ctx.setLineDash([]);
-        [INM_ABC_CORTES.A].forEach(p => {
+        [INM_ABC_CORTES.A, INM_ABC_CORTES.B].forEach(p => {
           const y = y1.getPixelForValue(p);
           const texto = `${p} %`;
           const w = ctx.measureText(texto).width + 8;
@@ -3939,7 +3935,7 @@
 
     inmParetoChart = new Chart(document.getElementById("inm-pareto").getContext("2d"), {
       data: {
-        labels: barras.map(r => r.grupo ? `Clase B y C (${r.n.toLocaleString("es-AR")} art.)` : inmEtiquetaCorta(r)),
+        labels: barras.map(r => r.grupo ? `Clase ${r.clase} (${r.n.toLocaleString("es-AR")} art.)` : String(r.cod_corto ?? "")),
         datasets: [
           {
             type: "line",
@@ -4037,20 +4033,20 @@
       const fecha = inmFechaCorta(inmParetoFecha);
       const art   = n => n.toLocaleString("es-AR") + " art.";
       if (r.grupo) {
-        // La barra de B y C no es un artículo: no lleva imagen ni stock (sumar
-        // unidades de artículos distintos no dice nada), sí el desglose.
+        // La barra de una clase agrupada no es un artículo: no lleva imagen,
+        // rubro ni stock (sumar unidades de artículos distintos no dice nada).
         el.innerHTML = `
           <div style="min-width:0">
-            <div class="inm-tip-titulo">Clase B y C agrupadas</div>
+            <div class="inm-tip-titulo"><span style="color:${INM_ABC_COLOR[r.clase]}">Clase ${r.clase}</span> agrupada</div>
             ${fila("Artículos", art(r.n))}
             ${fila("Costo obsoleto", pesos(r.costo, 0))}
-            ${fila(`<span style="color:${INM_ABC_COLOR.B}">Clase B</span> · ${art(r.nB)}`, pesos(r.costoB, 0))}
-            ${fila(`<span style="color:${INM_ABC_COLOR.C}">Clase C</span> · ${art(r.nC)}`, pesos(r.costoC, 0))}
+            ${fila("% acumulado", r.acumulado.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " %")}
           </div>`;
       } else {
         el.innerHTML = `
           <img class="inm-tip-img" alt="" src="${API}/api/r2/imagen-codigo?cod=${encodeURIComponent(r.cod_corto)}">
           <div style="min-width:0">
+            <div class="inm-tip-rubro">${nsEsc(r.rubro || "(sin rubro)")}</div>
             <div class="inm-tip-titulo">${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)} <span style="color:${INM_ABC_COLOR[r.clase]}">(clase ${r.clase})</span></div>
             ${fila("% acumulado", r.acumulado.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " %")}
             ${fila("Costo obsoleto", pesos(r.costo, 0))}
