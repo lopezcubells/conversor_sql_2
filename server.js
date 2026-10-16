@@ -625,13 +625,15 @@ app.get("/api/pg/inmovilizados/resumen", async (req, res) => {
     const and    = rubros.length ? "AND v.rubro = ANY($1::text[])" : "";
     const params = rubros.length ? [rubros] : [];
     // LEFT JOIN desde la fecha: si el filtro no deja filas, igual vuelve la
-    // fecha, con los totales en cero.
+    // fecha, con los totales en cero. stock es cantidad: el costo del stock se
+    // valoriza fila por fila con su costo unitario antes de sumar.
     const result = await pgPool.query(
       `WITH ultima AS (SELECT MAX(fecha) AS fecha FROM view_avance_inmovilizados)
        SELECT u.fecha,
               COALESCE(SUM(v.costo_obsoleto), 0) AS costo_obsoleto,
-              COALESCE(SUM(v.stock), 0)          AS costo_stock,
-              100.0 * SUM(v.costo_obsoleto) / NULLIF(SUM(v.stock), 0) AS pct_obsoleto
+              COALESCE(SUM(v.stock * v.costo_unitario), 0) AS costo_stock,
+              100.0 * SUM(v.costo_obsoleto)
+                    / NULLIF(SUM(v.stock * v.costo_unitario), 0) AS pct_obsoleto
        FROM ultima u
        LEFT JOIN view_avance_inmovilizados v ON v.fecha = u.fecha ${and}
        GROUP BY u.fecha`,
