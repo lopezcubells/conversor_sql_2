@@ -608,11 +608,15 @@ app.get("/api/pg/inmovilizados/evolucion", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Ranking de obsoletos. Antes devolvía todo el detalle para una tabla que ya no
-// existe; ahora solo alimenta el Top 10, así que corta en 10 desde la base.
+// Ranking de obsoletos, cortado en 10 desde la base. Hay dos: por cantidad y por
+// costo. La columna sale de esta tabla y nunca del texto que mandó el navegador,
+// porque entra al SQL como identificador.
+const INM_ORDEN = { cantidad: "obsoleto", costo: "costo_obsoleto" };
+
 app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
+    const columna = INM_ORDEN[req.query.orden] || INM_ORDEN.cantidad;
     const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
                  : req.query.rubros ? [req.query.rubros] : [];
     const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
@@ -622,7 +626,7 @@ app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
        FROM view_avance_inmovilizados
        WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
        ${and}
-       ORDER BY obsoleto DESC
+       ORDER BY ${columna} DESC NULLS LAST
        LIMIT 10`,
       params
     );
