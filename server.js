@@ -608,7 +608,9 @@ app.get("/api/pg/inmovilizados/evolucion", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/pg/inmovilizados/detalle", async (req, res) => {
+// Ranking de obsoletos. Antes devolvía todo el detalle para una tabla que ya no
+// existe; ahora solo alimenta el Top 10, así que corta en 10 desde la base.
+app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
@@ -620,7 +622,8 @@ app.get("/api/pg/inmovilizados/detalle", async (req, res) => {
        FROM view_avance_inmovilizados
        WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
        ${and}
-       ORDER BY obsoleto DESC`,
+       ORDER BY obsoleto DESC
+       LIMIT 10`,
       params
     );
     res.json({ rows: result.rows });

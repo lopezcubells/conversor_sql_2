@@ -1296,16 +1296,6 @@
 
   </div>
 
-  <!-- 3. Tabla detalle -->
-  <div class="section-heading" style="margin-top:24px"><h2>Detalle inmovilizados</h2></div>
-  <div id="inm-table-status" style="font-size:13px;color:var(--muted);margin-bottom:8px"></div>
-  <div class="card" style="padding:0">
-    <div class="table-wrap" id="inm-table-wrap">
-      <div class="empty"><div class="big">📋</div>Seleccioná un rubro para ver el detalle</div>
-    </div>
-  </div>
-  <div class="pagination" id="inm-pagination"></div>
-
 </div>
 
 <!-- ═══ RECEPCIONES ═══ -->
@@ -2327,7 +2317,7 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico, tabla y ranking"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución y Top 10 de obsoletos"],
       ],
       parametros: [
         ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
@@ -2339,10 +2329,6 @@
           ["Activo sin rotación", "SUM(costo_activo_sin_rotacion)"],
           ["Activo", "SUM(costo_activo)"],
         ]},
-        { titulo: "Detalle", origen: "view_avance_inmovilizados, última fecha", campos: [
-          ["Cód. Corto", "cod_corto"], ["Descripción", "descripcion"], ["Rubro", "rubro"],
-          ["Obsoleto", "obsoleto"], ["Costo Obsoleto", "costo_obsoleto"],
-        ]},
         { titulo: "Top 10 artículos obsoletos", origen: "view_avance_inmovilizados, última fecha", campos: [
           ["Artículo", "cod_corto + descripcion"],
           ["Cantidad", "obsoleto"],
@@ -2350,7 +2336,7 @@
         ]},
       ],
       notas: [
-        "Detalle y Top 10 toman solo la fecha más reciente: WHERE fecha = MAX(fecha).",
+        "El Top 10 toma solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya lo devuelve cortado en 10, ordenado por obsoleto.",
       ],
     },
 
@@ -3578,9 +3564,7 @@
 
   let inmChart        = null;
   let inmRubrosLoaded = false;
-  let inmDetalleData  = [];
-  let inmPage         = 0;
-  const INM_PAGE_SIZE = 50;
+  let inmTop10Data    = [];
 
   document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
     document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
@@ -3646,19 +3630,17 @@
       chartStatus.textContent = "";
     } catch (e) { chartStatus.textContent = "⚠ " + e.message; }
 
-    // Tabla detalle
-    const tableStatus = document.getElementById("inm-table-status");
-    tableStatus.textContent = "Consultando PostgreSQL…";
+    // Top 10 de obsoletos
     try {
-      const res = await fetch(`${API}/api/pg/inmovilizados/detalle?${params}`);
+      const res = await fetch(`${API}/api/pg/inmovilizados/top-obsoletos?${params}`);
       if (!res.ok) throw new Error((await res.json()).error);
       const { rows } = await res.json();
-      inmDetalleData = rows;
-      inmPage = 0;
-      inmRenderTable();
+      inmTop10Data = rows;
       inmRenderTop10();
-      tableStatus.textContent = rows.length ? `${rows.length.toLocaleString()} registros` : "";
-    } catch (e) { tableStatus.textContent = "⚠ " + e.message; }
+    } catch (e) {
+      document.getElementById("inm-top10-wrap").innerHTML =
+        `<div class="empty" style="padding:40px 0"><div class="big">⚠</div>${nsEsc(e.message)}</div>`;
+    }
   }
 
   function inmFmtFecha(str) {
@@ -3748,43 +3730,9 @@
     });
   }
 
-  function inmRenderTable() {
-    const wrap  = document.getElementById("inm-table-wrap");
-    const total = inmDetalleData.length;
-    if (!total) {
-      wrap.innerHTML = `<div class="empty"><div class="big">📋</div>Sin resultados</div>`;
-      document.getElementById("inm-pagination").innerHTML = "";
-      return;
-    }
-    const start = inmPage * INM_PAGE_SIZE;
-    const page  = inmDetalleData.slice(start, start + INM_PAGE_SIZE);
-    wrap.innerHTML = `<table>
-      <thead><tr>
-        <th>Cód. Corto</th>
-        <th>Descripción</th>
-        <th>Rubro</th>
-        <th style="text-align:right">Obsoleto</th>
-        <th style="text-align:right">Costo Obsoleto</th>
-      </tr></thead>
-      <tbody>${page.map(r => `<tr>
-        <td>${r.cod_corto ?? ""}</td>
-        <td>${r.descripcion ?? ""}</td>
-        <td>${r.rubro ?? ""}</td>
-        <td style="text-align:right">${r.obsoleto != null ? Math.round(r.obsoleto).toLocaleString("es-AR") : ""}</td>
-        <td style="text-align:right">${r.costo_obsoleto != null ? Math.round(r.costo_obsoleto).toLocaleString("es-AR") : ""}</td>
-      </tr>`).join("")}</tbody>
-    </table>`;
-    renderPagination("inm-pagination", total, start, INM_PAGE_SIZE, "inmGoPage");
-  }
-
-  function inmGoPage(offset) {
-    inmPage = Math.floor(offset / INM_PAGE_SIZE);
-    inmRenderTable();
-  }
-
   function inmRenderTop10() {
     const wrap = document.getElementById("inm-top10-wrap");
-    const top  = inmDetalleData.slice(0, 10);
+    const top  = inmTop10Data.slice(0, 10);
     if (!top.length) {
       wrap.innerHTML = `<div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>`;
       return;
