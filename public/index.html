@@ -519,6 +519,62 @@
     /* Fila cuya cantidad no es igual en todas las plantas */
     .bom-difiere td { background: rgba(247,135,79,.10); }
 
+    /* ── Mapeo y Dependencias ── */
+    .map-btn {
+      width: 28px; height: 28px; padding: 0; flex: 0 0 28px;
+      display: grid; place-items: center;
+      background: none; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 7px; cursor: pointer;
+    }
+    .map-btn:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .map-btn svg { width: 16px; height: 16px; display: block; }
+    .map-fondo {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.55);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 70px 20px 20px;
+    }
+    .map-panel {
+      width: min(820px, 100%); max-height: calc(100vh - 100px);
+      display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: 0 18px 50px rgba(0,0,0,.5);
+    }
+    .map-cab {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+    }
+    .map-cuerpo { padding: 14px 18px 18px; overflow-y: auto; }
+    .map-seccion {
+      font-size: 10.5px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .07em; font-weight: 600; margin: 16px 0 8px;
+    }
+    .map-seccion:first-child { margin-top: 0; }
+    .map-fuente { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; font-size: 12.5px; }
+    .map-tipo {
+      flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      padding: 2px 7px; border-radius: 99px; text-transform: uppercase;
+    }
+    .map-tipo.funcion   { background: rgba(167,139,250,.16); color: #c4b5fd; }
+    .map-tipo.vista     { background: rgba(34,199,199,.14);  color: #67e8e8; }
+    .map-tipo.tabla     { background: rgba(79,142,247,.16);  color: #93b8fb; }
+    .map-tipo.bucket    { background: rgba(247,135,79,.16);  color: #fbb48a; }
+    .map-tipo.escritura { background: rgba(247,96,96,.16);   color: #f9a1a1; }
+    .map-nombre { font-family: var(--mono); font-size: 12px; color: var(--text); }
+    .map-uso { color: var(--muted); font-size: 12px; }
+    .map-bloque { border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; overflow: hidden; }
+    .map-bloque-cab {
+      display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      padding: 7px 12px; background: var(--bg); font-size: 12.5px; font-weight: 600;
+    }
+    .map-bloque-cab span { font-weight: 400; color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+    .map-tabla { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .map-tabla td { padding: 5px 12px; border-top: 1px solid rgba(255,255,255,.05); vertical-align: top; }
+    .map-tabla td:first-child { width: 42%; color: var(--text); }
+    .map-tabla td:last-child  { font-family: var(--mono); font-size: 11.5px; color: #9fb6d9; }
+    .map-nota { font-size: 12px; color: var(--muted); line-height: 1.55; padding-left: 14px; position: relative; margin: 4px 0; }
+    .map-nota::before { content: "·"; position: absolute; left: 4px; }
+
     /* ── Search ── */
     .search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
     .search-input {
@@ -896,9 +952,30 @@
 
   <div class="hdr-sesion">
     <span id="hdr-usuario" style="font-size:12px;color:var(--muted)"></span>
+    <button class="map-btn" id="map-btn" title="Mapeo y Dependencias" aria-label="Mapeo y Dependencias">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.5" />
+        <line x1="12" y1="11" x2="12" y2="16.5" />
+        <circle cx="12" cy="7.6" r=".6" fill="currentColor" stroke="none" />
+      </svg>
+    </button>
     <button class="btn btn-outline" id="btn-logout" style="font-size:12px;display:none">Cerrar sesión</button>
   </div>
 </header>
+
+<!-- Mapeo y Dependencias: se arma con la pestaña activa al abrirlo -->
+<div class="map-fondo" id="map-fondo" hidden>
+  <div class="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-titulo">
+    <div class="map-cab">
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Mapeo y Dependencias</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px" id="map-titulo">—</div>
+      </div>
+      <button class="map-btn" id="map-cerrar" title="Cerrar" aria-label="Cerrar" style="font-size:16px">×</button>
+    </div>
+    <div class="map-cuerpo" id="map-cuerpo"></div>
+  </div>
+</div>
 
 <!-- ═══ DASHBOARD ═══ -->
 <div class="pane active" id="tab-dashboard">
@@ -2125,6 +2202,440 @@
       usersLoad();
     } catch (e) { toast("❌ " + e.message, "err"); }
   }
+
+
+  // ── Mapeo y Dependencias ──
+  //
+  // Una entrada por data-tab. Es documentación viva: CADA cambio en una pestaña
+  // (columna nueva, otra tabla, otro filtro) tiene que reflejarse acá en el
+  // mismo commit, o el panel empieza a mentir. Ver CLAUDE.md.
+  //
+  // tipos de fuente: funcion | vista | tabla | bucket | escritura
+  const MAPEO = {
+    dashboard: {
+      titulo: "Dashboard",
+      fuentes: [
+        ["tabla", "app_users", "Usuarios, roles y permisos por pestaña (solo administradores)"],
+      ],
+      bloques: [
+        { titulo: "Administración de usuarios", origen: "app_users", campos: [
+          ["Usuario", "usuario"],
+          ["Rol", "es_admin"],
+          ["Pestañas", "pestanas (TEXT[]; NULL = todas)"],
+          ["Creado", "creado_en"],
+          ["Contraseña", "password_hash (bcrypt, nunca se muestra)"],
+        ]},
+      ],
+    },
+
+    avance: {
+      titulo: "Avance",
+      fuentes: [
+        ["funcion", "avance_x_rubro(date, time, date, date, date, date, numeric)", "Tabla Avance por rubro"],
+        ["funcion", "avance_x_articulo(date, time, date, date, date, date, numeric)", "Tabla Avance x artículo"],
+      ],
+      parametros: [
+        ["Fecha de arranque", "$1 · fe_arranque_stock"],
+        ["Hora de arranque", "$2 · hora_arranque_stock"],
+        ["Fecha inicio PMP", "$3 · fe_inicio_pmp"],
+        ["Fecha final PMP", "$4 · fe_final_pmp"],
+        ["Fecha inicio semana (mes sgte.)", "$5 · fe_inicio_semana_mes_sgte"],
+        ["Fecha final semana (mes sgte.)", "$6 · fe_final_semana_mes_sgte"],
+        ["% de arranque", "$7 · porcentaje_arranque (se carga 0–100, viaja como 0–1)"],
+      ],
+      bloques: [
+        { titulo: "Avance por rubro", origen: "avance_x_rubro", campos: [
+          ["Rubro", "rubro"], ["Arranque", "stock_arranque"], ["Recepciones", "recepciones"],
+          ["Consumo", "consumo"], ["Consumo Arranque", "consumo_arranque"],
+          ["Nec. Inicial", "necesidad_inicial"], ["Nec. Actual", "necesidad_actual"],
+          ["Avance", "avance"],
+        ]},
+        { titulo: "Avance x artículo", origen: "avance_x_articulo", campos: [
+          ["Cód. Corto", "cod_corto"], ["Rubro", "rubro"], ["Descripción", "descripcion"],
+          ["Arranque", "stock_arranque"], ["Recepciones", "recepciones"], ["Consumo", "consumo"],
+          ["Consumo Arranque", "consumo_arranque_mes_sgte"],
+          ["Nec. Inicial", "necesidad_inicial"], ["Nec. Actual", "necesidad_actual"],
+          ["Mín Rec/Nec", "minimo_rec_vs_nec"], ["Avance", "avance"],
+        ]},
+      ],
+      notas: [
+        "Las dos funciones se consultan con SELECT *: la tabla muestra solo las columnas de arriba.",
+        "El selector de rubros se arma con los valores de avance_x_rubro.rubro.",
+      ],
+    },
+
+    rotacion: {
+      titulo: "Rotación",
+      fuentes: [
+        ["vista", "rotacion_2026", "Los dos gráficos"],
+      ],
+      parametros: [
+        ["Rubro", "$1 · WHERE rubro = $1 (lista fija de 17 rubros)"],
+      ],
+      bloques: [
+        { titulo: "Rotación en días", origen: "rotacion_2026", campos: [
+          ["Eje horizontal (mes)", "numero_mes"],
+          ["Barras", "pr"],
+          ["Línea de objetivo", "objetivo"],
+        ]},
+        { titulo: "Stock vs. Consumo", origen: "rotacion_2026", campos: [
+          ["Eje horizontal (mes)", "numero_mes"],
+          ["Stock", "stock_promedio"],
+          ["Consumo", "consumo"],
+        ]},
+      ],
+      notas: [
+        "El rango de meses (Desde / Hasta) filtra numero_mes en el navegador: no consulta la base de nuevo.",
+      ],
+    },
+
+    cobertura: {
+      titulo: "Cobertura y faltantes",
+      fuentes: [
+        ["funcion", "cobertura_semanal(time, date, date)", "Tabla de cobertura diaria"],
+      ],
+      parametros: [
+        ["Hora stock de arranque", "$1 · hora_arranque_stock"],
+        ["Fecha inicio semana", "$2 · fe_inicio_semana"],
+        ["Fecha final semana", "$3 · fe_final_semana"],
+        ["Filtro por rubro", "WHERE rubro IN (…) — los marcados, dentro de una lista fija de 19"],
+      ],
+      bloques: [
+        { titulo: "Tabla de cobertura", origen: "cobertura_semanal", campos: [
+          ["COD", "cod_corto"], ["Descripción", "descripcion"], ["Rubro", "rubro"],
+          ["Planta", "planta"], ["Arranque", "arranque"], ["Recepciones", "recepciones"],
+          ["Quiebres", "quiebres"], ["Columnas de días", "dia_1 … dia_14"],
+        ]},
+        { titulo: "Filtros (en el navegador)", origen: "cobertura_semanal", campos: [
+          ["Código insumo", "cod_corto"],
+          ["SKU producto", "cod_corto_ppal (columna oculta)"],
+          ["Descripción insumo", "descripcion"],
+          ["Solo programado", "programado > 0 (columna oculta)"],
+          ["Sin duplicados", "único por cod_corto + planta"],
+        ]},
+      ],
+      notas: [
+        "La consulta descarta filas sin movimiento: (arranque + recepciones + programado) > 0, y ordena por quiebres.",
+        "Se consulta con SELECT *; cod_corto_ppal y programado viajan pero no se muestran como columnas.",
+      ],
+    },
+
+    inmovilizados: {
+      titulo: "Inmovilizados",
+      fuentes: [
+        ["vista", "view_avance_inmovilizados", "Gráfico, tabla y ranking"],
+      ],
+      parametros: [
+        ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
+      ],
+      bloques: [
+        { titulo: "Evolución del costo (gráfico)", origen: "view_avance_inmovilizados, agrupado por fecha", campos: [
+          ["Eje horizontal", "fecha"],
+          ["Obsoleto", "SUM(costo_obsoleto)"],
+          ["Activo sin rotación", "SUM(costo_activo_sin_rotacion)"],
+          ["Activo", "SUM(costo_activo)"],
+        ]},
+        { titulo: "Detalle", origen: "view_avance_inmovilizados, última fecha", campos: [
+          ["Cód. Corto", "cod_corto"], ["Descripción", "descripcion"], ["Rubro", "rubro"],
+          ["Obsoleto", "obsoleto"], ["Costo Obsoleto", "costo_obsoleto"],
+        ]},
+        { titulo: "Top 10 artículos obsoletos", origen: "view_avance_inmovilizados, última fecha", campos: [
+          ["Artículo", "cod_corto + descripcion"],
+          ["Cantidad", "obsoleto"],
+          ["Costo", "costo_obsoleto"],
+        ]},
+      ],
+      notas: [
+        "Detalle y Top 10 toman solo la fecha más reciente: WHERE fecha = MAX(fecha).",
+      ],
+    },
+
+    recepciones: {
+      titulo: "Recepciones",
+      fuentes: [
+        ["vista", "view_recepciones_2026", "Tabla, total y gráficos"],
+      ],
+      bloques: [
+        { titulo: "Tabla de recepciones", origen: "view_recepciones_2026", campos: [
+          ["Fecha recepción", "fecha_recepcion + hora_recepcion"],
+          ["COD", "cod_corto"], ["Descripción", "descripcion"], ["Rubro", "rubro"],
+          ["Unidad negocio", "unidad_negocio"], ["Observaciones", "observaciones"],
+          ["Proveedor", "proveedor"], ["Cant. recibida", "cantidad_recibida"],
+        ]},
+        { titulo: "Tarjeta y gráficos", origen: "view_recepciones_2026", campos: [
+          ["Cantidad recibida (tarjeta)", "SUM(cantidad_recibida) de lo filtrado"],
+          ["Cantidad recibida por mes", "SUM(cantidad_recibida) por mes de fecha_recepcion"],
+          ["Cantidad recibida por proveedor", "SUM(cantidad_recibida) por proveedor"],
+        ]},
+        { titulo: "Filtros (en el navegador)", origen: "view_recepciones_2026", campos: [
+          ["Rubro", "rubro (solo los de una lista blanca)"],
+          ["Unidad de negocio", "unidad_negocio"],
+          ["Rango de fechas", "fecha_recepcion"],
+        ]},
+      ],
+      notas: [
+        "Se trae la vista completa una vez y todo se filtra en el navegador; el botón Actualizar vuelve a consultarla.",
+        "Los rubros fuera de la lista blanca se descartan al cargar, comparando sin tildes ni mayúsculas.",
+      ],
+    },
+
+    "nivel-servicio": {
+      titulo: "Nivel de servicio",
+      fuentes: [
+        ["funcion", "indicador_cobertura(date, date, time)", "Todos los bloques de lectura"],
+        ["escritura", "registro_nivel_servicio", "INSERT al generar el PDF, si está tildado «Cargar en BD»"],
+      ],
+      parametros: [
+        ["Fecha inicio semana (cobertura)", "$1 · cob_fe_inicio"],
+        ["Fecha final semana (cobertura)", "$2 · cob_fe_final"],
+        ["Hora arranque semana", "$3 · cob_hora"],
+        ["Rubros", "$4 · WHERE rubro = ANY($4)"],
+        ["Semana en curso · Inicio", "$5 · WHERE dia >= $5 (filtro, no arranque del cálculo)"],
+        ["Semana en curso · Final", "$6 · WHERE dia <= $6"],
+      ],
+      bloques: [
+        { titulo: "Indicador de NS (anillos)", origen: "indicador_cobertura, agrupado por planta", campos: [
+          ["Planta", "planta"],
+          ["Programados", "SUM(MAX(bultos)) por planta, producto y día"],
+          ["Afectados", "bultos de las líneas con evaluacion = 'no cubre'"],
+          ["% de cobertura", "(programados − afectados) / programados"],
+        ]},
+        { titulo: "Reporte de faltantes", origen: "indicador_cobertura, evaluacion = 'no cubre'", campos: [
+          ["Rubro", "rubro"],
+          ["Insumo", "cod_corto_comp + descripcion_comp"],
+          ["Producto afectado", "cod_corto_ppal + descripcion_ppal"],
+          ["Planta", "planta"],
+          ["Cantidad faltante", "faltante_puntual"],
+          ["Bultos afectados", "bultos_afectados"],
+          ["¿Faltante real? · Causa · Responsable", "carga manual del usuario"],
+        ]},
+        { titulo: "Tablero de faltantes por producto", origen: "indicador_cobertura", campos: [
+          ["Fecha", "dia"], ["Producto", "descripcion_ppal"], ["Columnas", "rubro"],
+          ["Celda (1 / 0 / −1)", "signo de saldo"],
+        ]},
+        { titulo: "Urgencias", origen: "indicador_cobertura, evaluacion = 'no cubre'", campos: [
+          ["Encabezado del día", "dia"], ["Rubro", "rubro"],
+          ["Insumo", "cod_corto_comp + descripcion_comp"],
+          ["Producto afectado", "descripcion_ppal"], ["Planta", "planta"],
+          ["Cantidad faltante", "faltante_puntual"],
+        ]},
+        { titulo: "Registro histórico (escritura)", origen: "registro_nivel_servicio", campos: [
+          ["Fecha del reporte", "fe_reporte"], ["Semana", "fe_inicial · fe_final"],
+          ["Rubro · Insumo · Producto · Planta", "rubro · insumo · producto_afectado · planta"],
+          ["Cantidad faltante · Bultos", "cantidad_faltante · bultos_afectados"],
+          ["Carga manual", "faltante_real · causa_estandar · sector_proveedor_responsable"],
+        ]},
+      ],
+      notas: [
+        "La función siempre corre sobre la semana completa de cobertura ($1/$2); la semana en curso solo recorta el resultado. Empezar a mitad de semana perdería el saldo acumulado.",
+      ],
+    },
+
+    "necesidad-final": {
+      titulo: "Necesidad Final",
+      fuentes: [
+        ["funcion", "necesidad_final(date, time, date)", "Tabla de necesidad"],
+      ],
+      parametros: [
+        ["Fecha arranque semanal", "$1 · fecha_arranque_semanal"],
+        ["Hora arranque semanal", "$2 · hora_arranque_semanal"],
+        ["Fecha horizonte consumo", "$3 · fecha_horizonte_consumo"],
+      ],
+      bloques: [
+        { titulo: "Tabla de necesidad final", origen: "necesidad_final", campos: [
+          ["Cód. Corto", "cod_corto"], ["Descripción", "descripcion"], ["Rubro", "rubro"],
+          ["Arranque semanal", "arranque_semanal"], ["Recepción semanal", "recepcion_semanal"],
+          ["Pendiente completo", "pendiente_completo"], ["Consumo total", "consumo_total"],
+          ["Necesidad final", "necesidad_final"], ["Criticidad", "criticidad_valor"],
+          ["Criticidad ABC (semáforo)", "criticidad_categoria"],
+        ]},
+        { titulo: "Filtros (en el navegador)", origen: "necesidad_final", campos: [
+          ["Compras en curso", "pendiente_completo > 0"],
+          ["Rubros", "rubro"],
+          ["Código / descripción", "cod_corto · descripcion"],
+        ]},
+      ],
+      notas: [
+        "La tabla llega ordenada por criticidad_valor de mayor a menor.",
+      ],
+    },
+
+    "consumo-historico": {
+      titulo: "Consumo Histórico",
+      fuentes: [
+        ["tabla", "consumos_im_if_consolidado", "Movimientos de consumo (base de todo)"],
+        ["tabla", "bd_articulos_x_rubro", "Descripción y rubro, por cod_corto y por cod_corto_ppal"],
+        ["tabla", "bd_maestro_insumos", "Subrubro, por cod_corto"],
+      ],
+      parametros: [
+        ["Código / descripción producto", "cod_corto_ppal · descripción por cod_corto_ppal"],
+        ["Código / descripción insumo", "cod_corto · descripcion"],
+        ["Rubro", "bd_articulos_x_rubro.rubro"],
+        ["Subrubro", "bd_maestro_insumos.sub_rubro"],
+        ["Unidad de negocio", "unidad_negocio"],
+        ["Tipo de documento", "tipo_doc"],
+        ["Desde / Hasta", "fecha_orden"],
+        ["Años", "EXTRACT(YEAR FROM fecha_orden)"],
+      ],
+      bloques: [
+        { titulo: "Tarjetas", origen: "consumos_im_if_consolidado", campos: [
+          ["Consumo total", "SUM(consumo)"], ["Movimientos", "COUNT(*)"],
+          ["Insumos distintos", "COUNT(DISTINCT cod_corto)"],
+          ["Productos distintos", "COUNT(DISTINCT cod_corto_ppal)"],
+          ["Rango de fechas", "MIN / MAX(fecha_orden)"],
+        ]},
+        { titulo: "Evolución del consumo", origen: "consumos_im_if_consolidado", campos: [
+          ["Período (anual / mensual / diario)", "date_trunc(fecha_orden)"],
+          ["Barras", "SUM(consumo)"],
+        ]},
+        { titulo: "Rankings y cortes", origen: "las tres tablas", campos: [
+          ["Top insumos", "cod_corto + descripcion · SUM(consumo)"],
+          ["Top productos", "cod_corto_ppal + descripción del producto · SUM(consumo)"],
+          ["Por rubro", "bd_articulos_x_rubro.rubro"],
+          ["Por subrubro", "bd_maestro_insumos.sub_rubro"],
+          ["Por unidad de negocio · tipo de documento", "unidad_negocio · tipo_doc"],
+        ]},
+        { titulo: "Detalle", origen: "las tres tablas", campos: [
+          ["Fecha", "fecha_orden"], ["Cód. Insumo", "cod_corto"],
+          ["Descripción · Rubro", "bd_articulos_x_rubro.descripcion · rubro"],
+          ["Subrubro", "bd_maestro_insumos.sub_rubro"],
+          ["Cód. Producto", "cod_corto_ppal"],
+          ["Producto", "bd_articulos_x_rubro.descripcion (por cod_corto_ppal)"],
+          ["U. Negocio · Tipo Doc · N° Doc", "unidad_negocio · tipo_doc · numero_documento"],
+          ["Tipo Orden · N° Orden", "tipo_orden · numero_orden"],
+          ["Consumo", "consumo"],
+        ]},
+      ],
+      notas: [
+        "Las dos tablas de referencia se deduplican con DISTINCT ON (cod_corto) antes de unir: un LEFT JOIN directo multiplicaría los consumos.",
+        "La agregación corre en Postgres y el detalle pagina contra el servidor, por el volumen de la tabla.",
+      ],
+    },
+
+    bom: {
+      titulo: "BOM",
+      fuentes: [
+        ["tabla", "bd_bom_m_multiplanta", "Lista de piezas (_ppal = padre, _comp = componente)"],
+      ],
+      parametros: [
+        ["Buscador · modo producto", "cod_corto_ppal · cod_largo_ppal · descripcion_ppal"],
+        ["Buscador · modo insumo", "cod_corto_comp · cod_largo_comp · descripcion_comp"],
+        ["Planta · Mercado · Sucursal", "planta · mercado · sucursal"],
+      ],
+      bloques: [
+        { titulo: "Cabecera", origen: "bd_bom_m_multiplanta", campos: [
+          ["Código", "cod_corto_ppal (o _comp en modo insumo)"],
+          ["Descripción", "descripcion_ppal (o _comp)"],
+          ["Código largo · Unidad", "cod_largo_ppal · unidad_ppal (o _comp)"],
+          ["Mercado", "mercado"],
+        ]},
+        { titulo: "Lista de piezas (modo producto)", origen: "bd_bom_m_multiplanta", campos: [
+          ["Cód. componente", "cod_corto_comp"], ["Descripción", "descripcion_comp"],
+          ["Rubro", "rubro_comp"], ["Unidad", "unidad_comp"],
+          ["Una columna por planta", "cantidad, por planta"],
+        ]},
+        { titulo: "Productos que lo usan (modo insumo)", origen: "bd_bom_m_multiplanta", campos: [
+          ["Cód. producto", "cod_corto_ppal"], ["Descripción", "descripcion_ppal"],
+          ["Unidad", "unidad_ppal"], ["Una columna por planta", "cantidad, por planta"],
+        ]},
+      ],
+      notas: [
+        "Una fila se marca como diferencia cuando la cantidad no coincide entre plantas o falta en alguna; eso se calcula en el navegador.",
+      ],
+    },
+
+    catalogo: {
+      titulo: "Catálogo",
+      fuentes: [
+        ["tabla", "bd_maestro_insumos", "Listado de artículos (solo 31 rubros)"],
+        ["tabla", "bd_stock_x_sucursales", "Stock, sumado por cod_corto"],
+        ["bucket", "Cloudflare R2 · imagenes-insumos", "Imágenes: nombre de archivo sin extensión = cod_corto"],
+      ],
+      parametros: [
+        ["Cód. corto · Cód. largo", "cod_corto · cod_largo"],
+        ["Descripción", "descripcion (o nombre_sencillo con «Etiquetas genéricas»)"],
+        ["Rubro · Familia", "rubro · familia"],
+        ["En stock", "stock > 0"],
+        ["Solo con imagen", "existe un archivo cuyo nombre = cod_corto"],
+        ["Etiquetas genéricas", "clasificacion = 'Generica' en rubros de etiquetas"],
+      ],
+      bloques: [
+        { titulo: "Listado (tres vistas)", origen: "bd_maestro_insumos + bd_stock_x_sucursales", campos: [
+          ["Cód. corto", "cod_corto"], ["Cód. largo", "cod_largo"],
+          ["Descripción", "descripcion · nombre_sencillo"],
+          ["Rubro", "rubro"],
+          ["Stock", "SUM(bd_stock_x_sucursales.existencias_fisicas)"],
+          ["Miniatura", "R2: archivo con nombre = cod_corto"],
+        ]},
+        { titulo: "Detalle y visor", origen: "bd_maestro_insumos + R2", campos: [
+          ["Título", "cod_corto + descripcion"],
+          ["Cód. largo · Rubro · Stock", "cod_largo · rubro · stock"],
+          ["Imagen", "R2, servida por la app (/api/r2/imagen)"],
+        ]},
+      ],
+      notas: [
+        "El stock se suma por cod_corto ANTES de unir al maestro: la tabla tiene una fila por sucursal.",
+        "Las imágenes no tienen URL pública: las sirve el servidor, así quedan detrás del login.",
+      ],
+    },
+  };
+
+  const MAP_TIPOS = { funcion: "Función", vista: "Vista", tabla: "Tabla", bucket: "Bucket", escritura: "Escritura" };
+
+  function mapRender() {
+    const activa = document.querySelector(".tab.active");
+    const clave  = activa ? activa.dataset.tab : null;
+    const m      = clave && MAPEO[clave];
+    const cuerpo = document.getElementById("map-cuerpo");
+    document.getElementById("map-titulo").textContent = m ? m.titulo : (activa ? activa.textContent.trim() : "—");
+
+    if (!m) {
+      cuerpo.innerHTML = `<div class="empty" style="padding:30px 10px">Todavía no hay mapeo cargado para esta pestaña.</div>`;
+      return;
+    }
+
+    const filas = pares => `<table class="map-tabla">${pares.map(([a, b]) =>
+      `<tr><td>${nsEsc(a)}</td><td>${nsEsc(b)}</td></tr>`).join("")}</table>`;
+
+    let html = `<div class="map-seccion">Fuentes de datos</div>` +
+      m.fuentes.map(([tipo, nombre, uso]) => `
+        <div class="map-fuente">
+          <span class="map-tipo ${tipo}">${MAP_TIPOS[tipo] || tipo}</span>
+          <span><span class="map-nombre">${nsEsc(nombre)}</span>
+          <span class="map-uso"> — ${nsEsc(uso)}</span></span>
+        </div>`).join("");
+
+    if (m.parametros && m.parametros.length) {
+      html += `<div class="map-seccion">Filtros y parámetros</div>
+        <div class="map-bloque">${filas(m.parametros)}</div>`;
+    }
+
+    html += `<div class="map-seccion">Qué columna alimenta cada campo</div>` +
+      m.bloques.map(b => `
+        <div class="map-bloque">
+          <div class="map-bloque-cab">${nsEsc(b.titulo)} <span>${nsEsc(b.origen)}</span></div>
+          ${filas(b.campos)}
+        </div>`).join("");
+
+    if (m.notas && m.notas.length) {
+      html += `<div class="map-seccion">A tener en cuenta</div>` +
+        m.notas.map(n => `<div class="map-nota">${nsEsc(n)}</div>`).join("");
+    }
+    cuerpo.innerHTML = html;
+    cuerpo.scrollTop = 0;
+  }
+
+  function mapAbrir()  { mapRender(); document.getElementById("map-fondo").hidden = false; }
+  function mapCerrar() { document.getElementById("map-fondo").hidden = true; }
+
+  document.getElementById("map-btn").addEventListener("click", mapAbrir);
+  document.getElementById("map-cerrar").addEventListener("click", mapCerrar);
+  document.getElementById("map-fondo").addEventListener("click", e => {
+    if (e.target.id === "map-fondo") mapCerrar();   // clic afuera del panel
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !document.getElementById("map-fondo").hidden) mapCerrar();
+  });
 
   // ── Tabs ──
   document.querySelectorAll(".tab").forEach(tab => {

@@ -93,6 +93,27 @@ se aplica cuando el usuario refresca, sin necesidad de volver a entrar.
 Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`.
 `ADMIN_USER`/`ADMIN_PASS` solo se usan la primera vez, cuando `app_users` está vacía.
 
+## Mapeo y Dependencias — mantenerlo SIEMPRE al día
+
+El botón ⓘ junto a "Cerrar sesión" abre un panel que muestra, para la pestaña
+activa, de qué tablas, vistas y funciones sale y qué columna alimenta cada
+campo. Los datos viven en el objeto **`MAPEO`** de `public/index.html` (una
+entrada por `data-tab`).
+
+**Regla fija pedida por el usuario: cada cambio en una pestaña actualiza su
+entrada en `MAPEO` en el mismo commit.** Columna nueva, columna quitada, otra
+tabla, otro filtro, otro parámetro: si cambia lo que la pestaña lee de la
+base, cambia el mapeo. Una pestaña nueva lleva su entrada desde el primer
+commit. Si no se hace, el panel empieza a mentir y es peor que no tenerlo.
+
+El mapeo se escribe **leyendo el código**, no de memoria: el SQL de
+`server.js` y el render de la pestaña. Ojo con las consultas `SELECT *`
+(Avance, Cobertura): ahí las columnas reales son las que usa el render.
+
+Para verificarlo, contrastar cada identificador del `MAPEO` contra el código
+**excluyendo el propio bloque del mapeo** (si no, se encuentra a sí mismo y la
+prueba no prueba nada).
+
 ## Catálogo de imágenes (Cloudflare R2)
 
 La pestaña Catálogo no usa PostgreSQL: lee un bucket de **Cloudflare R2**, que
