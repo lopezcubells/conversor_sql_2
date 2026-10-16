@@ -634,6 +634,31 @@ app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Ranking de rubros por costo obsoleto. Misma foto que los otros dos rankings
+// (última fecha y el filtro de rubros), pero agregada: cada fila es un rubro.
+app.get("/api/pg/inmovilizados/top-rubros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const result = await pgPool.query(
+      `SELECT rubro,
+              SUM(obsoleto)       AS obsoleto,
+              SUM(costo_obsoleto) AS costo_obsoleto
+       FROM view_avance_inmovilizados
+       WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+       ${and}
+       GROUP BY rubro
+       ORDER BY SUM(costo_obsoleto) DESC NULLS LAST
+       LIMIT 10`,
+      params
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Consumo histórico ──
 
 // Comparación tolerante para los filtros de valor exacto. El valor elegido sale

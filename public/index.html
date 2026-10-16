@@ -1286,7 +1286,7 @@
   <!-- Renglón 2: los dos rankings lado a lado -->
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">
 
-    <div class="card" style="flex:1;min-width:320px;padding:0;overflow:hidden">
+    <div class="card" style="flex:1;min-width:300px;padding:0;overflow:hidden">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div class="card-title" style="margin-bottom:0">Top 10 Artículos Obsoletos</div>
         <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:2px 10px">por cantidad</span>
@@ -1296,12 +1296,22 @@
       </div>
     </div>
 
-    <div class="card" style="flex:1;min-width:320px;padding:0;overflow:hidden">
+    <div class="card" style="flex:1;min-width:300px;padding:0;overflow:hidden">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div class="card-title" style="margin-bottom:0">Top 10 Artículos Obsoletos</div>
         <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:2px 10px">por costo</span>
       </div>
       <div id="inm-top10-costo-wrap">
+        <div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;min-width:300px;padding:0;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="card-title" style="margin-bottom:0">Top 10 Rubros Obsoletos</div>
+        <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:2px 10px">por costo</span>
+      </div>
+      <div id="inm-top10-rubros-wrap">
         <div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>
       </div>
     </div>
@@ -2329,7 +2339,7 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico de evolución y los dos Top 10 de obsoletos"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución y los tres Top 10 de obsoletos"],
       ],
       parametros: [
         ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
@@ -2351,9 +2361,15 @@
           ["Valor principal (costo)", "costo_obsoleto"],
           ["Valor secundario (cantidad)", "obsoleto"],
         ]},
+        { titulo: "Top 10 rubros obsoletos · por costo", origen: "view_avance_inmovilizados, última fecha · GROUP BY rubro", campos: [
+          ["Rubro", "rubro"],
+          ["Valor principal (costo)", "SUM(costo_obsoleto)"],
+          ["Valor secundario (cantidad)", "SUM(obsoleto)"],
+        ]},
       ],
       notas: [
-        "Los dos Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
+        "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
+        "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
         "El gráfico no muestra etiquetas de datos: los valores están en el tooltip.",
       ],
     },
@@ -3584,6 +3600,7 @@
   let inmRubrosLoaded = false;
   let inmTopCantidad  = [];
   let inmTopCosto     = [];
+  let inmTopRubros    = [];
 
   document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
     document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
@@ -3662,9 +3679,23 @@
           `<div class="empty" style="padding:40px 0"><div class="big">⚠</div>${nsEsc(e.message)}</div>`;
       }
     };
+    const pedirRubros = async () => {
+      const wrapId = "inm-top10-rubros-wrap";
+      try {
+        const res = await fetch(`${API}/api/pg/inmovilizados/top-rubros?${params}`);
+        if (!res.ok) throw new Error((await res.json()).error);
+        const { rows } = await res.json();
+        inmTopRubros = rows;
+        inmRenderTop10(wrapId, rows, "costo", true);
+      } catch (e) {
+        document.getElementById(wrapId).innerHTML =
+          `<div class="empty" style="padding:40px 0"><div class="big">⚠</div>${nsEsc(e.message)}</div>`;
+      }
+    };
     await Promise.all([
       pedirTop("cantidad", "inm-top10-wrap"),
       pedirTop("costo",    "inm-top10-costo-wrap"),
+      pedirRubros(),
     ]);
   }
 
@@ -3745,7 +3776,8 @@
   // Un mismo dibujo para los dos rankings. En "cantidad" el número grande son
   // las unidades y abajo el costo; en "costo", al revés. La barra se mide con
   // el valor principal, que es el que ordena.
-  function inmRenderTop10(wrapId, rows, criterio) {
+  // porRubro: cada fila es un rubro agregado, no un artículo; no lleva código.
+  function inmRenderTop10(wrapId, rows, criterio, porRubro) {
     const wrap = document.getElementById(wrapId);
     const top  = (rows || []).slice(0, 10);
     if (!top.length) {
@@ -3764,6 +3796,9 @@
       const chico   = porCosto ? `${Math.round(obs).toLocaleString("es-AR")} u.` : `$ ${Math.round(costo).toLocaleString("es-AR")}`;
       const badge   = BADGE[i] ?? "#4f8ef7";
       const isLast  = i === top.length - 1;
+      // Un rubro nulo en la vista se agrupa igual: se muestra, porque esconderlo
+      // escondería ese costo.
+      const nombre  = porRubro ? (r.rubro || "(sin rubro)") : (r.descripcion || "—");
       return `
       <div style="display:flex;align-items:center;gap:14px;padding:11px 18px;
                   ${isLast ? "" : "border-bottom:1px solid var(--border)"}">
@@ -3773,8 +3808,8 @@
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;color:var(--text);
                       overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-               title="${(r.descripcion ?? "").replace(/"/g,"&quot;")}">${r.descripcion ?? "—"}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">COD ${r.cod_corto ?? ""}</div>
+               title="${nsEsc(nombre)}">${nsEsc(nombre)}</div>
+          ${porRubro ? "" : `<div style="font-size:11px;color:var(--muted);margin-top:1px">COD ${nsEsc(r.cod_corto)}</div>`}
           <div style="margin-top:6px;height:4px;border-radius:2px;background:var(--border)">
             <div style="width:${pct}%;height:100%;border-radius:2px;
                         background:${badge};transition:width .4s"></div>
