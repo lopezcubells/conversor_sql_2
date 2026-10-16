@@ -57,6 +57,9 @@ const RUTA_PESTANA = [
   ["/api/pg/consumo-historico", "consumo-historico"],
   ["/api/pg/maestro-insumos",   "catalogo"],
   ["/api/pg/bom",               "bom"],
+  // La miniatura por código la usan dos pestañas. Va ANTES de la regla general
+  // de /api/r2, porque gana la primera que coincide.
+  ["/api/r2/imagen-codigo",     ["catalogo", "inmovilizados"]],
   ["/api/r2",                   "catalogo"],
 ];
 
@@ -241,7 +244,9 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   const regla = RUTA_PESTANA.find(([prefijo]) => req.path.startsWith(prefijo));
   if (!regla) return next();
-  if (puedeVer(req.session.user, regla[1])) return next();
+  // Una ruta puede servir a varias pestañas: alcanza con poder ver una
+  const pestanas = [].concat(regla[1]);
+  if (pestanas.some(p => puedeVer(req.session.user, p))) return next();
   res.status(403).json({ error: "No tenés acceso a esta sección." });
 });
 
@@ -670,19 +675,26 @@ app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
                  : req.query.rubros ? [req.query.rubros] : [];
     const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
     const params = rubros.length ? [rubros] : [];
-    const result = await pgPool.query(
-      `SELECT cod_corto,
-              MAX(descripcion)    AS descripcion,
-              SUM(costo_obsoleto) AS costo_obsoleto
-       FROM view_avance_inmovilizados
-       WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
-       ${and}
-       GROUP BY cod_corto
-       HAVING SUM(costo_obsoleto) > 0
-       ORDER BY SUM(costo_obsoleto) DESC`,
-      params
-    );
-    res.json({ rows: result.rows });
+    // El costo unitario es del artículo, no se suma: si la vista lo trajera
+    // repetido, MAX toma ese mismo valor. El stock (obsoleto) sí se suma.
+    const [result, ultima] = await Promise.all([
+      pgPool.query(
+        `SELECT cod_corto,
+                MAX(descripcion)    AS descripcion,
+                SUM(costo_obsoleto) AS costo_obsoleto,
+                MAX(costo_unitario) AS costo_unitario,
+                SUM(obsoleto)       AS obsoleto
+         FROM view_avance_inmovilizados
+         WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+         ${and}
+         GROUP BY cod_corto
+         HAVING SUM(costo_obsoleto) > 0
+         ORDER BY SUM(costo_obsoleto) DESC`,
+        params
+      ),
+      pgPool.query("SELECT MAX(fecha) AS fecha FROM view_avance_inmovilizados"),
+    ]);
+    res.json({ rows: result.rows, fecha: ultima.rows[0] ? ultima.rows[0].fecha : null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1161,35 +1173,60 @@ const catTipo = key => CAT_EXT[(String(key).match(/\.[^.]+$/) || [""])[0].toLowe
 
 // Listar el bucket entero cuesta una vuelta por cada 1000 objetos, así que se
 // cachea un rato. El botón Actualizar de la pestaña fuerza el refresco.
-let catCache = { ts: 0, items: [] };
+let catCache = { ts: 0, items: [], porCodigo: new Map() };
 const CAT_TTL_MS = 10 * 60 * 1000;
+
+// Mismo criterio que el Catálogo en el navegador: nombre de archivo sin
+// extensión = cod_corto, sin espacios ni mayúsculas.
+const r2CodigoDe = key => String(key).split("/").pop().replace(/\.[^.]+$/, "").trim().toUpperCase();
+
+// Listado del bucket con caché. Lo usan el Catálogo y la miniatura por código.
+async function r2Listar(refrescar) {
+  if (!refrescar && catCache.items.length && Date.now() - catCache.ts < CAT_TTL_MS)
+    return { items: catCache.items, cacheado: true };
+
+  const items = [];
+  let token = undefined;
+  do {
+    const out = await r2Client.send(new ListObjectsV2Command({
+      Bucket: R2_BUCKET, ContinuationToken: token, MaxKeys: 1000,
+    }));
+    (out.Contents || []).forEach(o => {
+      if (!o.Key || o.Key.endsWith("/")) return;   // las "carpetas" no son archivos
+      if (!catTipo(o.Key)) return;                 // solo imágenes
+      items.push({ key: o.Key, tamano: o.Size, modificado: o.LastModified });
+    });
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (token && items.length < 20000);
+
+  items.sort((a, b) => a.key.localeCompare(b.key, "es"));
+  // Índice por código para no recorrer la lista en cada miniatura. Si hubiera
+  // dos archivos con el mismo código, gana el primero en orden alfabético.
+  const porCodigo = new Map();
+  items.forEach(it => { const c = r2CodigoDe(it.key); if (c && !porCodigo.has(c)) porCodigo.set(c, it.key); });
+  catCache = { ts: Date.now(), items, porCodigo };
+  return { items, cacheado: false };
+}
+
+// Manda los bytes de una imagen del bucket, con caché privada en el navegador
+async function r2Servir(res, key) {
+  const tipo = catTipo(key);
+  if (!tipo) return res.status(400).json({ error: "El archivo no es una imagen." });
+  const out = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+  res.setHeader("Content-Type", tipo);
+  if (out.ContentLength) res.setHeader("Content-Length", String(out.ContentLength));
+  // Privado: la imagen queda en el navegador del usuario, no en proxies
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  out.Body.pipe(res);
+}
 
 app.get("/api/r2/catalogo", async (req, res) => {
   if (!r2Client) return res.status(503).json({
     error: "R2 no configurado. Faltan las variables R2_ACCOUNT_ID, R2_ACCESS_KEY_ID y R2_SECRET_ACCESS_KEY.",
   });
   try {
-    const refrescar = req.query.refresh === "1";
-    if (!refrescar && catCache.items.length && Date.now() - catCache.ts < CAT_TTL_MS)
-      return res.json({ archivos: catCache.items, bucket: R2_BUCKET, cacheado: true });
-
-    const items = [];
-    let token = undefined;
-    do {
-      const out = await r2Client.send(new ListObjectsV2Command({
-        Bucket: R2_BUCKET, ContinuationToken: token, MaxKeys: 1000,
-      }));
-      (out.Contents || []).forEach(o => {
-        if (!o.Key || o.Key.endsWith("/")) return;   // las "carpetas" no son archivos
-        if (!catTipo(o.Key)) return;                 // solo imágenes
-        items.push({ key: o.Key, tamano: o.Size, modificado: o.LastModified });
-      });
-      token = out.IsTruncated ? out.NextContinuationToken : undefined;
-    } while (token && items.length < 20000);
-
-    items.sort((a, b) => a.key.localeCompare(b.key, "es"));
-    catCache = { ts: Date.now(), items };
-    res.json({ archivos: items, bucket: R2_BUCKET, cacheado: false });
+    const { items, cacheado } = await r2Listar(req.query.refresh === "1");
+    res.json({ archivos: items, bucket: R2_BUCKET, cacheado });
   } catch (e) {
     console.error("R2 catalogo error:", e.message);
     res.status(500).json({ error: e.message });
@@ -1203,18 +1240,29 @@ app.get("/api/r2/imagen", async (req, res) => {
   try {
     const key = String(req.query.key || "");
     if (!key) return res.status(400).json({ error: "Falta la clave del archivo." });
-    const tipo = catTipo(key);
-    if (!tipo) return res.status(400).json({ error: "El archivo no es una imagen." });
-
-    const out = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-    res.setHeader("Content-Type", tipo);
-    if (out.ContentLength) res.setHeader("Content-Length", String(out.ContentLength));
-    // Privado: la imagen queda en el navegador del usuario, no en proxies
-    res.setHeader("Cache-Control", "private, max-age=86400");
-    out.Body.pipe(res);
+    await r2Servir(res, key);
   } catch (e) {
     const code = (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) ? 404 : 500;
     if (code === 500) console.error("R2 imagen error:", e.message);
+    res.status(code).json({ error: code === 404 ? "No se encontró la imagen." : e.message });
+  }
+});
+
+// Miniatura a partir del código: la busca en el listado cacheado. Evita que
+// otra pestaña tenga que bajarse el listado entero del bucket para armar el
+// vínculo código → archivo, como hace el Catálogo.
+app.get("/api/r2/imagen-codigo", async (req, res) => {
+  if (!r2Client) return res.status(503).json({ error: "R2 no configurado." });
+  try {
+    const cod = String(req.query.cod || "").trim().toUpperCase();
+    if (!cod) return res.status(400).json({ error: "Falta el código." });
+    await r2Listar(false);
+    const key = catCache.porCodigo.get(cod);
+    if (!key) return res.status(404).json({ error: "Sin imagen para ese código." });
+    await r2Servir(res, key);
+  } catch (e) {
+    const code = (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) ? 404 : 500;
+    if (code === 500) console.error("R2 imagen-codigo error:", e.message);
     res.status(code).json({ error: code === 404 ? "No se encontró la imagen." : e.message });
   }
 });

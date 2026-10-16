@@ -534,6 +534,28 @@
     .inm-abc-num    { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
     .inm-abc-num small { font-size: 12px; font-weight: 600; color: var(--muted); font-family: var(--sans); }
     .inm-abc-pie    { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    /* Tooltip propio del Pareto: el de Chart.js se dibuja en el canvas y no
+       puede mostrar una imagen. Va fijo a la ventana porque el gráfico scrollea. */
+    .inm-tip {
+      position: fixed; z-index: 300; pointer-events: none; opacity: 0;
+      display: flex; gap: 12px; align-items: flex-start;
+      max-width: 380px; padding: 10px 12px;
+      background: rgba(10,12,18,.96); color: #e2e4ef;
+      border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.45);
+      font-size: 12px; line-height: 1.5;
+      transition: opacity .08s;
+    }
+    .inm-tip-img, .inm-tip-sin {
+      width: 64px; height: 64px; flex: 0 0 64px; border-radius: 6px;
+      background: #14161f; border: 1px solid var(--border);
+    }
+    .inm-tip-img { object-fit: contain; display: block; }
+    .inm-tip-sin { display: grid; place-items: center; font-size: 18px; color: var(--muted); border-style: dashed; }
+    .inm-tip-titulo { font-weight: 700; margin-bottom: 3px; }
+    .inm-tip-fila { display: flex; justify-content: space-between; gap: 16px; }
+    .inm-tip-fila span:first-child { color: #9aa0b8; }
+    .inm-tip-fila span:last-child  { font-family: var(--mono); }
 
     /* ── Mapeo y Dependencias ── */
     .map-btn {
@@ -2374,6 +2396,7 @@
       titulo: "Inmovilizados",
       fuentes: [
         ["vista", "view_avance_inmovilizados", "Gráfico de evolución, los tres Top 10 y el Pareto de costo obsoleto"],
+        ["bucket", "Cloudflare R2 · imagenes-insumos", "Miniatura del tooltip del Pareto: nombre de archivo sin extensión = cod_corto"],
       ],
       parametros: [
         ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
@@ -2405,6 +2428,9 @@
           ["Barras", "SUM(costo_obsoleto)"],
           ["Línea de % acumulado", "acumulado de costo_obsoleto / total"],
           ["Color y tarjetas A / B / C", "clase según el acumulado: A hasta 80 %, B hasta 95 %, C el resto"],
+          ["Tooltip · Costo unitario", "MAX(costo_unitario)"],
+          ["Tooltip · Stock al (fecha)", "SUM(obsoleto) · la fecha es MAX(fecha)"],
+          ["Tooltip · Miniatura", "R2: archivo con nombre = cod_corto"],
         ]},
       ],
       notas: [
@@ -3644,6 +3670,8 @@
   let inmTopRubros    = [];
   let inmParetoData   = [];
   let inmParetoChart  = null;
+  let inmParetoFilas  = [];     // filas ya clasificadas, para el tooltip
+  let inmParetoFecha  = null;   // fecha más reciente de la vista
 
   document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
     document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
@@ -3757,8 +3785,9 @@
     try {
       const res = await fetch(`${API}/api/pg/inmovilizados/pareto?${params}`);
       if (!res.ok) throw new Error((await res.json()).error);
-      const { rows } = await res.json();
-      inmParetoData = rows;
+      const { rows, fecha } = await res.json();
+      inmParetoData  = rows;
+      inmParetoFecha = fecha;
       inmRenderPareto();
     } catch (e) {
       info.textContent = "⚠ " + e.message;
@@ -3805,6 +3834,7 @@
     }
 
     const filas = inmClasificar(inmParetoData);
+    inmParetoFilas = filas;
     const total = filas.reduce((a, r) => a + r.costo, 0);
 
     // El ancho de un canvas tiene un tope (~32.000 px reales). Con muchos
@@ -3917,17 +3947,7 @@
         plugins: {
           legend: { position: "top", labels: { color: "#e2e4ef", boxWidth: 14, padding: 16 } },
           datalabels: { display: false },
-          tooltip: {
-            callbacks: {
-              title: items => {
-                const r = filas[items[0].dataIndex];
-                return `${r.cod_corto} - ${r.descripcion ?? ""}  (clase ${r.clase})`;
-              },
-              label: ctx => ctx.dataset.yAxisID === "y1"
-                ? ` % acumulado: ${ctx.parsed.y.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`
-                : ` Costo obsoleto: $ ${Math.round(ctx.parsed.y).toLocaleString("es-AR")}`,
-            },
-          },
+          tooltip: { enabled: false, external: inmTooltipPareto },
         },
         scales: {
           x: {
@@ -3951,6 +3971,68 @@
     });
 
     inmRenderAbc(filas, total);
+  }
+
+  function inmFechaCorta(v) {
+    if (!v) return "";
+    const d = String(v).slice(0, 10).split("-");
+    return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(v);
+  }
+
+  // Tooltip en HTML para poder mostrar la miniatura. Se arma de nuevo solo
+  // cuando cambia el artículo: si no, la imagen se volvería a pedir con cada
+  // movimiento del mouse.
+  function inmTooltipPareto({ chart, tooltip }) {
+    let el = document.getElementById("inm-pareto-tip");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "inm-pareto-tip";
+      el.className = "inm-tip";
+      document.body.appendChild(el);
+    }
+    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
+      el.style.opacity = 0;
+      return;
+    }
+
+    const i = tooltip.dataPoints[0].dataIndex;
+    const r = inmParetoFilas[i];
+    if (!r) { el.style.opacity = 0; return; }
+
+    if (el.dataset.i !== String(i)) {
+      el.dataset.i = String(i);
+      const pesos = (v, dec) => "$ " + (parseFloat(v) || 0).toLocaleString("es-AR", { maximumFractionDigits: dec });
+      const fila  = (k, v) => `<div class="inm-tip-fila"><span>${k}</span><span>${v}</span></div>`;
+      const fecha = inmFechaCorta(inmParetoFecha);
+      el.innerHTML = `
+        <img class="inm-tip-img" alt="" src="${API}/api/r2/imagen-codigo?cod=${encodeURIComponent(r.cod_corto)}">
+        <div style="min-width:0">
+          <div class="inm-tip-titulo">${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)} <span style="color:${INM_ABC_COLOR[r.clase]}">(clase ${r.clase})</span></div>
+          ${fila("% acumulado", r.acumulado.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " %")}
+          ${fila("Costo obsoleto", pesos(r.costo, 0))}
+          ${fila("Costo unitario", r.costo_unitario != null ? pesos(r.costo_unitario, 2) : "—")}
+          ${fila(fecha ? `Stock al ${fecha}` : "Stock", r.obsoleto != null ? Math.round(parseFloat(r.obsoleto) || 0).toLocaleString("es-AR") : "—")}
+        </div>`;
+      // Sin imagen (o sin permiso, o R2 sin configurar) queda un recuadro vacío
+      // del mismo tamaño, para que el tooltip no cambie de forma al pasar.
+      el.querySelector("img").addEventListener("error", e => {
+        const sin = document.createElement("div");
+        sin.className = "inm-tip-sin";
+        sin.textContent = "📷";
+        e.target.replaceWith(sin);
+      });
+    }
+
+    // Junto al punto, del lado que tenga lugar, sin salirse de la ventana
+    const c = chart.canvas.getBoundingClientRect();
+    const px = c.left + tooltip.caretX, py = c.top + tooltip.caretY;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let x = px + 16;
+    if (x + w > window.innerWidth - 8) x = px - w - 16;
+    const y = Math.max(8, Math.min(py - h / 2, window.innerHeight - h - 8));
+    el.style.left = Math.max(8, x) + "px";
+    el.style.top  = y + "px";
+    el.style.opacity = 1;
   }
 
   function inmRenderAbc(filas, total) {

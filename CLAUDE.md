@@ -85,7 +85,10 @@ El permiso vive en dos lugares y los dos hacen falta:
 - **Servidor**: el middleware que mapea `RUTA_PESTANA` responde 403 a los datos
   de una pestaña restringida. Esconder la solapa es cosmético; esto es el
   permiso real. **Al agregar una pestaña con endpoints propios, sumarla a
-  `PESTANAS` y a `RUTA_PESTANA`.**
+  `PESTANAS` y a `RUTA_PESTANA`.** Una ruta puede servir a varias pestañas
+  (array): alcanza con poder ver una. Gana la primera regla que coincide por
+  prefijo, así que las específicas van antes que las generales — por ejemplo
+  `/api/r2/imagen-codigo` (Catálogo e Inmovilizados) antes que `/api/r2`.
 
 `/api/me` relee los permisos de la base en cada carga, así un cambio del admin
 se aplica cuando el usuario refresca, sin necesidad de volver a entrar.
