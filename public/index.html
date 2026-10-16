@@ -535,11 +535,15 @@
     .inm-pareto-marco  { position: relative; }
     .inm-pareto-scroll { overflow-x: auto; overflow-y: hidden; }
     .inm-pareto-eje    { position: absolute; top: 0; pointer-events: none; }
-    .inm-abc-fila { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    /* Renglón 3: las tarjetas A/B/C van en la columna del 30 %, una abajo de
+       la otra (usa el mismo armado 70/30 que el renglón 1, .inm-fila1) */
+    .inm-abc-fila { flex: 3 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
     .inm-abc {
-      flex: 1 1 220px; border: 1px solid var(--border); border-radius: 8px;
-      padding: 12px 14px; border-left-width: 4px;
+      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 18px; border-left-width: 4px;
     }
+    @media (max-width: 1000px) { .inm-abc-fila { flex: none; } }
     .inm-abc-titulo { font-size: 13px; font-weight: 700; }
     .inm-abc-num    { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
     .inm-abc-num small { font-size: 12px; font-weight: 600; color: var(--muted); font-family: var(--sans); }
@@ -1386,20 +1390,22 @@
 
   </div>
 
-  <!-- Renglón 3: Pareto de costo obsoleto -->
-  <div class="card">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-      <div class="card-title" style="margin-bottom:0">Pareto de costo obsoleto</div>
-      <span id="inm-pareto-info" style="font-size:12px;color:var(--muted)"></span>
-    </div>
-    <div class="inm-pareto-marco" id="inm-pareto-marco">
-      <div class="inm-pareto-scroll" id="inm-pareto-scroll">
-        <div id="inm-pareto-lienzo" style="position:relative;height:430px">
-          <canvas id="inm-pareto"></canvas>
-        </div>
+  <!-- Renglón 3: Pareto de costo obsoleto (70 %) y tarjetas A/B/C (30 %) -->
+  <div class="inm-fila1">
+    <div class="card">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">Pareto de costo obsoleto</div>
+        <span id="inm-pareto-info" style="font-size:12px;color:var(--muted)"></span>
       </div>
-      <canvas class="inm-pareto-eje" id="inm-pareto-eje-izq" style="left:0"></canvas>
-      <canvas class="inm-pareto-eje" id="inm-pareto-eje-der" style="right:0"></canvas>
+      <div class="inm-pareto-marco" id="inm-pareto-marco">
+        <div class="inm-pareto-scroll" id="inm-pareto-scroll">
+          <div id="inm-pareto-lienzo" style="position:relative;height:430px">
+            <canvas id="inm-pareto"></canvas>
+          </div>
+        </div>
+        <canvas class="inm-pareto-eje" id="inm-pareto-eje-izq" style="left:0"></canvas>
+        <canvas class="inm-pareto-eje" id="inm-pareto-eje-der" style="right:0"></canvas>
+      </div>
     </div>
     <div class="inm-abc-fila" id="inm-abc-fila"></div>
   </div>
