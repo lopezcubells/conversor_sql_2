@@ -767,20 +767,43 @@ app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
     const params = rubros.length ? [rubros] : [];
     // El costo unitario es del artículo, no se suma: si la vista lo trajera
     // repetido, MAX toma ese mismo valor. El stock (obsoleto) sí se suma.
+    // "serie" es la evolución del obsoleto en el año en curso (el de la fecha
+    // más reciente), para el gráfico del tooltip: mismo criterio que el Top 5
+    // de agotamiento, una fecha sin el artículo cuenta como 0.
     const [result, ultima] = await Promise.all([
       pgPool.query(
-        `SELECT cod_corto,
-                MAX(descripcion)    AS descripcion,
-                MAX(rubro)          AS rubro,
-                SUM(costo_obsoleto) AS costo_obsoleto,
-                MAX(costo_unitario) AS costo_unitario,
-                SUM(obsoleto)       AS obsoleto
-         FROM view_avance_inmovilizados
-         WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
-         ${and}
-         GROUP BY cod_corto
-         HAVING SUM(costo_obsoleto) > 0
-         ORDER BY SUM(costo_obsoleto) DESC`,
+        `WITH art AS (
+           SELECT cod_corto,
+                  MAX(descripcion)    AS descripcion,
+                  MAX(rubro)          AS rubro,
+                  SUM(costo_obsoleto) AS costo_obsoleto,
+                  MAX(costo_unitario) AS costo_unitario,
+                  SUM(obsoleto)       AS obsoleto
+           FROM view_avance_inmovilizados
+           WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+           ${and}
+           GROUP BY cod_corto
+           HAVING SUM(costo_obsoleto) > 0
+         ),
+         fechas AS (
+           SELECT DISTINCT fecha FROM view_avance_inmovilizados
+           WHERE date_trunc('year', fecha) =
+                 date_trunc('year', (SELECT MAX(fecha) FROM view_avance_inmovilizados))
+         ),
+         hist AS (
+           SELECT h.cod_corto, h.fecha, SUM(h.obsoleto) AS obsoleto
+           FROM view_avance_inmovilizados h
+           WHERE h.fecha IN (SELECT fecha FROM fechas)
+             AND h.cod_corto IN (SELECT cod_corto FROM art)
+           GROUP BY h.cod_corto, h.fecha
+         )
+         SELECT a.*,
+                (SELECT json_agg(json_build_object('fecha', f.fecha, 'obsoleto', COALESCE(h.obsoleto, 0))
+                                 ORDER BY f.fecha)
+                 FROM fechas f
+                 LEFT JOIN hist h ON h.fecha = f.fecha AND h.cod_corto = a.cod_corto) AS serie
+         FROM art a
+         ORDER BY a.costo_obsoleto DESC`,
         params
       ),
       pgPool.query("SELECT MAX(fecha) AS fecha FROM view_avance_inmovilizados"),

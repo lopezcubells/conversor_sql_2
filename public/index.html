@@ -590,6 +590,8 @@
     .inm-tip-rubro  { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.3; margin-bottom: 2px; }
     .inm-tip-titulo { font-weight: 700; margin-bottom: 3px; }
     .inm-tip-fila { display: flex; justify-content: space-between; gap: 16px; }
+    .inm-tip-graf { position: relative; width: 260px; height: 80px; margin-top: 8px; }
+    .inm-tip-graf-titulo { font-size: 11px; color: #9aa0b8; margin-top: 8px; }
     .inm-tip-fila span:first-child { color: #9aa0b8; }
     .inm-tip-fila span:last-child  { font-family: var(--mono); }
 
@@ -2503,6 +2505,7 @@
           ["Tooltip · Costo unitario", "MAX(costo_unitario)"],
           ["Tooltip · Stock al (fecha)", "SUM(obsoleto) · la fecha es MAX(fecha)"],
           ["Tooltip · Miniatura", "R2: archivo con nombre = cod_corto"],
+          ["Tooltip · Gráfico evolución", "SUM(obsoleto) por fecha del año en curso (año de MAX(fecha)); fecha sin el artículo = 0"],
         ]},
         { titulo: "TOP 5 agotamiento de obsoletos", origen: "view_avance_inmovilizados, primer y último reporte del año en curso · GROUP BY cod_corto, fecha", campos: [
           ["Orden", "importe agotado, de mayor a menor (LIMIT 5)"],
@@ -3755,6 +3758,7 @@
   let inmParetoChart  = null;
   let inmParetoFilas  = [];     // filas ya clasificadas, para el tooltip
   let inmParetoFecha  = null;   // fecha más reciente de la vista
+  let inmTipChart     = null;   // gráfico mini dentro del tooltip del Pareto
 
   document.getElementById("inm-rubro-toggle").addEventListener("click", () => {
     document.getElementById("inm-rubro-toggle").classList.toggle("collapsed");
@@ -3940,41 +3944,50 @@
     }));
 
     rows.forEach((r, i) => {
-      const serie  = Array.isArray(r.serie) ? r.serie : [];
-      const datos  = serie.map(p => parseFloat(p.obsoleto) || 0);
-      const labels = serie.map(p => inmFechaCorta(p.fecha));
-      const min = Math.min(...datos), max = Math.max(...datos);
-      inmAgotCharts.push(new Chart(document.getElementById(`inm-agot-graf-${i}`).getContext("2d"), {
-        type: "line",
-        data: { labels, datasets: [{
-          data: datos, borderColor: "#34c97e", backgroundColor: "rgba(52,201,126,.12)",
-          fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.25,
-        }] },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: false,
-          interaction: { mode: "index", intersect: false },
-          layout: { padding: { top: 4, right: 6 } },
-          plugins: {
-            legend: { display: false },
-            datalabels: { display: false },
-            tooltip: { displayColors: false, callbacks: { label: c => "Obsoleto: " + num(c.parsed.y) } },
+      inmAgotCharts.push(inmGraficoMini(document.getElementById(`inm-agot-graf-${i}`), r.serie, true));
+    });
+  }
+
+  // Gráfico de línea minimalista de la evolución del obsoleto en el año: solo
+  // la primera y la última fecha, y el valor mínimo y el máximo. Lo usan el
+  // Top 5 de agotamiento y el tooltip del Pareto (ahí sin tooltip propio,
+  // porque el del Pareto no recibe el mouse).
+  function inmGraficoMini(canvas, serie, conTooltip) {
+    serie = Array.isArray(serie) ? serie : [];
+    const num    = v => Math.round(parseFloat(v) || 0).toLocaleString("es-AR");
+    const datos  = serie.map(p => parseFloat(p.obsoleto) || 0);
+    const labels = serie.map(p => inmFechaCorta(p.fecha));
+    const min = datos.length ? Math.min(...datos) : 0, max = datos.length ? Math.max(...datos) : 0;
+    return new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: { labels, datasets: [{
+        data: datos, borderColor: "#34c97e", backgroundColor: "rgba(52,201,126,.12)",
+        fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: conTooltip ? 3 : 0, tension: 0.25,
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        events: conTooltip ? undefined : [],
+        interaction: { mode: "index", intersect: false },
+        layout: { padding: { top: 4, right: 6 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: false },
+          tooltip: { enabled: !!conTooltip, displayColors: false, callbacks: { label: c => "Obsoleto: " + num(c.parsed.y) } },
+        },
+        scales: {
+          x: {
+            grid: { display: false }, border: { display: false },
+            ticks: { color: "#7b7f99", font: { size: 10 }, autoSkip: false, maxRotation: 0,
+                     callback: (v, idx) => idx === 0 || idx === labels.length - 1 ? labels[idx] : "" },
           },
-          scales: {
-            // Minimalista: solo la primera y la última fecha, y el valor mínimo y el máximo
-            x: {
-              grid: { display: false }, border: { display: false },
-              ticks: { color: "#7b7f99", font: { size: 10 }, autoSkip: false, maxRotation: 0,
-                       callback: (v, idx) => idx === 0 || idx === labels.length - 1 ? labels[idx] : "" },
-            },
-            y: {
-              min, max: max > min ? max : min + 1,
-              grid: { display: false }, border: { display: false },
-              afterBuildTicks: ax => { ax.ticks = max > min ? [{ value: min }, { value: max }] : [{ value: min }]; },
-              ticks: { color: "#7b7f99", font: { size: 10 }, callback: v => num(v) },
-            },
+          y: {
+            min, max: max > min ? max : min + 1,
+            grid: { display: false }, border: { display: false },
+            afterBuildTicks: ax => { ax.ticks = max > min ? [{ value: min }, { value: max }] : [{ value: min }]; },
+            ticks: { color: "#7b7f99", font: { size: 10 }, callback: v => num(v) },
           },
         },
-      }));
+      },
     });
   }
 
@@ -4230,6 +4243,7 @@
 
     if (el.dataset.i !== String(i)) {
       el.dataset.i = String(i);
+      if (inmTipChart) { inmTipChart.destroy(); inmTipChart = null; }
       const pesos = (v, dec) => "$ " + (parseFloat(v) || 0).toLocaleString("es-AR", { maximumFractionDigits: dec });
       const fila  = (k, v) => `<div class="inm-tip-fila"><span>${k}</span><span>${v}</span></div>`;
       const fecha = inmFechaCorta(inmParetoFecha);
@@ -4254,7 +4268,12 @@
             ${fila("Costo obsoleto", pesos(r.costo, 0))}
             ${fila("Costo unitario", r.costo_unitario != null ? pesos(r.costo_unitario, 2) : "—")}
             ${fila(fecha ? `Stock al ${fecha}` : "Stock", r.obsoleto != null ? Math.round(parseFloat(r.obsoleto) || 0).toLocaleString("es-AR") : "—")}
+            ${Array.isArray(r.serie) && r.serie.length > 1 ? `
+              <div class="inm-tip-graf-titulo">Evolución del obsoleto en el año</div>
+              <div class="inm-tip-graf"><canvas></canvas></div>` : ""}
           </div>`;
+        const lienzoTip = el.querySelector(".inm-tip-graf canvas");
+        if (lienzoTip) inmTipChart = inmGraficoMini(lienzoTip, r.serie, false);
         // Sin imagen (o sin permiso, o R2 sin configurar) queda un recuadro vacío
         // del mismo tamaño, para que el tooltip no cambie de forma al pasar.
         el.querySelector("img").addEventListener("error", e => {
