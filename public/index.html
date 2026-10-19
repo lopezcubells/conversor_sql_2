@@ -533,6 +533,27 @@
       .inm-fila1 > .card, .inm-kpis { flex: none; }
     }
     .inm-pareto-marco  { position: relative; }
+    /* Bloque 4: Top 5 agotamiento de obsoletos */
+    .inm-agot-grilla { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+    @media (max-width: 1300px) { .inm-agot-grilla { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 800px)  { .inm-agot-grilla { grid-template-columns: minmax(0, 1fr); } }
+    .inm-agot {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      border-top: 3px solid #34c97e; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+    }
+    .inm-agot-img, .inm-agot-sin {
+      width: 100%; height: 120px; border-radius: 6px; background: #14161f; border: 1px solid var(--border);
+    }
+    .inm-agot-img { object-fit: contain; display: block; }
+    .inm-agot-sin { display: grid; place-items: center; font-size: 26px; color: var(--muted); border-style: dashed; }
+    .inm-agot-rubro  { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.3; }
+    .inm-agot-nombre { font-size: 12px; color: var(--muted); line-height: 1.35; min-height: 32px;
+                       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .inm-agot-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .inm-agot-kpi  { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+    .inm-agot-kpi span   { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .inm-agot-kpi strong { display: block; font-size: 15px; font-family: var(--mono); color: #34c97e; margin-top: 2px; overflow-wrap: anywhere; }
+    .inm-agot-graf { position: relative; height: 110px; }
     .inm-pareto-scroll { overflow-x: auto; overflow-y: hidden; }
     .inm-pareto-eje    { position: absolute; top: 0; pointer-events: none; }
     /* Renglón 3: las tarjetas A/B/C van en la columna del 30 %, una abajo de
@@ -1409,6 +1430,13 @@
     </div>
     <div class="inm-abc-fila" id="inm-abc-fila"></div>
   </div>
+
+  <!-- Bloque 4: Top 5 agotamiento de obsoletos -->
+  <div class="section-heading">
+    <h2>TOP 5 agotamiento de obsoletos</h2>
+    <span id="inm-agot-info" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <div class="inm-agot-grilla" id="inm-agot-grilla"></div>
 
 </div>
 
@@ -2431,8 +2459,8 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, tarjetas de resumen, los tres Top 10 y el Pareto de costo obsoleto"],
-        ["bucket", "Cloudflare R2 · imagenes-insumos", "Miniatura del tooltip del Pareto: nombre de archivo sin extensión = cod_corto"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, tarjetas de resumen, los tres Top 10, el Pareto y el Top 5 de agotamiento"],
+        ["bucket", "Cloudflare R2 · imagenes-insumos", "Miniatura del tooltip del Pareto y del Top 5 de agotamiento: nombre de archivo sin extensión = cod_corto"],
       ],
       parametros: [
         ["Filtro de rubros", "WHERE rubro = ANY(…) — opciones de SELECT DISTINCT rubro"],
@@ -2476,8 +2504,18 @@
           ["Tooltip · Stock al (fecha)", "SUM(obsoleto) · la fecha es MAX(fecha)"],
           ["Tooltip · Miniatura", "R2: archivo con nombre = cod_corto"],
         ]},
+        { titulo: "TOP 5 agotamiento de obsoletos", origen: "view_avance_inmovilizados, primer y último reporte del año en curso · GROUP BY cod_corto, fecha", campos: [
+          ["Orden", "importe agotado, de mayor a menor (LIMIT 5)"],
+          ["Imagen", "R2: archivo con nombre = cod_corto"],
+          ["Rubro", "MAX(rubro)"],
+          ["Código - Descripción", "cod_corto + \" - \" + MAX(descripcion)"],
+          ["Cantidad agotada", "SUM(obsoleto) primera fecha del año − SUM(obsoleto) última fecha"],
+          ["Importe agotado", "SUM(costo_obsoleto) primera fecha del año − SUM(costo_obsoleto) última fecha"],
+          ["Gráfico (línea)", "SUM(obsoleto) por fecha del año en curso; eje horizontal = fecha"],
+        ]},
       ],
       notas: [
+        "Top 5 agotamiento: el año en curso es el de la fecha más reciente de la vista; compara el primer reporte del año con el último. Un artículo que no figura en una de esas fechas cuenta como 0. Solo entran los que bajaron (importe agotado > 0), y respeta el filtro de rubros.",
         "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
         "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
         "El Pareto solo incluye artículos con costo obsoleto mayor a cero, y respeta el filtro de rubros. La clase de cada artículo se calcula en el navegador con el acumulado de los anteriores: el que cruza el 80 % todavía es A.",
@@ -3814,6 +3852,7 @@
       pedirRubros(),
       inmCargarPareto(params),
       inmCargarResumen(params),
+      inmCargarAgotamiento(params),
     ]);
   }
 
@@ -3850,6 +3889,93 @@
     // Sin stock no hay porcentaje posible: la base devuelve null
     document.getElementById("inm-kpi-pct").textContent = r.pct_obsoleto == null ? "—"
       : (parseFloat(r.pct_obsoleto) || 0).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+  }
+
+  // ── Top 5 agotamiento de obsoletos ──
+
+  let inmAgotCharts = [];
+
+  async function inmCargarAgotamiento(params) {
+    const info = document.getElementById("inm-agot-info");
+    info.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/agotamiento?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { rows } = await res.json();
+      inmRenderAgotamiento(rows);
+    } catch (e) {
+      inmAgotCharts.forEach(c => c.destroy()); inmAgotCharts = [];
+      document.getElementById("inm-agot-grilla").innerHTML = "";
+      info.textContent = "⚠ " + e.message;
+    }
+  }
+
+  function inmRenderAgotamiento(rows) {
+    const grilla = document.getElementById("inm-agot-grilla");
+    const info   = document.getElementById("inm-agot-info");
+    inmAgotCharts.forEach(c => c.destroy()); inmAgotCharts = [];
+    if (!rows.length) {
+      grilla.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:30px 0">Sin artículos con obsoleto agotado en el año</div>`;
+      info.textContent = "";
+      return;
+    }
+    info.textContent = `Del ${inmFechaCorta(rows[0].ini)} al ${inmFechaCorta(rows[0].fin)}`;
+    const num = v => Math.round(parseFloat(v) || 0).toLocaleString("es-AR");
+    grilla.innerHTML = rows.map((r, i) => `
+      <div class="inm-agot">
+        <img class="inm-agot-img" alt="" src="${API}/api/r2/imagen-codigo?cod=${encodeURIComponent(r.cod_corto)}">
+        <div class="inm-agot-rubro">${nsEsc(r.rubro || "(sin rubro)")}</div>
+        <div class="inm-agot-nombre" title="${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)}">${nsEsc(r.cod_corto)} - ${nsEsc(r.descripcion)}</div>
+        <div class="inm-agot-kpis">
+          <div class="inm-agot-kpi"><span>Cantidad agotada</span><strong>${num(r.cantidad_agotada)}</strong></div>
+          <div class="inm-agot-kpi"><span>Importe agotado</span><strong>$ ${num(r.importe_agotado)}</strong></div>
+        </div>
+        <div class="inm-agot-graf"><canvas id="inm-agot-graf-${i}"></canvas></div>
+      </div>`).join("");
+    // Sin imagen (o R2 sin configurar) queda un recuadro del mismo tamaño
+    grilla.querySelectorAll(".inm-agot-img").forEach(img => img.addEventListener("error", () => {
+      const sin = document.createElement("div");
+      sin.className = "inm-agot-sin"; sin.textContent = "📷";
+      img.replaceWith(sin);
+    }));
+
+    rows.forEach((r, i) => {
+      const serie  = Array.isArray(r.serie) ? r.serie : [];
+      const datos  = serie.map(p => parseFloat(p.obsoleto) || 0);
+      const labels = serie.map(p => inmFechaCorta(p.fecha));
+      const min = Math.min(...datos), max = Math.max(...datos);
+      inmAgotCharts.push(new Chart(document.getElementById(`inm-agot-graf-${i}`).getContext("2d"), {
+        type: "line",
+        data: { labels, datasets: [{
+          data: datos, borderColor: "#34c97e", backgroundColor: "rgba(52,201,126,.12)",
+          fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.25,
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: "index", intersect: false },
+          layout: { padding: { top: 4, right: 6 } },
+          plugins: {
+            legend: { display: false },
+            datalabels: { display: false },
+            tooltip: { displayColors: false, callbacks: { label: c => "Obsoleto: " + num(c.parsed.y) } },
+          },
+          scales: {
+            // Minimalista: solo la primera y la última fecha, y el valor mínimo y el máximo
+            x: {
+              grid: { display: false }, border: { display: false },
+              ticks: { color: "#7b7f99", font: { size: 10 }, autoSkip: false, maxRotation: 0,
+                       callback: (v, idx) => idx === 0 || idx === labels.length - 1 ? labels[idx] : "" },
+            },
+            y: {
+              min, max: max > min ? max : min + 1,
+              grid: { display: false }, border: { display: false },
+              afterBuildTicks: ax => { ax.ticks = max > min ? [{ value: min }, { value: max }] : [{ value: min }]; },
+              ticks: { color: "#7b7f99", font: { size: 10 }, callback: v => num(v) },
+            },
+          },
+        },
+      }));
+    });
   }
 
   // ── Pareto de costo obsoleto ──

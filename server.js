@@ -671,6 +671,66 @@ app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
 
 // Ranking de rubros por costo obsoleto. Misma foto que los otros dos rankings
 // (última fecha y el filtro de rubros), pero agregada: cada fila es un rubro.
+// Top 5 de agotamiento: los artículos cuyo costo obsoleto más bajó en el año
+// en curso, entre el primer y el último reporte del año. El año es el de la
+// fecha más reciente de la vista. Un artículo que no figura en una fecha cuenta
+// como 0 en esa fecha (si desapareció de la vista, se agotó del todo).
+app.get("/api/pg/inmovilizados/agotamiento", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND v.rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const result = await pgPool.query(
+      `WITH lim AS (
+         SELECT MIN(fecha) AS ini, MAX(fecha) AS fin
+         FROM view_avance_inmovilizados
+         WHERE date_trunc('year', fecha) =
+               date_trunc('year', (SELECT MAX(fecha) FROM view_avance_inmovilizados))
+       ),
+       fechas AS (
+         SELECT DISTINCT v.fecha FROM view_avance_inmovilizados v, lim
+         WHERE v.fecha BETWEEN lim.ini AND lim.fin
+       ),
+       base AS (
+         SELECT v.cod_corto, v.fecha,
+                MAX(v.descripcion)    AS descripcion,
+                MAX(v.rubro)          AS rubro,
+                SUM(v.obsoleto)       AS obsoleto,
+                SUM(v.costo_obsoleto) AS costo_obsoleto
+         FROM view_avance_inmovilizados v, lim
+         WHERE v.fecha BETWEEN lim.ini AND lim.fin ${and}
+         GROUP BY v.cod_corto, v.fecha
+       ),
+       difs AS (
+         SELECT b.cod_corto,
+                MAX(b.descripcion) AS descripcion,
+                MAX(b.rubro)       AS rubro,
+                COALESCE(SUM(b.obsoleto)       FILTER (WHERE b.fecha = lim.ini), 0)
+              - COALESCE(SUM(b.obsoleto)       FILTER (WHERE b.fecha = lim.fin), 0) AS cantidad_agotada,
+                COALESCE(SUM(b.costo_obsoleto) FILTER (WHERE b.fecha = lim.ini), 0)
+              - COALESCE(SUM(b.costo_obsoleto) FILTER (WHERE b.fecha = lim.fin), 0) AS importe_agotado
+         FROM base b, lim
+         GROUP BY b.cod_corto
+       ),
+       top AS (
+         SELECT * FROM difs WHERE importe_agotado > 0
+         ORDER BY importe_agotado DESC LIMIT 5
+       )
+       SELECT t.*, lim.ini, lim.fin,
+              (SELECT json_agg(json_build_object('fecha', f.fecha, 'obsoleto', COALESCE(b.obsoleto, 0))
+                               ORDER BY f.fecha)
+               FROM fechas f
+               LEFT JOIN base b ON b.fecha = f.fecha AND b.cod_corto = t.cod_corto) AS serie
+       FROM top t, lim
+       ORDER BY t.importe_agotado DESC`,
+      params
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get("/api/pg/inmovilizados/top-rubros", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
