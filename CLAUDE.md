@@ -61,9 +61,10 @@ negocio**, solo la consulta y la presenta.
   **antes** de unir al maestro, si no multiplica las filas)
 - **Tablas propias de la app**: `app_users` (login; se crea sola al arrancar),
   `registro_nivel_servicio` (histórico que se inserta al generar el PDF),
-  `rec_grupos_rubro` (grupo de cada rubro para "Costo de recepciones"; la edita
-  el usuario desde la pestaña, se crea sola al arrancar y es compartida por
-  todos los usuarios)
+  `rec_grupos_rubro` y `rec_grupos_articulo` (grupo de cada rubro y de
+  artículos puntuales para "Costo de recepciones"; la de artículo tiene
+  prioridad. Las edita el usuario desde la pestaña, se crean solas al arrancar
+  y son compartidas por todos los usuarios)
 
 Las dos tablas de referencia pueden traer más de una fila por `cod_corto`. Al
 unirlas hay que deduplicarlas antes (`DISTINCT ON`): un `LEFT JOIN` directo

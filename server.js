@@ -114,9 +114,10 @@ async function initAuth() {
 }
 initAuth();
 
-// Tabla auxiliar de la pestaña Recepciones: a qué grupo pertenece cada rubro.
-// La edita el usuario desde la pestaña; una fila por rubro con grupo asignado
-// (sacarle el grupo a un rubro borra su fila).
+// Tablas auxiliares de la pestaña Recepciones, las edita el usuario:
+//  - rec_grupos_rubro: el grupo de cada rubro (una fila por rubro con grupo).
+//  - rec_grupos_articulo: el grupo de un artículo puntual. Tiene prioridad
+//    sobre la del rubro, para los rubros que mezclan grupos.
 async function initRecGrupos() {
   if (!pgPool) return;
   try {
@@ -127,7 +128,14 @@ async function initRecGrupos() {
         actualizado_en  TIMESTAMPTZ DEFAULT now(),
         actualizado_por TEXT
       )`);
-  } catch (e) { console.error("Error init rec_grupos_rubro:", e.message); }
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS rec_grupos_articulo (
+        cod_corto       TEXT PRIMARY KEY,
+        grupo           TEXT NOT NULL,
+        actualizado_en  TIMESTAMPTZ DEFAULT now(),
+        actualizado_por TEXT
+      )`);
+  } catch (e) { console.error("Error init tablas auxiliares de recepciones:", e.message); }
 }
 initRecGrupos();
 
@@ -399,49 +407,93 @@ app.get("/api/pg/recepciones", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Costo de recepciones: costo por mes y rubro. El grupo de cada rubro lo pone
-// el navegador con la tabla auxiliar, así editarla redibuja el gráfico al
-// instante sin volver a consultar. Los rubros vacíos ya quedan afuera acá.
+// Costo de recepciones: costo por mes, rubro y artículo. El grupo lo pone el
+// navegador con las tablas auxiliares (primero la de artículo, después la de
+// rubro), así guardarlas redibuja el gráfico sin volver a consultar. Los
+// rubros vacíos ya quedan afuera acá.
 app.get("/api/pg/recepciones/costo-mensual", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
     const result = await pgPool.query(
       `SELECT date_trunc('month', fecha_recepcion)::date AS mes,
               btrim(rubro)                               AS rubro,
+              btrim(cod_corto::text)                     AS cod_corto,
               SUM(costo)                                 AS costo
        FROM view_recepciones_2026
        WHERE fecha_recepcion IS NOT NULL
          AND NULLIF(btrim(rubro), '') IS NOT NULL
-       GROUP BY 1, 2
-       ORDER BY 1, 2`
+       GROUP BY 1, 2, 3
+       ORDER BY 1, 2, 3`
     );
     res.json({ rows: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Tabla auxiliar: todos los rubros de bd_articulos_x_rubro (sin duplicados ni
-// vacíos), con el grupo que tengan asignado.
+// Las dos tablas auxiliares:
+//  - rubros: todos los de bd_articulos_x_rubro (sin duplicados ni vacíos) con
+//    el grupo que tengan asignado.
+//  - articulos: las clasificaciones por artículo, con su descripción.
 app.get("/api/pg/recepciones/grupos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
-    const result = await pgPool.query(
-      `SELECT r.rubro, g.grupo
-       FROM (SELECT DISTINCT btrim(rubro) AS rubro
-             FROM bd_articulos_x_rubro
-             WHERE NULLIF(btrim(rubro), '') IS NOT NULL) r
-       LEFT JOIN rec_grupos_rubro g ON g.rubro = r.rubro
-       ORDER BY r.rubro`
-    );
-    res.json({ rows: result.rows });
+    const [rubros, articulos] = await Promise.all([
+      pgPool.query(
+        `SELECT r.rubro, g.grupo
+         FROM (SELECT DISTINCT btrim(rubro) AS rubro
+               FROM bd_articulos_x_rubro
+               WHERE NULLIF(btrim(rubro), '') IS NOT NULL) r
+         LEFT JOIN rec_grupos_rubro g ON g.rubro = r.rubro
+         ORDER BY r.rubro`
+      ),
+      // bd_articulos_x_rubro puede traer más de una fila por cod_corto: se
+      // deduplica antes de unir, si no el artículo aparecería repetido.
+      pgPool.query(
+        `SELECT a.cod_corto, d.descripcion, a.grupo
+         FROM rec_grupos_articulo a
+         LEFT JOIN (
+           SELECT DISTINCT ON (upper(btrim(cod_corto::text)))
+                  upper(btrim(cod_corto::text)) AS cod, descripcion
+           FROM bd_articulos_x_rubro
+           ORDER BY upper(btrim(cod_corto::text)), descripcion
+         ) d ON d.cod = upper(a.cod_corto)
+         ORDER BY a.cod_corto`
+      ),
+    ]);
+    res.json({ rows: rubros.rows, articulos: articulos.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Guarda la tabla auxiliar entera, en una transacción: o se guarda todo o nada.
+// Descripción de un artículo, para completar la tabla auxiliar por artículo
+// mientras el usuario escribe el código.
+app.get("/api/pg/recepciones/articulo", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  const cod = typeof req.query.cod === "string" ? req.query.cod.trim() : "";
+  if (!cod || cod.length > 50) return res.json({ descripcion: null });
+  try {
+    const result = await pgPool.query(
+      `SELECT descripcion FROM bd_articulos_x_rubro
+       WHERE upper(btrim(cod_corto::text)) = upper($1)
+       ORDER BY descripcion
+       LIMIT 1`,
+      [cod]
+    );
+    res.json({ descripcion: result.rows[0] ? result.rows[0].descripcion : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Guarda las tablas auxiliares en una sola transacción: o se guarda todo o nada.
+//  - grupos: solo los rubros que cambiaron (grupo vacío borra la fila).
+//  - articulos: si viene, es la tabla por artículo entera y reemplaza a la
+//    guardada (es chica, y así borrar una fila es simplemente no mandarla).
 app.put("/api/pg/recepciones/grupos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
-  const grupos = req.body && req.body.grupos;
-  if (!Array.isArray(grupos) || grupos.length > 5000)
+  const body      = req.body || {};
+  const grupos    = body.grupos || [];
+  const articulos = body.articulos;
+  if (!Array.isArray(grupos) || grupos.length > 5000 ||
+      (articulos !== undefined && (!Array.isArray(articulos) || articulos.length > 5000)))
     return res.status(400).json({ error: "Formato inválido." });
+
   const filas = [];
   for (const g of grupos) {
     const rubro = typeof g?.rubro === "string" ? g.rubro.trim() : "";
@@ -450,6 +502,23 @@ app.put("/api/pg/recepciones/grupos", async (req, res) => {
       return res.status(400).json({ error: "Rubro o grupo inválido." });
     filas.push({ rubro, grupo });
   }
+  let arts = null;
+  if (articulos !== undefined) {
+    arts = [];
+    const vistos = new Set();
+    for (const a of articulos) {
+      const cod   = typeof a?.cod_corto === "string" ? a.cod_corto.trim() : "";
+      const grupo = typeof a?.grupo === "string" ? a.grupo.trim() : "";
+      if (!cod || !grupo || cod.length > 50 || grupo.length > 100)
+        return res.status(400).json({ error: "Cada artículo necesita código y grupo." });
+      if (vistos.has(cod.toUpperCase()))
+        return res.status(400).json({ error: `El código ${cod} está repetido.` });
+      vistos.add(cod.toUpperCase());
+      arts.push({ cod, grupo });
+    }
+  }
+
+  const usuario = req.session.user ? req.session.user.usuario : null;
   const client = await pgPool.connect();
   try {
     await client.query("BEGIN");
@@ -461,10 +530,20 @@ app.put("/api/pg/recepciones/grupos", async (req, res) => {
            ON CONFLICT (rubro) DO UPDATE
              SET grupo = EXCLUDED.grupo, actualizado_en = now(), actualizado_por = EXCLUDED.actualizado_por
            WHERE rec_grupos_rubro.grupo IS DISTINCT FROM EXCLUDED.grupo`,
-          [rubro, grupo, req.session.user ? req.session.user.usuario : null]
+          [rubro, grupo, usuario]
         );
       } else {
         await client.query("DELETE FROM rec_grupos_rubro WHERE rubro = $1", [rubro]);
+      }
+    }
+    if (arts) {
+      await client.query("DELETE FROM rec_grupos_articulo");
+      for (const { cod, grupo } of arts) {
+        await client.query(
+          `INSERT INTO rec_grupos_articulo (cod_corto, grupo, actualizado_en, actualizado_por)
+           VALUES ($1, $2, now(), $3)`,
+          [cod, grupo, usuario]
+        );
       }
     }
     await client.query("COMMIT");
