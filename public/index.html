@@ -867,6 +867,33 @@
     .rec-art-quitar { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 16px; padding: 2px 6px; }
     .rec-art-quitar:hover { color: #b91c1c; }
 
+    /* ── Recepciones: matriz de calor ──
+       La matriz y el gráfico de línea comparten el mismo ancho y la misma
+       columna de etiquetas (--rec-mc-lab): cada mes ocupa una franja igual en
+       los dos, así el punto de la línea cae justo bajo su columna. */
+    .rec-mc-scroll { overflow-x: auto; }
+    .rec-mc { --rec-mc-lab: 190px; min-width: 760px; }
+    .rec-mc-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .rec-mc-modo { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .rec-mc-modo button { border: none; background: transparent; padding: 6px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+    .rec-mc-modo button.on { background: #ede9fe; color: #4c1d95; font-weight: 600; }
+    .rec-mc-grid { display: grid; }
+    .rec-mc-grid > div { display: flex; align-items: center; min-width: 0; }
+    .rec-mc-th  { justify-content: center; font-size: 12px; color: var(--muted); padding: 4px 0 6px; }
+    .rec-mc-lab { gap: 8px; font-size: 13px; font-weight: 700; padding-right: 8px; overflow: hidden; white-space: nowrap; }
+    .rec-mc-lab span { overflow: hidden; text-overflow: ellipsis; }
+    .rec-mc-lab i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+    .rec-mc-th.rec-mc-lab { font-weight: 400; justify-content: flex-start; }
+    .rec-mc-celda { justify-content: center; margin: 2px; height: 32px; border-radius: 4px; font-size: 13px;
+                    font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .rec-mc-total { justify-content: center; font-weight: 700; font-size: 13px; height: 38px; font-family: var(--mono);
+                    border-top: 1px solid var(--border); margin-top: 4px; }
+    .rec-mc-total.lab { justify-content: flex-start; font-family: inherit; }
+    .rec-mc-total.alto { color: #ea580c; }
+    .rec-mc-sub { font-size: 12px; font-weight: 700; letter-spacing: .04em; margin: 14px 0 4px; }
+    .rec-mc-graf { position: relative; height: 220px; }
+    .rec-mc-nota { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
     /* ── Gama azul/violeta: solo pestaña Catálogo ── */
     /* Mismo recurso que Recepciones: se redefinen los tokens dentro de la
        pestaña y todo lo que ya usa var(--…) se recolorea solo, sin tocar una
@@ -1659,6 +1686,30 @@
         </div>
       </div>
       <datalist id="rec-aux-grupos"></datalist>
+    </div>
+  </div>
+
+  <!-- 4. Costo de recepciones - matriz de calor -->
+  <div class="section-heading" style="align-items:center">
+    <h2>Costo de recepciones - matriz de calor</h2>
+    <span style="font-size:12px;color:var(--muted)">Usa los filtros y la clasificación de "Costo de recepciones"</span>
+  </div>
+  <div class="card">
+    <div class="rec-mc-cab">
+      <span style="font-size:12px;color:var(--muted)">Grupos de mayor a menor costo en el período · millones de $</span>
+      <div class="rec-mc-modo" id="rec-mc-modo">
+        <button type="button" class="on" data-modo="monto">Monto</button>
+        <button type="button" data-modo="pct">% del mes</button>
+      </div>
+    </div>
+    <div id="rec-mc-empty" class="empty" style="padding:40px 20px">Cargando…</div>
+    <div class="rec-mc-scroll" id="rec-mc-box" style="display:none">
+      <div class="rec-mc">
+        <div class="rec-mc-grid" id="rec-mc-grid"></div>
+        <div class="rec-mc-sub">TOTAL MES</div>
+        <div class="rec-mc-graf"><canvas id="rec-mc-chart"></canvas></div>
+        <div class="rec-mc-nota">Millones de $</div>
+      </div>
     </div>
   </div>
 
@@ -2686,6 +2737,13 @@
           ["Filtro Rubro (desplegable)", "rubro de la vista (solo los que tienen algo clasificado)"],
           ["Filtro Rubro agrupado (desplegable)", "grupo resultante"],
           ["Filtro Tipo de orden (desplegable)", "tipo_orden (vacío = \"(sin tipo de orden)\", destildado al entrar)"],
+        ]},
+        { titulo: "Costo de recepciones - matriz de calor", origen: "los mismos datos, filtros y clasificación que el gráfico de barras apiladas", campos: [
+          ["Filas (grupos)", "grupo resultante, de mayor a menor SUM(costo) del período"],
+          ["Celda · Monto", "SUM(costo) del grupo en el mes, en millones de $"],
+          ["Celda · % del mes", "SUM(costo) del grupo / SUM(costo) del mes"],
+          ["Total mes (fila y línea)", "SUM(costo) del mes; ▲ y punto naranja si supera $ 8.000.000.000"],
+          ["Línea punteada", "valor fijo: $ 8.000.000.000"],
         ]},
         { titulo: "Tabla auxiliar por rubro", origen: "bd_articulos_x_rubro + rec_grupos_rubro", campos: [
           ["Rubro", "DISTINCT btrim(bd_articulos_x_rubro.rubro), sin vacíos"],
@@ -5147,6 +5205,7 @@
     } else {
       recCostoRows = [];
       empty.textContent = "⚠ " + costo.reason.message;
+      recMcRender(null, empty.textContent);
       return;
     }
     recCostoRender();
@@ -5259,6 +5318,7 @@
       empty.textContent = !conGrupo.length
         ? "Asigná un grupo en las tablas auxiliares de abajo para ver el gráfico"
         : "Sin datos para el filtro elegido";
+      recMcRender(null, empty.textContent);
       return;
     }
 
@@ -5372,6 +5432,150 @@
         },
       },
       plugins: [lineaMeta, totales],
+    });
+
+    // La matriz de calor muestra exactamente lo mismo, en otra forma
+    recMcRender({ labels, titulos, datasets, totalesMes, colores });
+  }
+
+  // ── Recepciones: matriz de calor ──
+  // Filas = grupos (de mayor a menor costo, el mismo orden que las pilas),
+  // columnas = meses. Abajo, el total del mes como línea, alineado con las
+  // columnas: el gráfico usa el mismo ancho, y su eje vertical ocupa
+  // exactamente la columna de etiquetas de la matriz.
+
+  let recMcChart = null;
+  let recMcModo  = "monto";
+  let recMcDatos = null;
+  const REC_MC_LAB = 190;   // ancho de la columna de etiquetas (igual que --rec-mc-lab)
+
+  document.getElementById("rec-mc-modo").addEventListener("click", e => {
+    const b = e.target.closest("button[data-modo]");
+    if (!b) return;
+    recMcModo = b.dataset.modo;
+    document.querySelectorAll("#rec-mc-modo button").forEach(x => x.classList.toggle("on", x === b));
+    if (recMcDatos) recMcRender(recMcDatos);
+  });
+
+  function recMcRender(d, mensaje) {
+    const box = document.getElementById("rec-mc-box");
+    const empty = document.getElementById("rec-mc-empty");
+    recMcDatos = d;
+    if (!d) {
+      if (recMcChart) { recMcChart.destroy(); recMcChart = null; }
+      box.style.display = "none";
+      empty.style.display = "block";
+      empty.textContent = mensaje || "Sin datos";
+      return;
+    }
+    const { labels, titulos, datasets, totalesMes, colores } = d;
+    const n = labels.length;
+    const mill = v => Math.round(v / 1e6).toLocaleString("es-AR");
+    const pesos = v => "$ " + Math.round(v).toLocaleString("es-AR");
+    const pct = (v, t) => t ? 100 * v / t : 0;
+    const f1 = v => v.toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+    // Intensidad de cada celda: contra la mayor de la matriz (monto) o contra
+    // la mayor participación de un grupo en un mes (% del mes)
+    const valor = (ds, i) => recMcModo === "pct" ? pct(ds.data[i], totalesMes[i]) : ds.data[i];
+    let max = 0;
+    datasets.forEach(ds => ds.data.forEach((_, i) => { max = Math.max(max, valor(ds, i)); }));
+
+    const celda = (ds, i) => {
+      const v = ds.data[i], t = max ? valor(ds, i) / max : 0;
+      const fondo = `rgba(124,58,237,${(0.06 + 0.86 * t).toFixed(3)})`;
+      const color = t > 0.5 ? "#fff" : "#1c1f2b";
+      const peso  = t > 0.6 ? 700 : 400;
+      const texto = recMcModo === "pct" ? f1(pct(v, totalesMes[i])) + " %" : mill(v);
+      const tip   = `${ds.label} · ${titulos[i]}: ${pesos(v)} (${f1(pct(v, totalesMes[i]))} % del mes)`;
+      return `<div class="rec-mc-celda" style="background:${fondo};color:${color};font-weight:${peso}" title="${nsEsc(tip)}">${v ? texto : "—"}</div>`;
+    };
+
+    const grid = document.getElementById("rec-mc-grid");
+    grid.style.gridTemplateColumns = `${REC_MC_LAB}px repeat(${n}, minmax(0, 1fr))`;
+    grid.innerHTML =
+      `<div class="rec-mc-th rec-mc-lab">Grupo</div>` +
+      labels.map(l => `<div class="rec-mc-th">${nsEsc(l)}</div>`).join("") +
+      datasets.map(ds =>
+        `<div class="rec-mc-lab"><i style="background:${colores.get(ds.label)}"></i><span title="${nsEsc(ds.label)}">${nsEsc(ds.label)}</span></div>` +
+        ds.data.map((_, i) => celda(ds, i)).join("")
+      ).join("") +
+      `<div class="rec-mc-total lab">Total mes</div>` +
+      totalesMes.map((t, i) => {
+        const alto = t > REC_COSTO_META;
+        return `<div class="rec-mc-total${alto ? " alto" : ""}" title="${nsEsc(titulos[i] + ": " + pesos(t))}">${alto ? "▲" : ""}${mill(t)}</div>`;
+      }).join("");
+
+    empty.style.display = "none";
+    box.style.display = "block";
+
+    // Línea del total: puntos naranjas los meses que pasan la referencia
+    const sobre = totalesMes.map(t => t > REC_COSTO_META);
+    const meta = {
+      id: "recMcMeta",
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea: area, scales: { y } } = chart;
+        const py = y.getPixelForValue(REC_COSTO_META);
+        if (py < area.top || py > area.bottom) return;
+        ctx.save();
+        ctx.setLineDash([6, 5]);
+        ctx.strokeStyle = "#5c6172";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(area.left, py); ctx.lineTo(area.right, py); ctx.stroke();
+        ctx.restore();
+      },
+    };
+    if (recMcChart) recMcChart.destroy();
+    recMcChart = new Chart(document.getElementById("rec-mc-chart").getContext("2d"), {
+      type: "line",
+      data: { labels, datasets: [{
+        data: totalesMes,
+        borderColor: "#7c3aed", borderWidth: 2, tension: 0,
+        fill: true, backgroundColor: "rgba(124,58,237,.08)",
+        pointRadius: 5, pointHoverRadius: 6, pointBorderWidth: 2,
+        pointBorderColor: sobre.map(s => s ? "#ea580c" : "#7c3aed"),
+        pointBackgroundColor: sobre.map(s => s ? "#f97316" : "#ffffff"),
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        // Sin el margen automático que Chart.js deja para los puntos: correría
+        // el área unos píxeles y la línea dejaría de coincidir con las columnas
+        // (los puntos van al centro de cada mes, no hay nada que se corte).
+        layout: { autoPadding: false, padding: { left: 0, right: 0, top: 10, bottom: 8 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: { title: items => titulos[items[0].dataIndex], label: c => "Total: " + pesos(c.raw) },
+          },
+        },
+        scales: {
+          // offset: cada mes es una franja igual y el punto va al centro, como
+          // las columnas de la matriz
+          x: { offset: true, display: false },
+          y: {
+            beginAtZero: true,
+            suggestedMax: REC_COSTO_META * 1.1,
+            // El eje ocupa justo la columna de etiquetas de la matriz
+            afterFit: sc => { sc.width = REC_MC_LAB; },
+            ticks: {
+              color: "#5c6172", maxTicksLimit: 6,
+              callback: v => (v / 1e6).toLocaleString("es-AR") + " M",
+              font: ctx => ({ weight: ctx.tick && ctx.tick.value === REC_COSTO_META ? "bold" : "normal" }),
+            },
+            afterBuildTicks: sc => {
+              // Que la referencia aparezca como valor del eje
+              if (!sc.ticks.some(t => t.value === REC_COSTO_META) && REC_COSTO_META <= sc.max)
+                sc.ticks.push({ value: REC_COSTO_META });
+              sc.ticks.sort((a, b) => a.value - b.value);
+            },
+            grid: { color: "#eceef3" },
+            border: { display: false },
+          },
+        },
+      },
+      plugins: [meta],
     });
   }
 
