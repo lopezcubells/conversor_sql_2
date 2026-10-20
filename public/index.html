@@ -825,6 +825,25 @@
     #tab-recepciones tr:hover td { background: rgba(37,99,235,.05); }
     #tab-recepciones input[type="range"] { accent-color: #2563eb; }
 
+    /* ── Recepciones: Costo de recepciones ── */
+    .rec-costo-filtros { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+    .rec-costo-filtro  { flex: 1 1 320px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .rec-costo-filtro-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .rec-costo-filtro-cab label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .rec-costo-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow-y: auto; }
+    .rec-costo-chip  { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; padding: 3px 10px;
+                       border: 1px solid var(--border); border-radius: 99px; white-space: nowrap; user-select: none; }
+    .rec-costo-chip.on { border-color: var(--accent); }
+    .rec-costo-chip i  { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .rec-costo-mini { font-size: 11px; padding: 3px 9px; }
+    .rec-aux-tabla { max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .rec-aux-tabla table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .rec-aux-tabla th { position: sticky; top: 0; z-index: 1; text-align: left; }
+    .rec-aux-tabla td { padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .rec-aux-tabla td input { width: 100%; padding: 5px 8px; font-size: 13px; }
+    .rec-aux-tabla tr.cambiado td { background: rgba(37,99,235,.07); }
+    .rec-aux-tabla tr.sin-grupo td:first-child { color: var(--muted); }
+
     /* ── Gama azul/violeta: solo pestaña Catálogo ── */
     /* Mismo recurso que Recepciones: se redefinen los tokens dentro de la
        pestaña y todo lo que ya usa var(--…) se recolorea solo, sin tocar una
@@ -1531,6 +1550,67 @@
     </div>
   </div>
   <div class="pagination" id="rec-pagination"></div>
+
+  <!-- 3. Costo de recepciones -->
+  <div class="section-heading" style="align-items:center">
+    <h2>Costo de recepciones</h2>
+    <span id="rec-costo-info" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+
+  <div class="card">
+    <!-- Filtros propios de este bloque: no tocan la tabla de arriba -->
+    <div class="rec-costo-filtros">
+      <div class="rec-costo-filtro">
+        <div class="rec-costo-filtro-cab">
+          <label>Rubro</label>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('rubro', true)">Todos</button>
+            <button class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('rubro', false)">Ninguno</button>
+          </div>
+        </div>
+        <div class="rec-costo-chips" id="rec-costo-f-rubro"></div>
+      </div>
+      <div class="rec-costo-filtro">
+        <div class="rec-costo-filtro-cab">
+          <label>Rubro agrupado</label>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('grupo', true)">Todos</button>
+            <button class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('grupo', false)">Ninguno</button>
+          </div>
+        </div>
+        <div class="rec-costo-chips" id="rec-costo-f-grupo"></div>
+      </div>
+    </div>
+
+    <div id="rec-costo-empty" class="empty" style="padding:50px 20px">Cargando…</div>
+    <div id="rec-costo-box" style="position:relative;height:380px;display:none">
+      <canvas id="rec-costo-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Tabla auxiliar de clasificación de rubro -->
+  <div class="card">
+    <div class="collapsible-header" id="rec-aux-toggle">
+      <div class="card-title" style="margin-bottom:0">Tabla auxiliar de clasificación de rubro</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="rec-aux-resumen" style="font-size:12px;color:var(--muted)"></span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="collapsible-body collapsible-body-tall" id="rec-aux-body">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <input class="search-input" id="rec-aux-q" placeholder="Buscar rubro…" style="max-width:240px" oninput="recAuxRender()">
+        <button class="btn btn-primary" id="rec-aux-guardar" onclick="recAuxGuardar()" disabled>Guardar</button>
+        <button class="btn btn-outline" id="rec-aux-descartar" onclick="recAuxDescartar()" disabled>Descartar cambios</button>
+        <span id="rec-aux-estado" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        Escribí el grupo de cada rubro. Los rubros sin grupo no se tienen en cuenta en el gráfico.
+      </div>
+      <div class="rec-aux-tabla" id="rec-aux-tabla"></div>
+      <datalist id="rec-aux-grupos"></datalist>
+    </div>
+  </div>
 
 </div>
 
@@ -2531,6 +2611,8 @@
       titulo: "Recepciones",
       fuentes: [
         ["vista", "view_recepciones_2026", "Tabla, total y gráficos"],
+        ["tabla", "bd_articulos_x_rubro", "Listado de rubros de la tabla auxiliar"],
+        ["tabla", "rec_grupos_rubro", "Tabla auxiliar: grupo de cada rubro (la edita el usuario; propia de la app)"],
       ],
       bloques: [
         { titulo: "Tabla de recepciones", origen: "view_recepciones_2026", campos: [
@@ -2544,6 +2626,17 @@
           ["Cantidad recibida por mes", "SUM(cantidad_recibida) por mes de fecha_recepcion"],
           ["Cantidad recibida por proveedor", "SUM(cantidad_recibida) por proveedor"],
         ]},
+        { titulo: "Costo de recepciones (barras apiladas)", origen: "view_recepciones_2026 + rec_grupos_rubro", campos: [
+          ["Eje horizontal (mes)", "date_trunc('month', fecha_recepcion)"],
+          ["Eje vertical / segmentos", "SUM(costo) por mes y grupo"],
+          ["Grupo", "rec_grupos_rubro.grupo, unido por rubro"],
+          ["Filtro Rubro", "rubro de la vista (solo los que tienen grupo)"],
+          ["Filtro Rubro agrupado", "rec_grupos_rubro.grupo"],
+        ]},
+        { titulo: "Tabla auxiliar de clasificación de rubro", origen: "bd_articulos_x_rubro + rec_grupos_rubro", campos: [
+          ["Rubro", "DISTINCT btrim(bd_articulos_x_rubro.rubro), sin vacíos"],
+          ["Grupo", "rec_grupos_rubro.grupo (editable; vacío borra la fila)"],
+        ]},
         { titulo: "Filtros (en el navegador)", origen: "view_recepciones_2026", campos: [
           ["Rubro", "rubro (solo los de una lista blanca)"],
           ["Unidad de negocio", "unidad_negocio"],
@@ -2553,6 +2646,8 @@
       notas: [
         "Se trae la vista completa una vez y todo se filtra en el navegador; el botón Actualizar vuelve a consultarla.",
         "Los rubros fuera de la lista blanca se descartan al cargar, comparando sin tildes ni mayúsculas.",
+        "Costo de recepciones tiene filtros propios: no usa los de arriba (rubro, unidad de negocio, fechas) ni la lista blanca. Ignora los rubros vacíos y los que no tienen grupo.",
+        "El grupo se une al rubro de la vista sin tildes ni mayúsculas, en el navegador: guardar la tabla auxiliar redibuja el gráfico sin volver a consultar el costo.",
       ],
     },
 
@@ -4925,12 +5020,278 @@
   }
 
   document.getElementById("rec-btn-actualizar").addEventListener("click", async () => {
-    if (await recCargar(true)) toast("✅ Recepciones actualizadas", "ok");
+    // Si hay cambios sin guardar en la tabla auxiliar, no se pisan
+    const [ok] = await Promise.all([recCargar(true), recAuxEdit.size ? null : recCostoCargar()]);
+    if (ok) toast("✅ Recepciones actualizadas", "ok");
   });
 
   function initRecepciones() {
     if (recLoaded) return;
     recCargar(false);
+    recCostoCargar();
+  }
+
+  // ── Recepciones: Costo de recepciones ──
+  // Gráfico de barras apiladas: costo por mes, un segmento por grupo de rubros.
+  // El grupo sale de la tabla auxiliar (rec_grupos_rubro), que edita el usuario.
+  // Sus filtros son propios: no comparten nada con los de la tabla de arriba.
+
+  let recCostoRows    = [];          // { mes, rubro, costo } desde la base
+  let recAuxFilas     = [];          // { rubro, grupo } guardado
+  let recAuxEdit      = new Map();   // rubro → grupo editado (sin guardar)
+  let recCostoChart   = null;
+  const recCostoOff   = { rubro: new Set(), grupo: new Set() };  // destildados
+  const REC_COSTO_COLORES = ["#2563eb", "#15803d", "#f59e0b", "#dc2626", "#7c3aed",
+                             "#0891b2", "#db2777", "#65a30d", "#ea580c", "#475569"];
+
+  document.getElementById("rec-aux-toggle").addEventListener("click", () => {
+    document.getElementById("rec-aux-toggle").classList.toggle("collapsed");
+    document.getElementById("rec-aux-body").classList.toggle("collapsed");
+  });
+
+  async function recCostoCargar() {
+    const empty = document.getElementById("rec-costo-empty");
+    empty.style.display = "block";
+    empty.textContent = "Consultando PostgreSQL…";
+    const [costo, grupos] = await Promise.allSettled([
+      fetch(`${API}/api/pg/recepciones/costo-mensual`).then(async r => { if (!r.ok) throw new Error((await r.json()).error); return r.json(); }),
+      fetch(`${API}/api/pg/recepciones/grupos`).then(async r => { if (!r.ok) throw new Error((await r.json()).error); return r.json(); }),
+    ]);
+    if (grupos.status === "fulfilled") {
+      recAuxFilas = grupos.value.rows.map(r => ({ rubro: r.rubro, grupo: (r.grupo ?? "").trim() }));
+      recAuxEdit.clear();
+      recAuxRender();
+    } else {
+      document.getElementById("rec-aux-tabla").innerHTML =
+        `<div class="empty">⚠ ${nsEsc(grupos.reason.message)}</div>`;
+    }
+    if (costo.status === "fulfilled") {
+      recCostoRows = costo.value.rows;
+    } else {
+      recCostoRows = [];
+      empty.textContent = "⚠ " + costo.reason.message;
+      return;
+    }
+    recCostoRender();
+  }
+
+  // Grupo guardado de cada rubro, con la clave normalizada: la vista y
+  // bd_articulos_x_rubro podrían escribir el rubro con o sin tilde.
+  function recCostoMapaGrupos() {
+    const mapa = new Map();
+    recAuxFilas.forEach(f => { if (f.grupo) mapa.set(recNormRubro(f.rubro), f.grupo); });
+    return mapa;
+  }
+
+  function recCostoChips(id, valores, tipo, colores) {
+    const cont = document.getElementById(id);
+    if (!valores.length) {
+      cont.innerHTML = `<span style="font-size:12px;color:var(--muted)">${tipo === "grupo"
+        ? "Asigná grupos en la tabla auxiliar" : "Sin rubros con grupo"}</span>`;
+      return;
+    }
+    cont.innerHTML = valores.map(v => {
+      const on = !recCostoOff[tipo].has(v);
+      const color = colores ? `<i style="background:${colores.get(v)}"></i>` : "";
+      return `<label class="rec-costo-chip${on ? " on" : ""}">
+        <input type="checkbox" ${on ? "checked" : ""} data-tipo="${tipo}" value="${nsEsc(v)}" style="accent-color:#2563eb">${color}${nsEsc(v)}</label>`;
+    }).join("");
+  }
+
+  document.getElementById("rec-costo-f-rubro").addEventListener("change", recCostoChipCambio);
+  document.getElementById("rec-costo-f-grupo").addEventListener("change", recCostoChipCambio);
+  function recCostoChipCambio(e) {
+    const cb = e.target;
+    if (!cb.dataset.tipo) return;
+    if (cb.checked) recCostoOff[cb.dataset.tipo].delete(cb.value);
+    else recCostoOff[cb.dataset.tipo].add(cb.value);
+    recCostoRender();
+  }
+
+  function recCostoTodos(tipo, todos) {
+    const sel = tipo === "rubro" ? "#rec-costo-f-rubro input" : "#rec-costo-f-grupo input";
+    document.querySelectorAll(sel).forEach(cb => {
+      if (todos) recCostoOff[tipo].delete(cb.value); else recCostoOff[tipo].add(cb.value);
+    });
+    recCostoRender();
+  }
+
+  function recCostoRender() {
+    const box   = document.getElementById("rec-costo-box");
+    const empty = document.getElementById("rec-costo-empty");
+    const info  = document.getElementById("rec-costo-info");
+    const mapa  = recCostoMapaGrupos();
+
+    // Solo cuentan los rubros con grupo asignado (los vacíos ya vienen filtrados)
+    const conGrupo = recCostoRows
+      .map(r => ({ ...r, grupo: mapa.get(recNormRubro(r.rubro)) }))
+      .filter(r => r.grupo);
+
+    const grupos = [...new Set(conGrupo.map(r => r.grupo))].sort((a, b) => a.localeCompare(b, "es"));
+    const colores = new Map(grupos.map((g, i) => [g, REC_COSTO_COLORES[i % REC_COSTO_COLORES.length]]));
+    // El filtro de rubro muestra los rubros de los grupos tildados
+    const rubros = [...new Set(conGrupo.filter(r => !recCostoOff.grupo.has(r.grupo)).map(r => r.rubro))]
+      .sort((a, b) => a.localeCompare(b, "es"));
+    recCostoChips("rec-costo-f-grupo", grupos, "grupo", colores);
+    recCostoChips("rec-costo-f-rubro", rubros, "rubro");
+
+    const filas = conGrupo.filter(r => !recCostoOff.grupo.has(r.grupo) && !recCostoOff.rubro.has(r.rubro));
+    const sinGrupo = new Set(recCostoRows.filter(r => !mapa.get(recNormRubro(r.rubro))).map(r => r.rubro)).size;
+    info.textContent = sinGrupo
+      ? `${sinGrupo} ${sinGrupo === 1 ? "rubro recibido sin grupo queda" : "rubros recibidos sin grupo quedan"} afuera`
+      : "";
+
+    if (!filas.length) {
+      if (recCostoChart) { recCostoChart.destroy(); recCostoChart = null; }
+      box.style.display = "none";
+      empty.style.display = "block";
+      empty.textContent = !conGrupo.length
+        ? "Asigná un grupo a los rubros en la tabla auxiliar de abajo para ver el gráfico"
+        : "Sin datos para el filtro elegido";
+      return;
+    }
+
+    const meses = [...new Set(filas.map(r => String(r.mes).slice(0, 7)))].sort();
+    const variosAnios = new Set(meses.map(m => m.slice(0, 4))).size > 1;
+    const labels = meses.map(m => (MES_NOMBRES[parseInt(m.slice(5, 7))] ?? m) + (variosAnios ? " " + m.slice(2, 4) : ""));
+    const gruposVis = grupos.filter(g => !recCostoOff.grupo.has(g));
+    const suma = new Map();
+    filas.forEach(r => {
+      const k = r.grupo + "|" + String(r.mes).slice(0, 7);
+      suma.set(k, (suma.get(k) || 0) + (parseFloat(r.costo) || 0));
+    });
+    const datasets = gruposVis.map(g => ({
+      label: g,
+      data: meses.map(m => suma.get(g + "|" + m) || 0),
+      backgroundColor: colores.get(g),
+      borderRadius: 2,
+      stack: "costo",
+    }));
+
+    empty.style.display = "none";
+    box.style.display = "block";
+    const pesos = v => "$ " + Math.round(v).toLocaleString("es-AR");
+    if (recCostoChart) recCostoChart.destroy();
+    recCostoChart = new Chart(document.getElementById("rec-costo-chart").getContext("2d"), {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "top", labels: { color: "#1c1f2b", boxWidth: 12, padding: 14 } },
+          datalabels: { display: false },
+          tooltip: {
+            filter: c => c.raw > 0,
+            callbacks: {
+              label: c => ` ${c.dataset.label}: ${pesos(c.raw)}`,
+              footer: items => "Total: " + pesos(items.reduce((a, c) => a + c.raw, 0)),
+            },
+          },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: "#5c6172" }, grid: { display: false } },
+          y: {
+            stacked: true, beginAtZero: true,
+            ticks: { color: "#5c6172", callback: v => pesos(v) },
+            grid: { color: "#d9dce3" },
+          },
+        },
+      },
+    });
+  }
+
+  // ── Tabla auxiliar ──
+
+  function recAuxGrupoActual(rubro) {
+    if (recAuxEdit.has(rubro)) return recAuxEdit.get(rubro);
+    return recAuxFilas.find(f => f.rubro === rubro)?.grupo ?? "";
+  }
+
+  function recAuxRender() {
+    const q = recNormRubro(document.getElementById("rec-aux-q").value);
+    const filas = recAuxFilas.filter(f => !q || recNormRubro(f.rubro).includes(q));
+    const wrap = document.getElementById("rec-aux-tabla");
+    if (!recAuxFilas.length) {
+      wrap.innerHTML = `<div class="empty">No hay rubros en bd_articulos_x_rubro</div>`;
+    } else {
+      wrap.innerHTML = `<table>
+        <thead><tr><th style="width:55%">Rubro</th><th>Grupo</th></tr></thead>
+        <tbody>${filas.map(f => {
+          const g = recAuxGrupoActual(f.rubro);
+          const cambiado = recAuxEdit.has(f.rubro);
+          return `<tr class="${cambiado ? "cambiado" : ""}${g ? "" : " sin-grupo"}">
+            <td>${nsEsc(f.rubro)}</td>
+            <td><input class="search-input" list="rec-aux-grupos" data-rubro="${nsEsc(f.rubro)}"
+                       value="${nsEsc(g)}" placeholder="(sin grupo)" maxlength="100"></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+    }
+    recAuxEstado();
+  }
+
+  // Sugerencias del campo Grupo: los grupos ya usados, guardados o en edición
+  function recAuxEstado() {
+    const grupos = new Set(recAuxFilas.map(f => recAuxGrupoActual(f.rubro)).filter(Boolean));
+    document.getElementById("rec-aux-grupos").innerHTML =
+      [...grupos].sort().map(g => `<option value="${nsEsc(g)}">`).join("");
+    const conGrupo = recAuxFilas.filter(f => recAuxGrupoActual(f.rubro)).length;
+    document.getElementById("rec-aux-resumen").textContent = recAuxFilas.length
+      ? `${conGrupo} de ${recAuxFilas.length} rubros con grupo` : "";
+    const pend = recAuxEdit.size;
+    document.getElementById("rec-aux-guardar").disabled = !pend;
+    document.getElementById("rec-aux-descartar").disabled = !pend;
+    document.getElementById("rec-aux-estado").textContent =
+      pend ? `${pend} ${pend === 1 ? "cambio sin guardar" : "cambios sin guardar"}` : "";
+  }
+
+  document.getElementById("rec-aux-tabla").addEventListener("input", e => {
+    const inp = e.target;
+    if (!inp.dataset.rubro) return;
+    const rubro = inp.dataset.rubro;
+    const guardado = recAuxFilas.find(f => f.rubro === rubro)?.grupo ?? "";
+    const nuevo = inp.value.trim();
+    if (nuevo === guardado) recAuxEdit.delete(rubro); else recAuxEdit.set(rubro, nuevo);
+    const tr = inp.closest("tr");
+    tr.classList.toggle("cambiado", recAuxEdit.has(rubro));
+    tr.classList.toggle("sin-grupo", !nuevo);
+    recAuxEstado();
+  });
+
+  function recAuxDescartar() {
+    recAuxEdit.clear();
+    recAuxRender();
+  }
+
+  async function recAuxGuardar() {
+    if (!recAuxEdit.size) return;
+    const btn = document.getElementById("rec-aux-guardar");
+    btn.disabled = true;
+    document.getElementById("rec-aux-estado").textContent = "Guardando…";
+    const grupos = [...recAuxEdit.entries()].map(([rubro, grupo]) => ({ rubro, grupo }));
+    try {
+      const res = await fetch(`${API}/api/pg/recepciones/grupos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grupos }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      // Lo guardado pasa a ser el estado base, y el gráfico se redibuja con él
+      grupos.forEach(({ rubro, grupo }) => {
+        const f = recAuxFilas.find(x => x.rubro === rubro);
+        if (f) f.grupo = grupo;
+      });
+      recAuxEdit.clear();
+      recAuxRender();
+      recCostoRender();
+      toast("✅ Clasificación de rubros guardada", "ok");
+    } catch (e) {
+      document.getElementById("rec-aux-estado").textContent = "⚠ " + e.message;
+      btn.disabled = false;
+    }
   }
 
   // ── Nivel de servicio ──

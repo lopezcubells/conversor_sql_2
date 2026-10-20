@@ -114,6 +114,23 @@ async function initAuth() {
 }
 initAuth();
 
+// Tabla auxiliar de la pestaña Recepciones: a qué grupo pertenece cada rubro.
+// La edita el usuario desde la pestaña; una fila por rubro con grupo asignado
+// (sacarle el grupo a un rubro borra su fila).
+async function initRecGrupos() {
+  if (!pgPool) return;
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS rec_grupos_rubro (
+        rubro           TEXT PRIMARY KEY,
+        grupo           TEXT NOT NULL,
+        actualizado_en  TIMESTAMPTZ DEFAULT now(),
+        actualizado_por TEXT
+      )`);
+  } catch (e) { console.error("Error init rec_grupos_rubro:", e.message); }
+}
+initRecGrupos();
+
 app.post("/api/login", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
@@ -380,6 +397,84 @@ app.get("/api/pg/recepciones", async (req, res) => {
     );
     res.json({ rows: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Costo de recepciones: costo por mes y rubro. El grupo de cada rubro lo pone
+// el navegador con la tabla auxiliar, así editarla redibuja el gráfico al
+// instante sin volver a consultar. Los rubros vacíos ya quedan afuera acá.
+app.get("/api/pg/recepciones/costo-mensual", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const result = await pgPool.query(
+      `SELECT date_trunc('month', fecha_recepcion)::date AS mes,
+              btrim(rubro)                               AS rubro,
+              SUM(costo)                                 AS costo
+       FROM view_recepciones_2026
+       WHERE fecha_recepcion IS NOT NULL
+         AND NULLIF(btrim(rubro), '') IS NOT NULL
+       GROUP BY 1, 2
+       ORDER BY 1, 2`
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Tabla auxiliar: todos los rubros de bd_articulos_x_rubro (sin duplicados ni
+// vacíos), con el grupo que tengan asignado.
+app.get("/api/pg/recepciones/grupos", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const result = await pgPool.query(
+      `SELECT r.rubro, g.grupo
+       FROM (SELECT DISTINCT btrim(rubro) AS rubro
+             FROM bd_articulos_x_rubro
+             WHERE NULLIF(btrim(rubro), '') IS NOT NULL) r
+       LEFT JOIN rec_grupos_rubro g ON g.rubro = r.rubro
+       ORDER BY r.rubro`
+    );
+    res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Guarda la tabla auxiliar entera, en una transacción: o se guarda todo o nada.
+app.put("/api/pg/recepciones/grupos", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  const grupos = req.body && req.body.grupos;
+  if (!Array.isArray(grupos) || grupos.length > 5000)
+    return res.status(400).json({ error: "Formato inválido." });
+  const filas = [];
+  for (const g of grupos) {
+    const rubro = typeof g?.rubro === "string" ? g.rubro.trim() : "";
+    const grupo = typeof g?.grupo === "string" ? g.grupo.trim() : "";
+    if (!rubro || rubro.length > 200 || grupo.length > 100)
+      return res.status(400).json({ error: "Rubro o grupo inválido." });
+    filas.push({ rubro, grupo });
+  }
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const { rubro, grupo } of filas) {
+      if (grupo) {
+        await client.query(
+          `INSERT INTO rec_grupos_rubro (rubro, grupo, actualizado_en, actualizado_por)
+           VALUES ($1, $2, now(), $3)
+           ON CONFLICT (rubro) DO UPDATE
+             SET grupo = EXCLUDED.grupo, actualizado_en = now(), actualizado_por = EXCLUDED.actualizado_por
+           WHERE rec_grupos_rubro.grupo IS DISTINCT FROM EXCLUDED.grupo`,
+          [rubro, grupo, req.session.user ? req.session.user.usuario : null]
+        );
+      } else {
+        await client.query("DELETE FROM rec_grupos_rubro WHERE rubro = $1", [rubro]);
+      }
+    }
+    await client.query("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ── Nivel de servicio ──
