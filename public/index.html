@@ -2668,7 +2668,8 @@
           ["Eje horizontal (mes)", "date_trunc('month', fecha_recepcion)"],
           ["Eje vertical / segmentos", "SUM(costo) por mes y grupo"],
           ["Grupo", "rec_grupos_articulo.grupo por cod_corto; si no hay, rec_grupos_rubro.grupo por rubro"],
-          ["Línea punteada", "valor fijo: $ 8.000.000"],
+          ["Línea punteada", "valor fijo: $ 8.000.000.000"],
+          ["Etiqueta de cada barra", "SUM(costo) del mes (todos los grupos visibles)"],
           ["Filtro Rubro (desplegable)", "rubro de la vista (solo los que tienen algo clasificado)"],
           ["Filtro Rubro agrupado (desplegable)", "grupo resultante"],
         ]},
@@ -4604,7 +4605,7 @@
   let recLoaded       = false;
   let recBarChart     = null;
   let recProvChart    = null;
-  const REC_PAGE_SIZE = 50;
+  const REC_PAGE_SIZE = 25;
 
   // Únicos rubros que se muestran en la pestaña; el resto se descarta al cargar.
   // La comparación ignora tildes y mayúsculas para no depender de cómo estén
@@ -5090,7 +5091,9 @@
   let recArtSigId     = 1;
   let recCostoChart   = null;
   const recCostoOff   = { rubro: new Set(), grupo: new Set() };  // destildados
-  const REC_COSTO_META = 8000000;    // línea punteada de referencia
+  const REC_COSTO_META = 8000000000; // línea punteada de referencia ($ 8.000.000.000)
+  const REC_MES_LARGO  = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
+                          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const REC_COSTO_COLORES = ["#2563eb", "#15803d", "#f59e0b", "#dc2626", "#7c3aed",
                              "#0891b2", "#db2777", "#65a30d", "#ea580c", "#475569"];
   const recNormCod = c => String(c ?? "").trim().toUpperCase();
@@ -5245,13 +5248,23 @@
       const k = r.grupo + "|" + String(r.mes).slice(0, 7);
       suma.set(k, (suma.get(k) || 0) + (parseFloat(r.costo) || 0));
     });
-    const datasets = gruposVis.map(g => ({
-      label: g,
-      data: meses.map(m => suma.get(g + "|" + m) || 0),
-      backgroundColor: colores.get(g),
-      borderRadius: 2,
-      stack: "costo",
-    }));
+    // Nombre completo del mes, para el tooltip
+    const titulos = meses.map(m => (REC_MES_LARGO[parseInt(m.slice(5, 7))] || m) + (variosAnios ? " " + m.slice(0, 4) : ""));
+    // Los segmentos van de mayor a menor según el total del grupo en todo el
+    // período: el primero queda pegado al eje. Es el mismo orden en todos los
+    // meses, así cada color está siempre en el mismo lugar y se compara fácil.
+    const totalGrupo = g => meses.reduce((a, m) => a + (suma.get(g + "|" + m) || 0), 0);
+    const datasets = gruposVis
+      .map(g => ({ g, total: totalGrupo(g) }))
+      .sort((a, b) => b.total - a.total)
+      .map(({ g }) => ({
+        label: g,
+        data: meses.map(m => suma.get(g + "|" + m) || 0),
+        backgroundColor: colores.get(g),
+        borderRadius: 2,
+        stack: "costo",
+      }));
+    const totalesMes = meses.map((_, i) => datasets.reduce((a, d) => a + d.data[i], 0));
 
     const pesos = v => "$ " + Math.round(v).toLocaleString("es-AR");
     // Línea punteada horizontal de referencia, con su valor a la derecha
@@ -5279,6 +5292,23 @@
       },
     };
 
+    // Una etiqueta por barra: el total del mes, arriba de la pila
+    const totales = {
+      id: "recTotales",
+      afterDatasetsDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        ctx.save();
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillStyle = "#1c1f2b";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        totalesMes.forEach((t, i) => {
+          if (t > 0) ctx.fillText(pesos(t), x.getPixelForValue(i), y.getPixelForValue(t) - 4);
+        });
+        ctx.restore();
+      },
+    };
+
     empty.style.display = "none";
     box.style.display = "block";
     if (recCostoChart) recCostoChart.destroy();
@@ -5290,29 +5320,35 @@
         maintainAspectRatio: false,
         animation: false,
         interaction: { mode: "index", intersect: false },
+        layout: { padding: { top: 22 } },
         plugins: {
-          legend: { position: "top", labels: { color: "#1c1f2b", boxWidth: 12, padding: 14 } },
+          legend: { position: "right", labels: { color: "#1c1f2b", boxWidth: 12, padding: 12 } },
           datalabels: { display: false },
+          // Mes con nombre completo, el total y después los grupos de mayor a menor
           tooltip: {
             filter: c => c.raw > 0,
+            itemSort: (a, b) => b.raw - a.raw,
             callbacks: {
+              title: items => items.length ? titulos[items[0].dataIndex] : "",
+              beforeBody: items => items.length ? "Total: " + pesos(totalesMes[items[0].dataIndex]) : "",
               label: c => ` ${c.dataset.label}: ${pesos(c.raw)}`,
-              footer: items => "Total: " + pesos(items.reduce((a, c) => a + c.raw, 0)),
             },
           },
         },
         scales: {
           x: { stacked: true, ticks: { color: "#5c6172" }, grid: { display: false } },
+          // Sin valores en el eje: cada barra lleva su total como etiqueta
           y: {
             stacked: true, beginAtZero: true,
             // Que la línea de referencia siempre entre, aunque los meses no lleguen
             suggestedMax: REC_COSTO_META * 1.08,
-            ticks: { color: "#5c6172", callback: v => pesos(v) },
-            grid: { color: "#d9dce3" },
+            ticks: { display: false },
+            border: { display: false },
+            grid: { color: "#e6e8ee" },
           },
         },
       },
-      plugins: [lineaMeta],
+      plugins: [lineaMeta, totales],
     });
   }
 
