@@ -2685,7 +2685,7 @@
           ["Etiqueta de cada barra", "SUM(costo) del mes (todos los grupos visibles)"],
           ["Filtro Rubro (desplegable)", "rubro de la vista (solo los que tienen algo clasificado)"],
           ["Filtro Rubro agrupado (desplegable)", "grupo resultante"],
-          ["Filtro Tipo de orden (desplegable)", "tipo_orden (vacío = \"(sin tipo de orden)\")"],
+          ["Filtro Tipo de orden (desplegable)", "tipo_orden (vacío = \"(sin tipo de orden)\", destildado al entrar)"],
         ]},
         { titulo: "Tabla auxiliar por rubro", origen: "bd_articulos_x_rubro + rec_grupos_rubro", campos: [
           ["Rubro", "DISTINCT btrim(bd_articulos_x_rubro.rubro), sin vacíos"],
@@ -5104,8 +5104,10 @@
   let recArtEdit      = [];          // copia de trabajo: { id, cod_corto, descripcion, grupo }
   let recArtSigId     = 1;
   let recCostoChart   = null;
-  const recCostoOff   = { rubro: new Set(), grupo: new Set(), tipo: new Set() };  // destildados
   const REC_SIN_TIPO  = "(sin tipo de orden)";
+  // Destildados. "(sin tipo de orden)" arranca destildado: se puede tildar a
+  // mano, y la elección se mantiene mientras no se recargue la página.
+  const recCostoOff   = { rubro: new Set(), grupo: new Set(), tipo: new Set([REC_SIN_TIPO]) };
   const REC_COSTO_META = 8000000000; // línea punteada de referencia ($ 8.000.000.000)
   const REC_MES_LARGO  = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
                           "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -5319,7 +5321,7 @@
       afterDatasetsDraw(chart) {
         const { ctx, scales: { x, y } } = chart;
         ctx.save();
-        ctx.font = "bold 11px sans-serif";
+        ctx.font = "bold 15px sans-serif";
         ctx.fillStyle = "#1c1f2b";
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
@@ -5341,7 +5343,7 @@
         maintainAspectRatio: false,
         animation: false,
         interaction: { mode: "index", intersect: false },
-        layout: { padding: { top: 22 } },
+        layout: { padding: { top: 28 } },
         plugins: {
           legend: { position: "right", labels: { color: "#1c1f2b", boxWidth: 12, padding: 12 } },
           datalabels: { display: false },
