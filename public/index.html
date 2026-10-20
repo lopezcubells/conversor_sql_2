@@ -1609,6 +1609,19 @@
           </div>
         </div>
       </div>
+      <div class="rec-costo-filtro">
+        <label>Tipo de orden</label>
+        <div class="rec-dd" id="rec-costo-dd-tipo">
+          <button type="button" class="search-input rec-dd-btn"><span class="rec-dd-txt">Todos</span><span>▾</span></button>
+          <div class="rec-dd-panel" hidden>
+            <div class="rec-dd-acc">
+              <button type="button" class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('tipo', true)">Todos</button>
+              <button type="button" class="btn btn-outline rec-costo-mini" onclick="recCostoTodos('tipo', false)">Ninguno</button>
+            </div>
+            <div class="rec-dd-lista" id="rec-costo-f-tipo"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="rec-costo-empty" class="empty" style="padding:50px 20px">Cargando…</div>
@@ -2672,6 +2685,7 @@
           ["Etiqueta de cada barra", "SUM(costo) del mes (todos los grupos visibles)"],
           ["Filtro Rubro (desplegable)", "rubro de la vista (solo los que tienen algo clasificado)"],
           ["Filtro Rubro agrupado (desplegable)", "grupo resultante"],
+          ["Filtro Tipo de orden (desplegable)", "tipo_orden (vacío = \"(sin tipo de orden)\")"],
         ]},
         { titulo: "Tabla auxiliar por rubro", origen: "bd_articulos_x_rubro + rec_grupos_rubro", campos: [
           ["Rubro", "DISTINCT btrim(bd_articulos_x_rubro.rubro), sin vacíos"],
@@ -5090,7 +5104,8 @@
   let recArtEdit      = [];          // copia de trabajo: { id, cod_corto, descripcion, grupo }
   let recArtSigId     = 1;
   let recCostoChart   = null;
-  const recCostoOff   = { rubro: new Set(), grupo: new Set() };  // destildados
+  const recCostoOff   = { rubro: new Set(), grupo: new Set(), tipo: new Set() };  // destildados
+  const REC_SIN_TIPO  = "(sin tipo de orden)";
   const REC_COSTO_META = 8000000000; // línea punteada de referencia ($ 8.000.000.000)
   const REC_MES_LARGO  = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
                           "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -5187,6 +5202,7 @@
 
   document.getElementById("rec-costo-f-rubro").addEventListener("change", recCostoChipCambio);
   document.getElementById("rec-costo-f-grupo").addEventListener("change", recCostoChipCambio);
+  document.getElementById("rec-costo-f-tipo").addEventListener("change", recCostoChipCambio);
   function recCostoChipCambio(e) {
     const cb = e.target;
     if (!cb.dataset.tipo) return;
@@ -5196,7 +5212,7 @@
   }
 
   function recCostoTodos(tipo, todos) {
-    const sel = tipo === "rubro" ? "#rec-costo-f-rubro input" : "#rec-costo-f-grupo input";
+    const sel = `#rec-costo-f-${tipo} input`;
     document.querySelectorAll(sel).forEach(cb => {
       if (todos) recCostoOff[tipo].delete(cb.value); else recCostoOff[tipo].add(cb.value);
     });
@@ -5212,7 +5228,7 @@
     const grupoDe = recCostoClasificador();
 
     // Solo cuentan las recepciones con grupo (los rubros vacíos ya vienen filtrados)
-    const todas    = recCostoRows.map(r => ({ ...r, grupo: grupoDe(r) }));
+    const todas    = recCostoRows.map(r => ({ ...r, grupo: grupoDe(r), tipo: r.tipo_orden || REC_SIN_TIPO }));
     const conGrupo = todas.filter(r => r.grupo);
 
     const grupos = [...new Set(conGrupo.map(r => r.grupo))].sort((a, b) => a.localeCompare(b, "es"));
@@ -5221,9 +5237,14 @@
     const rubros = [...new Set(conGrupo.filter(r => !recCostoOff.grupo.has(r.grupo)).map(r => r.rubro))]
       .sort((a, b) => a.localeCompare(b, "es"));
     recCostoOpciones("rec-costo-f-grupo", grupos, "grupo", colores);
+    // Tipos de orden de lo clasificado; el que viene vacío se agrupa aparte, al final
+    const tipos = [...new Set(conGrupo.map(r => r.tipo))]
+      .sort((a, b) => (a === REC_SIN_TIPO) - (b === REC_SIN_TIPO) || a.localeCompare(b, "es"));
+    recCostoOpciones("rec-costo-f-tipo", tipos, "tipo");
     recCostoOpciones("rec-costo-f-rubro", rubros, "rubro");
 
-    const filas = conGrupo.filter(r => !recCostoOff.grupo.has(r.grupo) && !recCostoOff.rubro.has(r.rubro));
+    const filas = conGrupo.filter(r => !recCostoOff.grupo.has(r.grupo) && !recCostoOff.rubro.has(r.rubro)
+                                    && !recCostoOff.tipo.has(r.tipo));
     const sinGrupo = new Set(todas.filter(r => !r.grupo).map(r => r.rubro)).size;
     info.textContent = sinGrupo
       ? `${sinGrupo} ${sinGrupo === 1 ? "rubro con recepciones sin clasificar queda" : "rubros con recepciones sin clasificar quedan"} afuera (total o en parte)`
