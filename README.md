@@ -44,15 +44,49 @@ El primer usuario se crea solo al arrancar, cuando la tabla está vacía, tomand
 - Node.js >= 18
 - PostgreSQL con las vistas y funciones que consume la app (ver más abajo)
 
-## Correr localmente
+## Dos accesos: Railway y local
+
+La misma app puede correr en Railway (por internet, con su dominio) y en una PC
+(en `http://localhost:3000`) **al mismo tiempo**. Si las dos apuntan a la misma
+base, comparten todo: usuarios, permisos y las tablas auxiliares de Recepciones.
+La sesión sí es aparte: hay que iniciar sesión en cada acceso.
+
+Si Railway tiene problemas con el servidor de la app, el acceso local sigue
+funcionando mientras la base responda. Si el problema es la base, los dos
+accesos se caen: para eso hace falta un respaldo de la base, que es otro tema.
+
+### Correr en local (Windows)
+
+1. Instalar **Node.js LTS** desde <https://nodejs.org> (una sola vez).
+2. Copiar `.env.example` como `.env`, en la misma carpeta, y completar:
+   - `DATABASE_URL`: la URL **pública** de la base. En Railway: servicio
+     Postgres → Variables → `DATABASE_PUBLIC_URL` (el host termina en
+     `.proxy.rlwy.net`). La interna (`postgres.railway.internal`) solo anda
+     dentro de Railway.
+   - `SESSION_SECRET`: cualquier texto largo.
+   - Las variables `R2_*`, si se quieren ver las imágenes del Catálogo.
+3. Doble clic en **`iniciar-local.bat`**. La primera vez instala las
+   dependencias; después arranca la app y abre el navegador. Para detenerla,
+   cerrar esa ventana.
+
+El `.env` tiene contraseñas: **nunca se sube al repositorio** (está en
+`.gitignore`) y no conviene compartirlo.
+
+Desde otra PC de la misma red se puede entrar con `http://IP-DE-ESTA-PC:3000`,
+si el firewall de Windows lo permite.
+
+Sin el `.bat` (o en otro sistema operativo):
 
 ```bash
 npm install
-DATABASE_URL="postgres://..." npm start
-# Abrir http://localhost:3000
+npm start          # lee el .env de la carpeta
 ```
 
 ## Variables de entorno
+
+En Railway se cargan desde el panel. En local, desde el archivo `.env` (ver
+`.env.example`): la app lo lee al arrancar, sin pisar las que ya estén definidas
+en el entorno.
 
 | Variable | Default | Descripción |
 |---|---|---|
@@ -61,6 +95,7 @@ DATABASE_URL="postgres://..." npm start
 | `ADMIN_USER` | `admin` | Usuario inicial. Solo se usa si `app_users` está vacía. |
 | `ADMIN_PASS` | `admin` | Contraseña inicial. Solo se usa si `app_users` está vacía. |
 | `PORT` | `3000` | Puerto del servidor. |
+| `DB_SSL` | `true` | SSL hacia la base. `false` solo para un PostgreSQL instalado en la PC, que no lo usa. |
 | `R2_ACCOUNT_ID` | — | Cuenta de Cloudflare R2. Sin ella, la pestaña Catálogo avisa que falta configurarla. |
 | `R2_ACCESS_KEY_ID` | — | Access Key del token de R2. |
 | `R2_SECRET_ACCESS_KEY` | — | Secret Access Key del token de R2. |

@@ -1,10 +1,30 @@
 const express  = require("express");
 const cors     = require("cors");
 const path     = require("path");
+const fs       = require("fs");
 const crypto   = require("crypto");
 const session  = require("express-session");
 const bcrypt   = require("bcryptjs");
 const { Pool } = require("pg");
+
+// Configuración desde un archivo .env (para correr en local). En Railway no
+// existe ese archivo y las variables vienen del panel; además, lo que ya está
+// definido en el entorno nunca se pisa, así que allá esto no cambia nada.
+function cargarEnv(archivo) {
+  let texto;
+  try { texto = fs.readFileSync(archivo, "utf8"); } catch { return; }
+  // El Bloc de notas puede guardar con BOM y fin de línea \r\n: se toleran los dos
+  texto.replace(/^\uFEFF/, "").split(/\r?\n/).forEach(linea => {
+    const m = linea.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!m || process.env[m[1]] !== undefined) return;
+    let valor = m[2];
+    const comillas = valor.match(/^(["'])(.*)\1$/);
+    if (comillas) valor = comillas[2];
+    process.env[m[1]] = valor;
+  });
+  console.log("Configuración leída de", path.basename(archivo));
+}
+cargarEnv(path.join(__dirname, ".env"));
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -16,8 +36,14 @@ app.use(express.json({ limit: "25mb" }));
 app.get("/health", (req, res) => res.status(200).send("ok"));
 
 let pgPool = null;
+// SSL activado salvo que DB_SSL diga lo contrario: Railway (y casi cualquier
+// base en internet) lo exige, pero un PostgreSQL instalado en la PC no lo usa.
+const DB_SSL = !/^(false|0|no|off|disable)$/i.test(process.env.DB_SSL || "");
 if (process.env.DATABASE_URL) {
-  pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: DB_SSL ? { rejectUnauthorized: false } : false,
+  });
   pgPool.connect().then(c => { console.log("PostgreSQL conectado"); c.release(); }).catch(e => console.error("PG error:", e.message));
 } else {
   console.log("DATABASE_URL no definida");

@@ -97,8 +97,19 @@ El permiso vive en dos lugares y los dos hacen falta:
 `/api/me` relee los permisos de la base en cada carga, así un cambio del admin
 se aplica cuando el usuario refresca, sin necesidad de volver a entrar.
 
-Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`.
+Variables de entorno: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER`, `ADMIN_PASS`, `PORT`,
+`DB_SSL` (`false` solo para un PostgreSQL local sin SSL; por defecto SSL activado).
 `ADMIN_USER`/`ADMIN_PASS` solo se usan la primera vez, cuando `app_users` está vacía.
+
+## Dos accesos: Railway y local
+
+La app corre en Railway y también en una PC con `iniciar-local.bat`, a la vez y
+contra la misma base. En local la configuración sale de un `.env` (plantilla:
+`.env.example`), que `server.js` lee al arrancar con `cargarEnv()` **sin pisar**
+variables ya definidas: por eso en Railway, donde no hay `.env`, no cambia nada.
+**El `.env` nunca se commitea** (tiene contraseñas; está en `.gitignore`).
+Cualquier cambio de configuración tiene que seguir funcionando en los dos lados:
+nada de rutas absolutas ni supuestos de HTTPS (la cookie usa `secure: "auto"`).
 
 ## Mapeo y Dependencias — mantenerlo SIEMPRE al día
 
