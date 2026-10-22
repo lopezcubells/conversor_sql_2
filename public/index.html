@@ -560,12 +560,17 @@
        la otra (usa el mismo armado 70/30 que el renglón 1, .inm-fila1) */
     .inm-abc-fila { flex: 3 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
     .inm-abc {
-      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      flex: 1; display: flex; align-items: center; gap: 16px; min-height: 0;
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
       padding: 14px 18px; border-left-width: 4px;
     }
     @media (max-width: 1000px) { .inm-abc-fila { flex: none; } }
-    .inm-abc-titulo { font-size: 13px; font-weight: 700; }
+    /* La letra de la clase, enorme y en su color: casi el alto de la tarjeta,
+       para que se lea de lejos. line-height bajo para que no agrande la tarjeta. */
+    .inm-abc-letra  { font-size: 180px; font-weight: 800; line-height: .72; letter-spacing: -.03em;
+                      flex: none; min-width: .75em; text-align: center; }
+    .inm-abc-datos  { min-width: 0; display: flex; flex-direction: column; }
+    .inm-abc-titulo { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
     .inm-abc-num    { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
     .inm-abc-num small { font-size: 12px; font-weight: 600; color: var(--muted); font-family: var(--sans); }
     .inm-abc-pie    { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -4518,10 +4523,13 @@
       const pctCosto = total ? (100 * costo / total) : 0;
       const f1 = v => v.toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
       return `
-        <div class="inm-abc" style="border-left-color:${INM_ABC_COLOR[clase]}">
-          <div class="inm-abc-titulo">Clase ${clase}</div>
-          <div class="inm-abc-num">${de.length.toLocaleString("es-AR")} art. <small>(${f1(pctArt)} % de los artículos)</small></div>
-          <div class="inm-abc-pie">Costo obsoleto: $ ${Math.round(costo).toLocaleString("es-AR")} (${f1(pctCosto)} %)</div>
+        <div class="inm-abc" style="border-left-color:${INM_ABC_COLOR[clase]}" title="Clase ${clase}">
+          <div class="inm-abc-letra" style="color:${INM_ABC_COLOR[clase]}">${clase}</div>
+          <div class="inm-abc-datos">
+            <div class="inm-abc-titulo">Clase ${clase}</div>
+            <div class="inm-abc-num">${de.length.toLocaleString("es-AR")} art. <small>(${f1(pctArt)} % de los artículos)</small></div>
+            <div class="inm-abc-pie">Costo obsoleto: $ ${Math.round(costo).toLocaleString("es-AR")} (${f1(pctCosto)} %)</div>
+          </div>
         </div>`;
     }).join("");
     document.getElementById("inm-abc-fila").innerHTML = html;
