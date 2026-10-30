@@ -533,6 +533,10 @@
       .inm-fila1 > .card, .inm-kpis { flex: none; }
     }
     .inm-pareto-marco  { position: relative; }
+    /* Renglón 2: causas y responsables, barras horizontales minimalistas */
+    .inm-cr-titulo { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .inm-cr-graf   { position: relative; }
+    .inm-cr-vacio  { font-size: 12px; color: var(--muted); padding: 14px 0; }
     /* Bloque 4: Top 5 agotamiento de obsoletos */
     .inm-agot-grilla { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
     @media (max-width: 1300px) { .inm-agot-grilla { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -1452,17 +1456,19 @@
     </div>
   </div>
 
-  <!-- Renglón 2: los dos rankings lado a lado -->
+  <!-- Renglón 2: causas y responsables, y los dos rankings -->
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">
 
-    <div class="card" style="flex:1;min-width:300px;padding:0;overflow:hidden">
-      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-        <div class="card-title" style="margin-bottom:0">Top 10 Artículos Obsoletos</div>
-        <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:2px 10px">por cantidad</span>
+    <div class="card" style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:18px">
+      <div>
+        <div class="inm-cr-titulo" style="color:#f87171">Causas</div>
+        <div class="inm-cr-graf" id="inm-causas-box"><canvas id="inm-causas"></canvas></div>
       </div>
-      <div id="inm-top10-wrap">
-        <div class="empty" style="padding:40px 0"><div class="big">📊</div>Sin datos</div>
+      <div>
+        <div class="inm-cr-titulo" style="color:#facc15">Responsables</div>
+        <div class="inm-cr-graf" id="inm-resp-box"><canvas id="inm-resp"></canvas></div>
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:auto">Costo obsoleto · última fecha</div>
     </div>
 
     <div class="card" style="flex:1;min-width:300px;padding:0;overflow:hidden">
@@ -2647,7 +2653,7 @@
     inmovilizados: {
       titulo: "Inmovilizados",
       fuentes: [
-        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, tarjetas de resumen, los tres Top 10, el Pareto y el Top 5 de agotamiento"],
+        ["vista", "view_avance_inmovilizados", "Gráfico de evolución, tarjetas de resumen, causas, responsables, los dos Top 10, el Pareto y el Top 5 de agotamiento"],
         ["bucket", "Cloudflare R2 · imagenes-insumos", "Miniatura del tooltip del Pareto y del Top 5 de agotamiento: nombre de archivo sin extensión = cod_corto"],
       ],
       parametros: [
@@ -2659,16 +2665,20 @@
           ["Obsoleto", "SUM(costo_obsoleto)"],
           ["Activo sin rotación", "SUM(costo_activo_sin_rotacion)"],
           ["Activo", "SUM(costo_activo)"],
+          ["Al entrar", "solo se ve Obsoleto; las otras dos se prenden desde la leyenda"],
         ]},
         { titulo: "Tarjetas de resumen (al lado del gráfico)", origen: "view_avance_inmovilizados, última fecha (MAX(fecha) global) · filtro de rubros", campos: [
           ["Costo Stock Obsoleto ($)", "SUM(costo_obsoleto)"],
           ["Costo Stock Total ($) al (fecha)", "SUM(stock × costo_unitario_actual) · la fecha es MAX(fecha)"],
           ["% Obsoleto", "100 × SUM(costo_obsoleto) / SUM(stock × costo_unitario_actual), calculado en la base"],
         ]},
-        { titulo: "Top 10 obsoletos · por cantidad", origen: "view_avance_inmovilizados, última fecha · ORDER BY obsoleto", campos: [
-          ["Artículo", "cod_corto + descripcion"],
-          ["Valor principal (cantidad)", "obsoleto"],
-          ["Valor secundario (costo)", "costo_obsoleto"],
+        { titulo: "Causas (barras horizontales)", origen: "view_avance_inmovilizados, última fecha · costo_obsoleto > 0 · GROUP BY causa_estandar", campos: [
+          ["Categoría", "causa_estandar (vacío = \"(sin causa)\")"],
+          ["Barra y etiqueta", "SUM(costo_obsoleto)"],
+        ]},
+        { titulo: "Responsables (barras horizontales)", origen: "view_avance_inmovilizados, última fecha · costo_obsoleto > 0 · GROUP BY sector_responsable", campos: [
+          ["Categoría", "sector_responsable (vacío = \"(sin responsable)\")"],
+          ["Barra y etiqueta", "SUM(costo_obsoleto)"],
         ]},
         { titulo: "Top 10 obsoletos · por costo", origen: "view_avance_inmovilizados, última fecha · ORDER BY costo_obsoleto", campos: [
           ["Artículo", "cod_corto + descripcion"],
@@ -2705,7 +2715,7 @@
       ],
       notas: [
         "Top 5 agotamiento: el año en curso es el de la fecha más reciente de la vista; compara el primer reporte del año con el último. Un artículo que no figura en una de esas fechas cuenta como 0. Solo entran los que bajaron (importe agotado > 0), y respeta el filtro de rubros.",
-        "Los tres Top 10 toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
+        "Los dos Top 10, causas y responsables toman solo la fecha más reciente (WHERE fecha = MAX(fecha)) y la base ya los devuelve cortados en 10. Los valores nulos van al final del orden.",
         "El ranking de rubros respeta el filtro de rubros: si se eligen dos, muestra a lo sumo dos.",
         "El Pareto solo incluye artículos con costo obsoleto mayor a cero, y respeta el filtro de rubros. La clase de cada artículo se calcula en el navegador con el acumulado de los anteriores: el que cruza el 80 % todavía es A.",
         "En el Pareto solo los artículos A van desplegados; los B se suman en una barra y los C en otra, al final.",
@@ -3968,7 +3978,12 @@
 
   let inmChart        = null;
   let inmRubrosLoaded = false;
-  let inmTopCantidad  = [];
+  let inmCausasChart = null;
+  let inmRespChart   = null;
+  // Series del gráfico de evolución que están ocultas. Arranca mostrando solo el
+  // costo obsoleto; lo que el usuario prenda o apague en la leyenda se respeta
+  // al cambiar el filtro de rubros.
+  const inmEvolOcultas = new Set(["Costo activo sin rotación", "Costo activo"]);
   let inmTopCosto     = [];
   let inmTopRubros    = [];
   let inmParetoData   = [];
@@ -4041,13 +4056,13 @@
       chartStatus.textContent = "";
     } catch (e) { chartStatus.textContent = "⚠ " + e.message; }
 
-    // Los dos rankings, en paralelo: cada uno muestra su propio error si falla
+    // Todo en paralelo: cada bloque muestra su propio error si falla
     const pedirTop = async (orden, wrapId) => {
       try {
         const res = await fetch(`${API}/api/pg/inmovilizados/top-obsoletos?orden=${orden}&${params}`);
         if (!res.ok) throw new Error((await res.json()).error);
         const { rows } = await res.json();
-        if (orden === "costo") inmTopCosto = rows; else inmTopCantidad = rows;
+        inmTopCosto = rows;
         inmRenderTop10(wrapId, rows, orden);
       } catch (e) {
         document.getElementById(wrapId).innerHTML =
@@ -4068,13 +4083,91 @@
       }
     };
     await Promise.all([
-      pedirTop("cantidad", "inm-top10-wrap"),
+      inmCargarCausas(params),
       pedirTop("costo",    "inm-top10-costo-wrap"),
       pedirRubros(),
       inmCargarPareto(params),
       inmCargarResumen(params),
       inmCargarAgotamiento(params),
     ]);
+  }
+
+  // ── Causas y responsables (renglón 2) ──
+
+  async function inmCargarCausas(params) {
+    try {
+      const res = await fetch(`${API}/api/pg/inmovilizados/causas?${params}`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { causas, responsables } = await res.json();
+      inmCausasChart = inmBarrasH("inm-causas", inmCausasChart, causas, "#991b1b");
+      inmRespChart   = inmBarrasH("inm-resp", inmRespChart, responsables, "#a16207");
+    } catch (e) {
+      if (inmCausasChart) { inmCausasChart.destroy(); inmCausasChart = null; }
+      if (inmRespChart)   { inmRespChart.destroy();   inmRespChart = null; }
+      ["inm-causas-box", "inm-resp-box"].forEach(id => { document.getElementById(id).style.height = ""; });
+      document.getElementById("inm-causas-box").innerHTML = `<div class="inm-cr-vacio">⚠ ${nsEsc(e.message)}</div>`;
+      document.getElementById("inm-resp-box").innerHTML = "";
+    }
+  }
+
+  // Barras horizontales minimalistas: la categoría a la izquierda, el costo a la
+  // derecha de cada barra y la más larga arriba (la base ya las manda ordenadas).
+  // Sin ejes ni grilla. El alto crece con la cantidad de categorías.
+  function inmBarrasH(id, anterior, filas, color) {
+    if (anterior) anterior.destroy();
+    let box = document.getElementById(id + "-box");
+    if (!document.getElementById(id)) box.innerHTML = `<canvas id="${id}"></canvas>`;
+    const datos = (filas || []).map(r => ({ cat: r.categoria, v: parseFloat(r.costo_obsoleto) || 0 }))
+                               .filter(r => r.v > 0).sort((a, b) => b.v - a.v);
+    if (!datos.length) {
+      box.style.height = "";
+      box.innerHTML = `<div class="inm-cr-vacio">Sin obsoletos para el filtro elegido</div>`;
+      return null;
+    }
+    box.style.height = Math.max(90, datos.length * 30 + 10) + "px";
+    const pesos = v => "$ " + Math.round(v).toLocaleString("es-AR");
+    // Se reserva a la derecha justo el ancho del valor más largo, medido con la
+    // misma fuente de la etiqueta: así entra aunque sean miles de millones
+    const medidor = document.createElement("canvas").getContext("2d");
+    medidor.font = "bold 11px " + getComputedStyle(document.body).fontFamily;
+    const reserva = Math.ceil(Math.max(...datos.map(d => medidor.measureText(pesos(d.v)).width))) + 10;
+    return new Chart(document.getElementById(id).getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: datos.map(d => d.cat),
+        datasets: [{ data: datos.map(d => d.v), backgroundColor: color, borderRadius: 3, barPercentage: .8, categoryPercentage: .9 }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        layout: { padding: { right: reserva } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+          datalabels: {
+            anchor: "end", align: "end", offset: 4, clip: false,
+            color: "#e2e4ef", font: { weight: "bold", size: 11 },
+            formatter: v => pesos(v),
+          },
+        },
+        scales: {
+          x: { display: false, beginAtZero: true },
+          y: {
+            grid: { display: false }, border: { display: false },
+            ticks: {
+              color: "#e2e4ef", font: { size: 11 }, autoSkip: false,
+              callback(i) {
+                const t = String(this.getLabelForValue(i) ?? "");
+                return t.length > 26 ? t.slice(0, 25) + "…" : t;
+              },
+            },
+          },
+        },
+      },
+      plugins: [ChartDataLabels],
+    });
   }
 
   // ── Tarjetas de resumen (renglón 1) ──
@@ -4581,6 +4674,7 @@
           },
           {
             label: "Costo activo sin rotación",
+            hidden: inmEvolOcultas.has("Costo activo sin rotación"),
             data: sinRotacion,
             backgroundColor: "rgba(30,64,175,.8)",
             borderColor: "#1e40af",
@@ -4589,6 +4683,7 @@
           },
           {
             label: "Costo activo",
+            hidden: inmEvolOcultas.has("Costo activo"),
             data: activo,
             backgroundColor: "rgba(56,189,248,.75)",
             borderColor: "#38bdf8",
@@ -4602,7 +4697,16 @@
         maintainAspectRatio: false,
         layout: { padding: { top: 8 } },
         plugins: {
-          legend: { display: true, position: "bottom", labels: { color: "#e2e4ef", boxWidth: 14, padding: 18 } },
+          legend: {
+            display: true, position: "bottom", labels: { color: "#e2e4ef", boxWidth: 14, padding: 18 },
+            // Clic en la leyenda: prende/apaga la serie como siempre, y se
+            // recuerda para el próximo redibujo
+            onClick(e, item, legend) {
+              Chart.defaults.plugins.legend.onClick.call(this, e, item, legend);
+              if (legend.chart.isDatasetVisible(item.datasetIndex)) inmEvolOcultas.delete(item.text);
+              else inmEvolOcultas.add(item.text);
+            },
+          },
           tooltip: {
             callbacks: {
               label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.raw).toLocaleString("es-AR")}`,

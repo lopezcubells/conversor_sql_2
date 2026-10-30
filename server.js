@@ -844,15 +844,15 @@ app.get("/api/pg/inmovilizados/resumen", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Ranking de obsoletos, cortado en 10 desde la base. Hay dos: por cantidad y por
-// costo. La columna sale de esta tabla y nunca del texto que mandó el navegador,
-// porque entra al SQL como identificador.
-const INM_ORDEN = { cantidad: "obsoleto", costo: "costo_obsoleto" };
+// Ranking de obsoletos por costo, cortado en 10 desde la base. (El de cantidad
+// se quitó.) La columna sale de esta tabla y nunca del texto que mandó el
+// navegador, porque entra al SQL como identificador.
+const INM_ORDEN = { costo: "costo_obsoleto" };
 
 app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
-    const columna = INM_ORDEN[req.query.orden] || INM_ORDEN.cantidad;
+    const columna = INM_ORDEN[req.query.orden] || INM_ORDEN.costo;
     const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
                  : req.query.rubros ? [req.query.rubros] : [];
     const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
@@ -867,6 +867,36 @@ app.get("/api/pg/inmovilizados/top-obsoletos", async (req, res) => {
       params
     );
     res.json({ rows: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Costo obsoleto por causa estándar y por sector responsable. Solo obsoletos
+// (costo_obsoleto > 0), en la misma foto que el resto: la última fecha y el
+// filtro de rubros. Las dos agrupaciones van en paralelo. Un valor vacío se
+// agrupa aparte, para que ese costo no desaparezca.
+app.get("/api/pg/inmovilizados/causas", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const rubros = Array.isArray(req.query.rubros) ? req.query.rubros
+                 : req.query.rubros ? [req.query.rubros] : [];
+    const and    = rubros.length ? "AND rubro = ANY($1::text[])" : "";
+    const params = rubros.length ? [rubros] : [];
+    const agrupar = (columna, vacio) => pgPool.query(
+      `SELECT COALESCE(NULLIF(btrim(${columna}::text), ''), '${vacio}') AS categoria,
+              SUM(costo_obsoleto) AS costo_obsoleto
+       FROM view_avance_inmovilizados
+       WHERE fecha = (SELECT MAX(fecha) FROM view_avance_inmovilizados)
+         AND costo_obsoleto > 0
+       ${and}
+       GROUP BY 1
+       ORDER BY 2 DESC`,
+      params
+    );
+    const [causas, responsables] = await Promise.all([
+      agrupar("causa_estandar", "(sin causa)"),
+      agrupar("sector_responsable", "(sin responsable)"),
+    ]);
+    res.json({ causas: causas.rows, responsables: responsables.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
