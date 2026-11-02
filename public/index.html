@@ -886,6 +886,7 @@
     .rec-mc-modo { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .rec-mc-modo button { border: none; background: transparent; padding: 6px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
     .rec-mc-modo button.on { background: #ede9fe; color: #4c1d95; font-weight: 600; }
+    #rec-mp-modo button.on { background: #fbe4e8; color: #800020; }
     .rec-mc-grid { display: grid; }
     .rec-mc-grid > div { display: flex; align-items: center; min-width: 0; }
     .rec-mc-th  { justify-content: center; font-size: 12px; color: var(--muted); padding: 4px 0 6px; }
@@ -1720,6 +1721,35 @@
         <div class="rec-mc-sub">TOTAL MES</div>
         <div class="rec-mc-graf"><canvas id="rec-mc-chart"></canvas></div>
         <div class="rec-mc-nota">Millones de $</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Matriz de calor por proveedor: plegable, arranca contraída (es larga) -->
+  <div class="card">
+    <div class="collapsible-header collapsed" id="rec-mp-toggle">
+      <div class="card-title" style="margin-bottom:0">Costo de recepciones por proveedor - matriz de calor</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="rec-mp-resumen" style="font-size:12px;color:var(--muted)"></span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="collapsible-body collapsible-body-tall collapsed" id="rec-mp-body">
+      <div class="rec-mc-cab">
+        <span style="font-size:12px;color:var(--muted)">Proveedores de mayor a menor costo en el período · millones de $ · mismos filtros y totales que la matriz de grupos</span>
+        <div class="rec-mc-modo" id="rec-mp-modo">
+          <button type="button" class="on" data-modo="monto">Monto</button>
+          <button type="button" data-modo="pct">% del mes</button>
+        </div>
+      </div>
+      <div id="rec-mp-empty" class="empty" style="padding:40px 20px">Cargando…</div>
+      <div class="rec-mc-scroll" id="rec-mp-box" style="display:none">
+        <div class="rec-mc">
+          <div class="rec-mc-grid" id="rec-mp-grid"></div>
+          <div class="rec-mc-sub">TOTAL MES</div>
+          <div class="rec-mc-graf"><canvas id="rec-mp-chart"></canvas></div>
+          <div class="rec-mc-nota">Millones de $</div>
+        </div>
       </div>
     </div>
   </div>
@@ -2759,6 +2789,11 @@
           ["Celda · % del mes", "SUM(costo) del grupo / SUM(costo) del mes"],
           ["Total mes (fila y línea)", "SUM(costo) del mes; ▲ y punto naranja si supera $ 8.000.000.000"],
           ["Línea punteada", "valor fijo: $ 8.000.000.000"],
+        ]},
+        { titulo: "Costo de recepciones por proveedor - matriz de calor (plegable)", origen: "las mismas filas filtradas y clasificadas que la matriz de grupos", campos: [
+          ["Filas (proveedores)", "view_recepciones_2026.proveedor (vacío = \"(sin proveedor)\"), de mayor a menor SUM(costo)"],
+          ["Celda · Monto / % del mes", "SUM(costo) del proveedor en el mes / sobre el total del mes"],
+          ["Total mes (fila y línea)", "SUM(costo) del mes: igual al de la matriz de grupos"],
         ]},
         { titulo: "Tabla auxiliar por rubro", origen: "bd_articulos_x_rubro + rec_grupos_rubro", campos: [
           ["Rubro", "DISTINCT btrim(bd_articulos_x_rubro.rubro), sin vacíos"],
@@ -5318,6 +5353,7 @@
       recCostoRows = [];
       empty.textContent = "⚠ " + costo.reason.message;
       recMcRender(null, empty.textContent);
+      recMpRender(null, null, null, null, empty.textContent);
       return;
     }
     recCostoRender();
@@ -5431,6 +5467,7 @@
         ? "Asigná un grupo en las tablas auxiliares de abajo para ver el gráfico"
         : "Sin datos para el filtro elegido";
       recMcRender(null, empty.textContent);
+      recMpRender(null, null, null, null, empty.textContent);
       return;
     }
 
@@ -5546,35 +5583,39 @@
       plugins: [lineaMeta, totales],
     });
 
-    // La matriz de calor muestra exactamente lo mismo, en otra forma
+    // Las matrices de calor muestran exactamente lo mismo, en otra forma
     recMcRender({ labels, titulos, datasets, totalesMes, colores });
+    recMpRender(filas, meses, labels, titulos);
   }
 
-  // ── Recepciones: matriz de calor ──
-  // Filas = grupos (de mayor a menor costo, el mismo orden que las pilas),
-  // columnas = meses. Abajo, el total del mes como línea, alineado con las
-  // columnas: el gráfico usa el mismo ancho, y su eje vertical ocupa
-  // exactamente la columna de etiquetas de la matriz.
+  // ── Recepciones: matrices de calor ──
+  // Filas = grupos o proveedores (de mayor a menor costo), columnas = meses.
+  // Abajo, el total del mes como línea, alineado con las columnas: el gráfico
+  // usa el mismo ancho, y su eje vertical ocupa exactamente la columna de
+  // etiquetas de la matriz. Hay dos instancias de la misma "fábrica": la de
+  // grupos (violeta) y la de proveedores (bordó); cada una con su estado.
 
-  let recMcChart = null;
-  let recMcModo  = "monto";
-  let recMcDatos = null;
   const REC_MC_LAB = 190;   // ancho de la columna de etiquetas (igual que --rec-mc-lab)
 
-  document.getElementById("rec-mc-modo").addEventListener("click", e => {
-    const b = e.target.closest("button[data-modo]");
-    if (!b) return;
-    recMcModo = b.dataset.modo;
-    document.querySelectorAll("#rec-mc-modo button").forEach(x => x.classList.toggle("on", x === b));
-    if (recMcDatos) recMcRender(recMcDatos);
-  });
+  // cfg: { pref: prefijo de los ids, etiqueta: título de la columna,
+  //        rgb: color de las celdas "r,g,b", linea: color de la línea }
+  function recMcCrear(cfg) {
+    let chart = null, modo = "monto", datos = null;
+    const $ = sufijo => document.getElementById(`${cfg.pref}-${sufijo}`);
+    $("modo").addEventListener("click", e => {
+      const b = e.target.closest("button[data-modo]");
+      if (!b) return;
+      modo = b.dataset.modo;
+      $("modo").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+      if (datos) render(datos);
+    });
 
-  function recMcRender(d, mensaje) {
-    const box = document.getElementById("rec-mc-box");
-    const empty = document.getElementById("rec-mc-empty");
-    recMcDatos = d;
+  function render(d, mensaje) {
+    const box = $("box");
+    const empty = $("empty");
+    datos = d;
     if (!d) {
-      if (recMcChart) { recMcChart.destroy(); recMcChart = null; }
+      if (chart) { chart.destroy(); chart = null; }
       box.style.display = "none";
       empty.style.display = "block";
       empty.textContent = mensaje || "Sin datos";
@@ -5589,27 +5630,27 @@
 
     // Intensidad de cada celda: contra la mayor de la matriz (monto) o contra
     // la mayor participación de un grupo en un mes (% del mes)
-    const valor = (ds, i) => recMcModo === "pct" ? pct(ds.data[i], totalesMes[i]) : ds.data[i];
+    const valor = (ds, i) => modo === "pct" ? pct(ds.data[i], totalesMes[i]) : ds.data[i];
     let max = 0;
     datasets.forEach(ds => ds.data.forEach((_, i) => { max = Math.max(max, valor(ds, i)); }));
 
     const celda = (ds, i) => {
       const v = ds.data[i], t = max ? valor(ds, i) / max : 0;
-      const fondo = `rgba(124,58,237,${(0.06 + 0.86 * t).toFixed(3)})`;
+      const fondo = `rgba(${cfg.rgb},${(0.06 + 0.86 * t).toFixed(3)})`;
       const color = t > 0.5 ? "#fff" : "#1c1f2b";
       const peso  = t > 0.6 ? 700 : 400;
-      const texto = recMcModo === "pct" ? f1(pct(v, totalesMes[i])) + " %" : mill(v);
+      const texto = modo === "pct" ? f1(pct(v, totalesMes[i])) + " %" : mill(v);
       const tip   = `${ds.label} · ${titulos[i]}: ${pesos(v)} (${f1(pct(v, totalesMes[i]))} % del mes)`;
       return `<div class="rec-mc-celda" style="background:${fondo};color:${color};font-weight:${peso}" title="${nsEsc(tip)}">${v ? texto : "—"}</div>`;
     };
 
-    const grid = document.getElementById("rec-mc-grid");
+    const grid = $("grid");
     grid.style.gridTemplateColumns = `${REC_MC_LAB}px repeat(${n}, minmax(0, 1fr))`;
     grid.innerHTML =
-      `<div class="rec-mc-th rec-mc-lab">Grupo</div>` +
+      `<div class="rec-mc-th rec-mc-lab">${nsEsc(cfg.etiqueta)}</div>` +
       labels.map(l => `<div class="rec-mc-th">${nsEsc(l)}</div>`).join("") +
       datasets.map(ds =>
-        `<div class="rec-mc-lab"><i style="background:${colores.get(ds.label)}"></i><span title="${nsEsc(ds.label)}">${nsEsc(ds.label)}</span></div>` +
+        `<div class="rec-mc-lab">${colores ? `<i style="background:${colores.get(ds.label)}"></i>` : ""}<span title="${nsEsc(ds.label)}">${nsEsc(ds.label)}</span></div>` +
         ds.data.map((_, i) => celda(ds, i)).join("")
       ).join("") +
       `<div class="rec-mc-total lab">Total mes</div>` +
@@ -5637,15 +5678,15 @@
         ctx.restore();
       },
     };
-    if (recMcChart) recMcChart.destroy();
-    recMcChart = new Chart(document.getElementById("rec-mc-chart").getContext("2d"), {
+    if (chart) chart.destroy();
+    chart = new Chart($("chart").getContext("2d"), {
       type: "line",
       data: { labels, datasets: [{
         data: totalesMes,
-        borderColor: "#7c3aed", borderWidth: 2, tension: 0,
-        fill: true, backgroundColor: "rgba(124,58,237,.08)",
+        borderColor: cfg.linea, borderWidth: 2, tension: 0,
+        fill: true, backgroundColor: `rgba(${cfg.rgb},.08)`,
         pointRadius: 5, pointHoverRadius: 6, pointBorderWidth: 2,
-        pointBorderColor: sobre.map(s => s ? "#ea580c" : "#7c3aed"),
+        pointBorderColor: sobre.map(s => s ? "#ea580c" : cfg.linea),
         pointBackgroundColor: sobre.map(s => s ? "#f97316" : "#ffffff"),
       }] },
       options: {
@@ -5690,6 +5731,43 @@
       plugins: [meta],
     });
   }
+    // Un gráfico creado con el bloque oculto queda con ancho cero y no se
+    // recupera solo: al mostrarlo se arma de nuevo con los mismos datos
+    return { render, redibujar: () => { if (datos) render(datos); } };
+  }
+
+  const recMcGrupos = recMcCrear({ pref: "rec-mc", etiqueta: "Grupo", rgb: "124,58,237", linea: "#7c3aed" });
+  const recMcProv   = recMcCrear({ pref: "rec-mp", etiqueta: "Proveedor", rgb: "128,0,32", linea: "#800020" });
+  const recMcRender = (d, mensaje) => recMcGrupos.render(d, mensaje);
+
+  // Por proveedor: las mismas filas ya filtradas y clasificadas que la de
+  // grupos, solo que agrupadas por proveedor. Así los totales por mes son
+  // exactamente los mismos en las dos matrices.
+  function recMpRender(filas, meses, labels, titulos, mensaje) {
+    const resumen = document.getElementById("rec-mp-resumen");
+    if (!filas) { resumen.textContent = ""; recMcProv.render(null, mensaje); return; }
+    const suma = new Map();
+    filas.forEach(r => {
+      const p = r.proveedor || "(sin proveedor)";
+      if (!suma.has(p)) suma.set(p, meses.map(() => 0));
+      const i = meses.indexOf(String(r.mes).slice(0, 7));
+      if (i >= 0) suma.get(p)[i] += parseFloat(r.costo) || 0;
+    });
+    const datasets = [...suma.entries()]
+      .map(([label, data]) => ({ label, data, total: data.reduce((a, b) => a + b, 0) }))
+      .sort((a, b) => b.total - a.total);
+    const totalesMes = meses.map((_, i) => datasets.reduce((a, d) => a + d.data[i], 0));
+    resumen.textContent = `${datasets.length.toLocaleString("es-AR")} ${datasets.length === 1 ? "proveedor" : "proveedores"}`;
+    recMcProv.render({ labels, titulos, datasets, totalesMes, colores: null });
+  }
+
+  // Plegable: arranca contraída. Al abrirla se redibuja, para que el gráfico
+  // tome el ancho real (mientras está oculta mide cero).
+  document.getElementById("rec-mp-toggle").addEventListener("click", () => {
+    document.getElementById("rec-mp-toggle").classList.toggle("collapsed");
+    document.getElementById("rec-mp-body").classList.toggle("collapsed");
+    if (!document.getElementById("rec-mp-body").classList.contains("collapsed")) recMcProv.redibujar();
+  });
 
   // ── Tablas auxiliares ──
 

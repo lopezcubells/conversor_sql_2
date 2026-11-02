@@ -433,7 +433,7 @@ app.get("/api/pg/recepciones", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Costo de recepciones: costo por mes, rubro, artículo y tipo de orden. El grupo lo pone el
+// Costo de recepciones: costo por mes, rubro, artículo, tipo de orden y proveedor. El grupo lo pone el
 // navegador con las tablas auxiliares (primero la de artículo, después la de
 // rubro), así guardarlas redibuja el gráfico sin volver a consultar. Los
 // rubros vacíos ya quedan afuera acá.
@@ -445,12 +445,13 @@ app.get("/api/pg/recepciones/costo-mensual", async (req, res) => {
               btrim(rubro)                               AS rubro,
               btrim(cod_corto::text)                     AS cod_corto,
               NULLIF(btrim(tipo_orden::text), '')        AS tipo_orden,
+              NULLIF(btrim(proveedor::text), '')         AS proveedor,
               SUM(costo)                                 AS costo
        FROM view_recepciones_2026
        WHERE fecha_recepcion IS NOT NULL
          AND NULLIF(btrim(rubro), '') IS NOT NULL
-       GROUP BY 1, 2, 3, 4
-       ORDER BY 1, 2, 3, 4`
+       GROUP BY 1, 2, 3, 4, 5
+       ORDER BY 1, 2, 3, 4, 5`
     );
     res.json({ rows: result.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
