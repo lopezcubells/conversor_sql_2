@@ -825,11 +825,14 @@
       color: var(--text);
     }
     #tab-consumo-historico .card { box-shadow: 0 1px 3px rgba(40,20,90,.07); }
-    .ch-layout { display: flex; gap: 16px; align-items: flex-start; }
-    /* Panel de filtros: compacto, fijo a la izquierda mientras se desplaza */
-    .ch-filtros { flex: 0 0 280px; position: sticky; top: 12px; margin-bottom: 0; padding: 16px;
-                  max-height: calc(100vh - 24px); overflow-y: auto; }
-    .ch-filtros-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .ch-layout { display: flex; flex-direction: column; gap: 16px; }
+    /* Panel de filtros: franja horizontal arriba, así la tabla usa todo el ancho.
+       Los grupos se acomodan en columnas que bajan de renglón si no entran. */
+    .ch-filtros { margin-bottom: 0; padding: 14px 16px;
+                  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 16px; align-items: start; }
+    .ch-filtros .ch-grupo { margin-bottom: 0; }
+    .ch-filtros-cab { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; }
+    .ch-grupo.ancho { grid-column: span 2; }
     .ch-filtros-cab h3 { font-size: 14px; margin: 0; }
     .ch-reset { border: none; border-radius: 99px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
                 background: var(--accent2); color: #fff; }
@@ -903,10 +906,7 @@
     .ch-tabla thead th { overflow: visible; }
     .ch-th-txt { display: block; overflow: hidden; text-overflow: ellipsis; }
     .ch-pag { margin-top: 10px; }
-    @media (max-width: 1000px) {
-      .ch-layout { flex-direction: column; align-items: stretch; }
-      .ch-filtros { position: static; flex: none; max-height: none; }
-    }
+    @media (max-width: 700px) { .ch-grupo.ancho { grid-column: auto; } }
 
     /* ── Tema claro: solo pestaña Recepciones ── */
     #tab-recepciones {
@@ -2104,12 +2104,12 @@
         </div>
       </div>
 
-      <div class="ch-grupo">
+      <div class="ch-grupo ancho">
         <label>Año</label>
         <div class="ch-chips" id="ch-anios"></div>
       </div>
 
-      <div class="ch-grupo">
+      <div class="ch-grupo ancho">
         <label>Mes</label>
         <div class="ch-chips" id="ch-meses"></div>
         <div class="ch-nota-filtro">Sin ninguno marcado, se toman todos.</div>
@@ -7103,6 +7103,7 @@
   let chAbiertos = new Set();
   let chPagina   = 0;
   let chVisibles = [];            // filas de la página actual (para los botones +/−)
+  let chDimsVis  = [0];           // índices de CH_DIMS que se muestran
   let chPedido   = null;          // AbortController del pedido en curso
   let chTimer    = null;
 
@@ -7408,6 +7409,12 @@
     }
     const { per, grupo, etiqueta } = chColumnas();
     const todas = chFilasVisibles();
+    // Columnas de descripción según hasta dónde está abierto: con solo rubros,
+    // solo "Rubro insumo"; con insumos, suma código y descripción; con
+    // productos, todas. Se mira lo que está abierto de verdad (no solo el botón
+    // "Filas hasta"), para que abrir un rubro con + muestre sus columnas.
+    const prof = todas.reduce((a, n) => Math.max(a, n.nivel), 1);
+    chDimsVis = prof === 1 ? [0] : prof === 2 ? [0, 1, 2] : [0, 1, 2, 3, 4];
     const inicio = Math.min(chPagina * CH_PAGE, Math.max(0, todas.length - 1));
     chVisibles = todas.slice(inicio, inicio + CH_PAGE);
     estado.textContent = `${raiz.hijos.size.toLocaleString("es-AR")} rubros · ${per.length.toLocaleString("es-AR")} columnas · consumo total ${fmtNum(raiz.t)}`;
@@ -7430,14 +7437,14 @@
       if (n.nivel === 1) c[0] = tog(n, i) + txt(n.rubro);
       if (n.nivel === 2) { c[1] = tog(n, i) + txt(n.cod); c[2] = txt(n.desc); }
       if (n.nivel === 3) { c[3] = txt(n.sku); c[4] = txt(n.desc); }
-      return c.map((v, j) => `<td class="dim d${j}" title="${nsEsc(String(v).replace(/<[^>]+>/g, ""))}">${v}</td>`).join("");
+      return chDimsVis.map(j => `<td class="dim d${j}" title="${nsEsc(String(c[j]).replace(/<[^>]+>/g, ""))}">${c[j]}</td>`).join("");
     };
 
     // Encabezado: una o dos filas según cómo se agrupen las columnas
     const rz = k => `<span class="ch-rz" data-col="${nsEsc(k)}"></span>`;
     const dosFilas = !!grupo;
-    const thDims = CH_DIMS.map((d, j) =>
-      `<th class="dim d${j}" ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">${d.t}</span>${rz("d:" + d.k)}</th>`).join("");
+    const thDims = chDimsVis.map(j => { const d = CH_DIMS[j];
+      return `<th class="dim d${j}" ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">${d.t}</span>${rz("d:" + d.k)}</th>`; }).join("");
     let fila1 = thDims, fila2 = "";
     if (!dosFilas) {
       fila1 += per.map(p => `<th><span class="ch-th-txt">${nsEsc(etiqueta(p))}</span>${rz("p:" + p)}</th>`).join("");
@@ -7456,14 +7463,14 @@
     }
     fila1 += `<th ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">Total</span>${rz("tot")}</th>`;
 
-    const claves = [...CH_DIMS.map(d => "d:" + d.k), ...per.map(p => "p:" + p), "tot"];
+    const claves = [...chDimsVis.map(j => "d:" + CH_DIMS[j].k), ...per.map(p => "p:" + p), "tot"];
     const anchoTotal = claves.reduce((a, k) => a + chAncho(k), 0);
 
     wrap.innerHTML = `<table class="ch-tabla" id="ch-tabla" style="width:${anchoTotal}px">
       <colgroup>${claves.map(k => `<col data-col="${nsEsc(k)}" style="width:${chAncho(k)}px">`).join("")}</colgroup>
       <thead><tr class="f1">${fila1}</tr>${dosFilas ? `<tr class="f2">${fila2}</tr>` : ""}</thead>
       <tbody>${chVisibles.map((n, i) => `<tr class="n${n.nivel}">${dims(n, i)}${per.map(p => celda(n, p)).join("")}<td class="num tot">${fmtNum(n.t)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td class="dim d0">Total</td><td class="dim d1"></td><td class="dim d2"></td><td class="dim d3"></td><td class="dim d4"></td>
+      <tfoot><tr>${chDimsVis.map((j, i) => `<td class="dim d${j}">${i === 0 ? "Total" : ""}</td>`).join("")}
         ${per.map(p => `<td class="num">${raiz.v.get(p) ? fmtNum(raiz.v.get(p)) : ""}</td>`).join("")}
         <td class="num">${fmtNum(raiz.t)}</td></tr></tfoot>
     </table>`;
@@ -7487,8 +7494,8 @@
     let css = "", izq = 0;
     const tope = (document.getElementById("ch-tabla-wrap").clientWidth || 1000) * 0.5;
     let fija = true;
-    CH_DIMS.forEach((d, j) => {
-      const w = chAncho("d:" + d.k);
+    chDimsVis.forEach(j => {
+      const w = chAncho("d:" + CH_DIMS[j].k);
       if (fija && izq + w <= tope) css += `.ch-tabla .d${j}{left:${izq}px}`;
       else { fija = false; css += `.ch-tabla td.d${j},.ch-tabla thead th.d${j}{position:static}.ch-tabla thead th.d${j}{position:sticky;left:auto}`; }
       izq += w;
