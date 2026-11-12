@@ -16,7 +16,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 | **Recepciones** | Detalle de recepciones del año, con totales y gráficos por mes y por proveedor. |
 | **Nivel de servicio** | Indicador de NS por planta, faltantes por causa y reporte exportable a PDF. |
 | **Necesidad Final** | Necesidad de compra por insumo, con criticidad ABC en semáforo. |
-| **Consumo Histórico** | En reconstrucción. |
+| **Consumo Histórico** | Matriz de consumos por rubro, insumo y producto, por año, mes o día, con filtros y filas que se abren y cierran. |
 | **BOM** | Lista de piezas por producto, comparada entre plantas, y vista inversa por insumo. |
 | **Catálogo** | Imágenes de insumos alojadas en Cloudflare R2, con listado y visor. |
 
@@ -111,7 +111,7 @@ La app no calcula lógica de negocio: consulta y presenta.
 **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
 `view_stock_x_rubro`
 
-**Tablas de datos**: `consumos_im_if_consolidado`, `bd_articulos_x_rubro`,
+**Tablas de datos**: `consumos_im_if_consolidado`, `bd_productos`, `bd_articulos_x_rubro`,
 `bd_maestro_insumos`, `bd_bom_m_multiplanta`
 
 **Tablas propias**: `app_users` (usuarios; se crea sola al arrancar) y

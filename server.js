@@ -1044,6 +1044,156 @@ app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Consumo histórico ──
+// Matriz de consumos (versión renovada del tablero de Power BI). Todo sale de
+// consumos_im_if_consolidado, enriquecido con:
+//  - bd_articulos_x_rubro: descripción y rubro del insumo (por cod_corto) y
+//    descripción del producto (por cod_corto_ppal)
+//  - bd_maestro_insumos: sub-rubro del insumo (por cod_corto)
+//  - bd_productos: familia y mercado del producto (por cod_corto_ppal)
+// Las tablas de referencia pueden repetir códigos: se deduplican ANTES de unir
+// (DISTINCT ON), si no multiplicarían las filas e inflarían los consumos.
+const CH_BASE = `
+  WITH art AS (
+    SELECT DISTINCT ON (btrim(cod_corto::text))
+           btrim(cod_corto::text) AS k,
+           NULLIF(btrim(descripcion::text), '') AS descripcion,
+           NULLIF(btrim(rubro::text), '')       AS rubro
+    FROM bd_articulos_x_rubro
+    ORDER BY btrim(cod_corto::text), descripcion
+  ),
+  mae AS (
+    SELECT DISTINCT ON (btrim(cod_corto::text))
+           btrim(cod_corto::text) AS k,
+           NULLIF(btrim(sub_rubro::text), '') AS sub_rubro
+    FROM bd_maestro_insumos
+    ORDER BY btrim(cod_corto::text), sub_rubro
+  ),
+  pro AS (
+    SELECT DISTINCT ON (btrim(cod_corto::text))
+           btrim(cod_corto::text) AS k,
+           NULLIF(btrim(familia::text), '') AS familia,
+           NULLIF(btrim(mercado::text), '') AS mercado
+    FROM bd_productos
+    ORDER BY btrim(cod_corto::text), familia
+  ),
+  base AS (
+    SELECT c.fecha_orden,
+           c.consumo,
+           NULLIF(btrim(c.cod_corto::text), '')      AS cod,
+           NULLIF(btrim(c.cod_corto_ppal::text), '') AS sku,
+           NULLIF(btrim(c.unidad_negocio::text), '') AS unidad,
+           ai.descripcion AS desc_ins,
+           ai.rubro       AS rubro,
+           m.sub_rubro    AS sub_rubro,
+           ap.descripcion AS desc_prod,
+           p.familia      AS familia,
+           p.mercado      AS mercado
+    FROM consumos_im_if_consolidado c
+    LEFT JOIN art ai ON ai.k = btrim(c.cod_corto::text)
+    LEFT JOIN mae m  ON m.k  = btrim(c.cod_corto::text)
+    LEFT JOIN art ap ON ap.k = btrim(c.cod_corto_ppal::text)
+    LEFT JOIN pro p  ON p.k  = btrim(c.cod_corto_ppal::text)
+  )`;
+
+// Valor que el navegador manda para "(En blanco)" en los filtros de lista
+const CH_VACIO = "__vacio__";
+// Cómo se agrupan las columnas de la matriz. Entra al SQL como texto de
+// to_char, así que sale de esta tabla y nunca de lo que mandó el navegador.
+const CH_GRANOS = { anio: "YYYY", mes: "YYYY-MM", dia: "YYYY-MM-DD" };
+// Tope de filas agrupadas: más que esto no se puede dibujar en el navegador
+const CH_MAX_FILAS = 400000;
+
+// Arma el WHERE a partir de los filtros, siempre con parámetros
+function chWhere(f) {
+  f = f || {};
+  const where = [], params = [];
+  const p = v => { params.push(v); return "$" + params.length; };
+  const fecha = /^\d{4}-\d{2}-\d{2}$/;
+  if (fecha.test(f.desde || "")) where.push(`fecha_orden >= ${p(f.desde)}::date`);
+  if (fecha.test(f.hasta || "")) where.push(`fecha_orden < ${p(f.hasta)}::date + 1`);
+  const enteros = a => Array.isArray(a) ? a.map(Number).filter(Number.isInteger) : [];
+  const anios = enteros(f.anios), meses = enteros(f.meses);
+  if (anios.length) where.push(`EXTRACT(YEAR FROM fecha_orden)::int = ANY(${p(anios)}::int[])`);
+  if (meses.length) where.push(`EXTRACT(MONTH FROM fecha_orden)::int = ANY(${p(meses)}::int[])`);
+
+  // Listas: si no vienen, no se filtra. Si vienen vacías, no pasa nada.
+  const listas = { unidad: "unidad", mercado: "mercado", familia: "familia", rubro: "rubro", sub_rubro: "sub_rubro" };
+  for (const [clave, col] of Object.entries(listas)) {
+    const v = f.listas && f.listas[clave];
+    if (!Array.isArray(v)) continue;
+    const reales = v.filter(x => typeof x === "string" && x !== CH_VACIO);
+    const conds = [];
+    if (reales.length) conds.push(`${col} = ANY(${p(reales)}::text[])`);
+    if (v.includes(CH_VACIO)) conds.push(`${col} IS NULL`);
+    where.push(conds.length ? `(${conds.join(" OR ")})` : "FALSE");
+  }
+
+  // Textos: "contiene", sin distinguir mayúsculas. Los comodines que escriba
+  // el usuario se toman literales.
+  const textos = { desc_prod: "desc_prod", sku: "sku", cod: "cod", desc_ins: "desc_ins", desc_ins2: "desc_ins" };
+  for (const [clave, col] of Object.entries(textos)) {
+    const v = f.textos && typeof f.textos[clave] === "string" ? f.textos[clave].trim() : "";
+    if (!v) continue;
+    where.push(`${col} ILIKE ${p("%" + v.replace(/[\\%_]/g, m => "\\" + m) + "%")}`);
+  }
+  return { where: where.length ? "AND " + where.join(" AND ") : "", params };
+}
+
+// Valores disponibles para los filtros, en una sola pasada sobre la base
+app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const r = await pgPool.query(`${CH_BASE}
+      SELECT array_agg(DISTINCT EXTRACT(YEAR FROM fecha_orden)::int) AS anios,
+             array_agg(DISTINCT unidad)    AS unidad,
+             array_agg(DISTINCT mercado)   AS mercado,
+             array_agg(DISTINCT familia)   AS familia,
+             array_agg(DISTINCT rubro)     AS rubro,
+             array_agg(DISTINCT sub_rubro) AS sub_rubro,
+             MIN(fecha_orden)::date        AS desde,
+             MAX(fecha_orden)::date        AS hasta
+      FROM base
+      WHERE fecha_orden IS NOT NULL`);
+    const f = r.rows[0] || {};
+    const lista = a => (a || []).map(v => v === null ? CH_VACIO : v);
+    res.json({
+      anios: (f.anios || []).filter(v => v !== null).sort((a, b) => a - b),
+      desde: f.desde, hasta: f.hasta,
+      listas: { unidad: lista(f.unidad), mercado: lista(f.mercado), familia: lista(f.familia),
+                rubro: lista(f.rubro), sub_rubro: lista(f.sub_rubro) },
+      vacio: CH_VACIO,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// La matriz: consumo sumado por rubro, insumo, producto y período. El navegador
+// arma el árbol (rubro > insumo > producto) y los subtotales, así abrir y cerrar
+// filas no vuelve a consultar. Las filas van como arrays para achicar la respuesta.
+app.post("/api/pg/consumo-historico/datos", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const body  = req.body || {};
+    const fmt   = CH_GRANOS[body.grano] || CH_GRANOS.anio;
+    const { where, params } = chWhere(body.filtros);
+    const r = await pgPool.query({
+      text: `${CH_BASE}
+        SELECT rubro, cod, desc_ins, sku, desc_prod,
+               to_char(fecha_orden, '${fmt}') AS periodo,
+               SUM(consumo)::float8 AS consumo
+        FROM base
+        WHERE fecha_orden IS NOT NULL ${where}
+        GROUP BY 1, 2, 3, 4, 5, 6
+        LIMIT ${CH_MAX_FILAS + 1}`,
+      values: params,
+      rowMode: "array",
+    });
+    if (r.rows.length > CH_MAX_FILAS)
+      return res.status(413).json({ error: "Son demasiados datos para mostrar juntos. Acotá las fechas o los filtros, o usá columnas por Año o Mes." });
+    res.json({ filas: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── BOM (lista de piezas multiplanta) ──
 
 // bd_bom_m_multiplanta tiene una fila por (planta, producto, componente).

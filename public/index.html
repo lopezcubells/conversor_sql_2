@@ -811,6 +811,103 @@
     .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
     .empty .big { font-size: 40px; margin-bottom: 8px; }
 
+    /* ── Consumo Histórico: tema claro blanco / lila / naranja ── */
+    #tab-consumo-historico {
+      --bg:      #ffffff;
+      --surface: #ffffff;
+      --border:  #e3ddf3;
+      --text:    #1f1b2e;
+      --muted:   #6b6584;
+      --accent:  #7c3aed;
+      --accent2: #f97316;
+      --ch-lila-suave: #f3effd;
+      background: #f6f4fb;
+      color: var(--text);
+    }
+    #tab-consumo-historico .card { box-shadow: 0 1px 3px rgba(40,20,90,.07); }
+    .ch-layout { display: flex; gap: 16px; align-items: flex-start; }
+    /* Panel de filtros: compacto, fijo a la izquierda mientras se desplaza */
+    .ch-filtros { flex: 0 0 280px; position: sticky; top: 12px; margin-bottom: 0; padding: 16px;
+                  max-height: calc(100vh - 24px); overflow-y: auto; }
+    .ch-filtros-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .ch-filtros-cab h3 { font-size: 14px; margin: 0; }
+    .ch-reset { border: none; border-radius: 99px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+                background: var(--accent2); color: #fff; }
+    .ch-reset:hover { background: #ea580c; }
+    .ch-grupo { margin-bottom: 12px; }
+    .ch-grupo > label, .ch-lbl { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+                                 letter-spacing: .07em; color: var(--muted); margin-bottom: 5px; }
+    .ch-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .ch-fechas input, .ch-texto { width: 100%; padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border);
+                                  border-radius: 6px; background: #fff; color: var(--text); color-scheme: light; }
+    .ch-texto:focus, .ch-fechas input:focus { outline: none; border-color: var(--accent); }
+    .ch-texto + .ch-texto { margin-top: 5px; }
+    .ch-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .ch-chip { border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 99px;
+               padding: 3px 9px; font-size: 12px; cursor: pointer; user-select: none; }
+    .ch-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .ch-nota-filtro { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    /* Menú desplegable con buscador y casillas */
+    .ch-dd { position: relative; }
+    .ch-dd-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+                 padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px;
+                 background: #fff; color: var(--text); cursor: pointer; text-align: left; }
+    .ch-dd-btn.filtrado { border-color: var(--accent); background: var(--ch-lila-suave); }
+    .ch-dd-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ch-dd-panel { position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; width: 100%; min-width: 240px;
+                   background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+                   box-shadow: 0 10px 28px rgba(40,20,90,.18); }
+    .ch-dd-panel[hidden] { display: none; }
+    .ch-dd-acc { display: flex; gap: 6px; margin: 6px 0; }
+    .ch-dd-acc button { flex: 1; font-size: 11px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px;
+                        background: #fff; color: var(--text); cursor: pointer; }
+    .ch-dd-lista { max-height: 240px; overflow-y: auto; }
+    .ch-dd-op { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 4px 4px; border-radius: 4px;
+                cursor: pointer; }
+    .ch-dd-op:hover { background: var(--ch-lila-suave); }
+    .ch-dd-op input { accent-color: var(--accent); }
+    .ch-dd-op.vacio { color: var(--muted); font-style: italic; }
+    /* Panel de la tabla */
+    .ch-panel { flex: 1; min-width: 0; margin-bottom: 0; padding: 16px; }
+    .ch-barra { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .ch-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .ch-seg button { border: none; background: #fff; padding: 6px 12px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+    .ch-seg button + button { border-left: 1px solid var(--border); }
+    .ch-seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+    .ch-estado { font-size: 12px; color: var(--muted); margin-left: auto; }
+    .ch-tabla-wrap { overflow: auto; max-height: calc(100vh - 190px); border: 1px solid var(--border); border-radius: 8px; }
+    .ch-tabla { border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 12.5px; }
+    .ch-tabla th, .ch-tabla td { padding: 5px 8px; border-bottom: 1px solid #eee9f8; border-right: 1px solid #f1edfa;
+                                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ch-tabla thead th { position: sticky; z-index: 3; background: #3b1d6e; color: #fff; font-weight: 600;
+                         text-align: center; border-right-color: rgba(255,255,255,.12); }
+    .ch-tabla thead th.dim { text-align: left; z-index: 5; }
+    .ch-tabla td.dim, .ch-tabla th.dim { position: sticky; }
+    .ch-tabla td.dim { z-index: 2; background: #fff; }
+    .ch-tabla td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ch-tabla td.tot { font-weight: 700; background: #faf8ff; }
+    .ch-tabla tr.n1 td { font-weight: 700; }
+    .ch-tabla tr.n1 td.dim { background: #ede7fb; }
+    .ch-tabla tr.n2 td.dim { background: #f7f4fe; }
+    .ch-tabla tr:hover td.dim { background: #e4dbfa; }
+    .ch-tabla tfoot td { position: sticky; bottom: 0; z-index: 3; background: #3b1d6e; color: #fff; font-weight: 700; }
+    .ch-tabla tfoot td.dim { z-index: 5; }
+    .ch-tog { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 5px; border-radius: 4px;
+              border: 1px solid #c9bdf0; background: #fff; color: var(--accent); font-size: 12px; line-height: 1;
+              cursor: pointer; vertical-align: -2px; font-weight: 700; }
+    .ch-tog:hover { background: var(--accent); color: #fff; }
+    .ch-vacio-txt { color: var(--muted); font-style: italic; font-weight: 400; }
+    /* Manija para cambiar el ancho de una columna */
+    .ch-rz { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 6; }
+    .ch-rz:hover, .ch-rz.activo { background: rgba(249,115,22,.7); }
+    .ch-tabla thead th { overflow: visible; }
+    .ch-th-txt { display: block; overflow: hidden; text-overflow: ellipsis; }
+    .ch-pag { margin-top: 10px; }
+    @media (max-width: 1000px) {
+      .ch-layout { flex-direction: column; align-items: stretch; }
+      .ch-filtros { position: static; flex: none; max-height: none; }
+    }
+
     /* ── Tema claro: solo pestaña Recepciones ── */
     #tab-recepciones {
       --bg:      #ffffff;
@@ -1990,8 +2087,79 @@
 
 <!-- ═══ CONSUMO HISTÓRICO ═══ -->
 <div class="pane" id="tab-consumo-historico">
-  <div class="card">
-    <div class="empty" style="padding:50px 20px"><div class="big">🛠</div>Pestaña en reconstrucción</div>
+  <div class="ch-layout">
+
+    <!-- Panel 1: filtros -->
+    <aside class="card ch-filtros" id="ch-filtros">
+      <div class="ch-filtros-cab">
+        <h3>Filtros</h3>
+        <button type="button" class="ch-reset" id="ch-reset" title="Vuelve todos los filtros a su estado inicial">↺ Reiniciar</button>
+      </div>
+
+      <div class="ch-grupo">
+        <label>Fecha orden</label>
+        <div class="ch-fechas">
+          <input type="date" id="ch-desde" title="Desde">
+          <input type="date" id="ch-hasta" title="Hasta">
+        </div>
+      </div>
+
+      <div class="ch-grupo">
+        <label>Año</label>
+        <div class="ch-chips" id="ch-anios"></div>
+      </div>
+
+      <div class="ch-grupo">
+        <label>Mes</label>
+        <div class="ch-chips" id="ch-meses"></div>
+        <div class="ch-nota-filtro">Sin ninguno marcado, se toman todos.</div>
+      </div>
+
+      <div class="ch-grupo"><label>Unidad de negocio</label><div class="ch-dd" data-lista="unidad"></div></div>
+      <div class="ch-grupo"><label>Mercado</label><div class="ch-dd" data-lista="mercado"></div></div>
+      <div class="ch-grupo"><label>Familia producto</label><div class="ch-dd" data-lista="familia"></div></div>
+      <div class="ch-grupo"><label>Rubro insumo</label><div class="ch-dd" data-lista="rubro"></div></div>
+      <div class="ch-grupo"><label>Sub-rubro</label><div class="ch-dd" data-lista="sub_rubro"></div></div>
+
+      <div class="ch-grupo">
+        <label>Producto</label>
+        <input class="ch-texto" data-texto="sku" placeholder="SKU contiene…">
+        <input class="ch-texto" data-texto="desc_prod" placeholder="Descripción contiene…">
+      </div>
+
+      <div class="ch-grupo">
+        <label>Insumo</label>
+        <input class="ch-texto" data-texto="cod" placeholder="Código contiene…">
+        <input class="ch-texto" data-texto="desc_ins" placeholder="Descripción contiene…">
+        <input class="ch-texto" data-texto="desc_ins2" placeholder="…y también contiene">
+      </div>
+    </aside>
+
+    <!-- Panel 2: la matriz -->
+    <section class="card ch-panel">
+      <div class="ch-barra">
+        <div><span class="ch-lbl">Filas hasta</span>
+          <div class="ch-seg" id="ch-nivel">
+            <button type="button" data-nivel="1">Rubro</button>
+            <button type="button" data-nivel="2">Insumo</button>
+            <button type="button" data-nivel="3">Producto</button>
+          </div>
+        </div>
+        <div><span class="ch-lbl">Columnas por</span>
+          <div class="ch-seg" id="ch-grano">
+            <button type="button" data-grano="anio">Año</button>
+            <button type="button" data-grano="mes">Mes</button>
+            <button type="button" data-grano="dia">Día</button>
+          </div>
+        </div>
+        <span class="ch-estado" id="ch-estado"></span>
+      </div>
+      <div class="ch-tabla-wrap" id="ch-tabla-wrap">
+        <div class="empty" style="padding:50px 20px">Cargando…</div>
+      </div>
+      <div class="pagination ch-pag" id="ch-pag"></div>
+    </section>
+
   </div>
 </div>
 
@@ -2751,9 +2919,41 @@
 
     "consumo-historico": {
       titulo: "Consumo Histórico",
-      fuentes: [],
-      bloques: [],
-      notas: ["Pestaña en reconstrucción: por ahora no lee nada de la base."],
+      fuentes: [
+        ["tabla", "consumos_im_if_consolidado", "Movimientos de consumo: base de todo (fecha_orden, consumo, cod_corto, cod_corto_ppal, unidad_negocio)"],
+        ["tabla", "bd_articulos_x_rubro", "Descripción y rubro del insumo (por cod_corto) y descripción del producto (por cod_corto_ppal)"],
+        ["tabla", "bd_maestro_insumos", "Sub-rubro del insumo (por cod_corto)"],
+        ["tabla", "bd_productos", "Familia y mercado del producto (por cod_corto = cod_corto_ppal)"],
+      ],
+      parametros: [
+        ["Fecha orden (desde / hasta)", "consumos_im_if_consolidado.fecha_orden"],
+        ["Año · Mes", "EXTRACT(YEAR / MONTH FROM fecha_orden)"],
+        ["Unidad de negocio", "consumos_im_if_consolidado.unidad_negocio"],
+        ["Mercado", "bd_productos.mercado"],
+        ["Familia producto", "bd_productos.familia"],
+        ["Rubro insumo", "bd_articulos_x_rubro.rubro"],
+        ["Sub-rubro", "bd_maestro_insumos.sub_rubro"],
+        ["Producto · SKU contiene", "consumos_im_if_consolidado.cod_corto_ppal"],
+        ["Producto · Descripción contiene", "bd_articulos_x_rubro.descripcion (por cod_corto_ppal)"],
+        ["Insumo · Código contiene", "consumos_im_if_consolidado.cod_corto"],
+        ["Insumo · Descripción contiene (dos campos, deben cumplirse los dos)", "bd_articulos_x_rubro.descripcion (por cod_corto)"],
+      ],
+      bloques: [
+        { titulo: "Matriz", origen: "consumos_im_if_consolidado + las tres tablas de referencia", campos: [
+          ["Rubro insumo", "bd_articulos_x_rubro.rubro"],
+          ["Código insumo", "consumos_im_if_consolidado.cod_corto"],
+          ["Descripción insumo", "bd_articulos_x_rubro.descripcion (por cod_corto)"],
+          ["SKU", "consumos_im_if_consolidado.cod_corto_ppal"],
+          ["Descripción producto", "bd_articulos_x_rubro.descripcion (por cod_corto_ppal)"],
+          ["Columnas (año / mes / día)", "to_char(fecha_orden)"],
+          ["Valores, subtotales y totales", "SUM(consumo)"],
+        ]},
+      ],
+      notas: [
+        "Las tablas de referencia se deduplican por código (DISTINCT ON) antes de unirlas, para no multiplicar consumos.",
+        "Los filtros se aplican en la base; el árbol rubro > insumo > producto y los subtotales se arman en el navegador.",
+        "Los movimientos sin fecha_orden no entran. Los valores vacíos se muestran y filtran como \"(En blanco)\".",
+      ],
     },
 
     bom: {
@@ -6873,10 +7073,492 @@
 
 
   // ── Consumo histórico ──
-  // En reconstrucción: se vació para rehacerla desde cero. El init queda para
-  // que el router de pestañas no se rompa.
+  // Versión renovada del tablero de Power BI: panel de filtros a la izquierda y
+  // matriz a la derecha. Filas: rubro > insumo > producto (se abren y cierran).
+  // Columnas: año, mes o día de fecha_orden. Valores: SUM(consumo).
+  // Los filtros van al servidor (la tabla es grande); el árbol, los subtotales,
+  // la apertura de filas y la paginación se resuelven en el navegador.
 
-  function initConsumoHistorico() {}
+  const CH_STORAGE_KEY = "consumo-historico-params";
+  const CH_PAGE        = 200;   // filas visibles por página
+  const CH_LISTAS      = ["unidad", "mercado", "familia", "rubro", "sub_rubro"];
+  const CH_DIMS = [
+    { k: "rubro", t: "Rubro insumo",         ancho: 170 },
+    { k: "cod",   t: "Código insumo",        ancho: 105 },
+    { k: "dins",  t: "Descripción insumo",   ancho: 250 },
+    { k: "sku",   t: "SKU",                  ancho: 90  },
+    { k: "dprod", t: "Descripción producto", ancho: 270 },
+  ];
+  const CH_ANCHO_PER = { anio: 110, mes: 92, dia: 78 };
+  const CH_ANCHO_TOT = 120;
+  const CH_NADA = "\u0000";   // clave interna para valores vacíos
+
+  let chLoaded   = false;
+  let chOpciones = { anios: [], listas: {}, vacio: "__vacio__" };
+  let chF        = chFiltrosVacios();
+  let chGrano    = "anio";
+  let chNivel    = 1;
+  let chAnchos   = {};
+  let chArbol    = null;          // { raiz, periodos }
+  let chAbiertos = new Set();
+  let chPagina   = 0;
+  let chVisibles = [];            // filas de la página actual (para los botones +/−)
+  let chPedido   = null;          // AbortController del pedido en curso
+  let chTimer    = null;
+
+  function chFiltrosVacios() {
+    return { desde: "", hasta: "", anios: [], meses: [], excl: {}, textos: {} };
+  }
+
+  function chGuardar() {
+    try {
+      localStorage.setItem(CH_STORAGE_KEY, JSON.stringify({ f: chF, grano: chGrano, nivel: chNivel, anchos: chAnchos }));
+    } catch {}
+  }
+  function chRestaurar() {
+    try {
+      const s = JSON.parse(localStorage.getItem(CH_STORAGE_KEY) || "null");
+      if (!s) return;
+      chF = Object.assign(chFiltrosVacios(), s.f || {});
+      if (["anio", "mes", "dia"].includes(s.grano)) chGrano = s.grano;
+      if ([1, 2, 3].includes(s.nivel)) chNivel = s.nivel;
+      chAnchos = s.anchos || {};
+    } catch {}
+  }
+
+  // ── Filtros ──
+
+  const chEtiqueta = v => v === chOpciones.vacio ? "(En blanco)" : v;
+  const chOrdenar  = (a, b) => (a === chOpciones.vacio) - (b === chOpciones.vacio) ||
+                               String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
+
+  // Lo que viaja al servidor. Una lista solo se manda si tiene algo destildado.
+  function chPayloadFiltros() {
+    const listas = {};
+    CH_LISTAS.forEach(k => {
+      const excl = new Set(chF.excl[k] || []);
+      if (!excl.size) return;
+      listas[k] = (chOpciones.listas[k] || []).filter(v => !excl.has(v));
+    });
+    return { desde: chF.desde, hasta: chF.hasta, anios: chF.anios, meses: chF.meses, listas, textos: chF.textos };
+  }
+
+  function chProgramar() {
+    chGuardar();
+    clearTimeout(chTimer);
+    chTimer = setTimeout(chCargar, 350);
+  }
+
+  function chArmarChips() {
+    const anios = document.getElementById("ch-anios");
+    anios.innerHTML = chOpciones.anios.length
+      ? chOpciones.anios.map(a => `<button type="button" class="ch-chip${chF.anios.includes(a) ? " on" : ""}" data-anio="${a}">${a}</button>`).join("")
+      : `<span class="ch-nota-filtro">—</span>`;
+    document.getElementById("ch-meses").innerHTML = Array.from({ length: 12 }, (_, i) => i + 1)
+      .map(m => `<button type="button" class="ch-chip${chF.meses.includes(m) ? " on" : ""}" data-mes="${m}">${MES_NOMBRES[m]}</button>`).join("");
+  }
+
+  document.getElementById("ch-anios").addEventListener("click", e => {
+    const b = e.target.closest("[data-anio]");
+    if (!b) return;
+    const a = Number(b.dataset.anio);
+    chF.anios = chF.anios.includes(a) ? chF.anios.filter(x => x !== a) : [...chF.anios, a];
+    b.classList.toggle("on");
+    chProgramar();
+  });
+  document.getElementById("ch-meses").addEventListener("click", e => {
+    const b = e.target.closest("[data-mes]");
+    if (!b) return;
+    const m = Number(b.dataset.mes);
+    chF.meses = chF.meses.includes(m) ? chF.meses.filter(x => x !== m) : [...chF.meses, m];
+    b.classList.toggle("on");
+    chProgramar();
+  });
+
+  ["desde", "hasta"].forEach(k => {
+    document.getElementById("ch-" + k).addEventListener("change", e => { chF[k] = e.target.value; chProgramar(); });
+  });
+  document.querySelectorAll("#ch-filtros .ch-texto[data-texto]").forEach(inp => {
+    inp.addEventListener("input", () => { chF.textos[inp.dataset.texto] = inp.value; chProgramar(); });
+  });
+
+  // Menús desplegables con buscador (unidad, mercado, familia, rubro, sub-rubro)
+  function chArmarDd(dd) {
+    const k = dd.dataset.lista;
+    dd.innerHTML = `
+      <button type="button" class="ch-dd-btn"><span class="ch-dd-txt"></span><span>▾</span></button>
+      <div class="ch-dd-panel" hidden>
+        <input class="ch-texto ch-dd-buscar" placeholder="Buscar…">
+        <div class="ch-dd-acc">
+          <button type="button" data-acc="todos">Todos</button>
+          <button type="button" data-acc="ninguno">Ninguno</button>
+        </div>
+        <div class="ch-dd-lista"></div>
+      </div>`;
+    chDdPintar(dd);
+    dd.querySelector(".ch-dd-btn").addEventListener("click", () => {
+      const panel = dd.querySelector(".ch-dd-panel");
+      const abrir = panel.hidden;
+      document.querySelectorAll("#ch-filtros .ch-dd-panel").forEach(p => { p.hidden = true; });
+      panel.hidden = !abrir;
+      if (abrir) dd.querySelector(".ch-dd-buscar").focus();
+    });
+    dd.querySelector(".ch-dd-buscar").addEventListener("input", () => chDdPintar(dd));
+    dd.querySelector(".ch-dd-lista").addEventListener("change", e => {
+      const cb = e.target;
+      if (!cb.dataset.v && cb.dataset.v !== "") return;
+      const excl = new Set(chF.excl[k] || []);
+      if (cb.checked) excl.delete(cb.dataset.v); else excl.add(cb.dataset.v);
+      chF.excl[k] = [...excl];
+      chDdTexto(dd);
+      chProgramar();
+    });
+    // Todos / Ninguno actúan sobre lo que muestra el buscador
+    dd.querySelector(".ch-dd-acc").addEventListener("click", e => {
+      const b = e.target.closest("[data-acc]");
+      if (!b) return;
+      const excl = new Set(chF.excl[k] || []);
+      chDdValoresVisibles(dd).forEach(v => { if (b.dataset.acc === "todos") excl.delete(v); else excl.add(v); });
+      chF.excl[k] = [...excl];
+      chDdPintar(dd);
+      chProgramar();
+    });
+  }
+
+  function chDdValoresVisibles(dd) {
+    const q = recNormRubro(dd.querySelector(".ch-dd-buscar").value);
+    return (chOpciones.listas[dd.dataset.lista] || [])
+      .filter(v => !q || recNormRubro(chEtiqueta(v)).includes(q));
+  }
+
+  function chDdPintar(dd) {
+    const excl = new Set(chF.excl[dd.dataset.lista] || []);
+    const vals = chDdValoresVisibles(dd).sort(chOrdenar);
+    dd.querySelector(".ch-dd-lista").innerHTML = vals.length
+      ? vals.map(v => `<label class="ch-dd-op${v === chOpciones.vacio ? " vacio" : ""}">
+          <input type="checkbox" data-v="${nsEsc(v)}" ${excl.has(v) ? "" : "checked"}><span>${nsEsc(chEtiqueta(v))}</span></label>`).join("")
+      : `<div class="ch-nota-filtro" style="padding:4px">Sin opciones</div>`;
+    chDdTexto(dd);
+  }
+
+  function chDdTexto(dd) {
+    const todos = chOpciones.listas[dd.dataset.lista] || [];
+    const excl  = new Set(chF.excl[dd.dataset.lista] || []);
+    const elegidos = todos.filter(v => !excl.has(v));
+    dd.querySelector(".ch-dd-txt").textContent =
+      !excl.size ? "Todos" : !elegidos.length ? "Ninguno"
+      : elegidos.length === 1 ? chEtiqueta(elegidos[0]) : `${elegidos.length} de ${todos.length}`;
+    dd.querySelector(".ch-dd-btn").classList.toggle("filtrado", excl.size > 0);
+  }
+
+  // Escucha global: cierra los menús al hacer clic afuera. Si la pestaña está
+  // restringida no hay menús y no hace nada (ver CLAUDE.md).
+  document.addEventListener("click", e => {
+    if (e.target.closest && e.target.closest(".ch-dd")) return;
+    document.querySelectorAll("#ch-filtros .ch-dd-panel").forEach(p => { p.hidden = true; });
+  });
+
+  // Pinta todos los controles a partir de chF (al entrar y al reiniciar)
+  function chPintarFiltros() {
+    document.getElementById("ch-desde").value = chF.desde || "";
+    document.getElementById("ch-hasta").value = chF.hasta || "";
+    document.querySelectorAll("#ch-filtros .ch-texto[data-texto]").forEach(inp => { inp.value = chF.textos[inp.dataset.texto] || ""; });
+    chArmarChips();
+    document.querySelectorAll("#ch-filtros .ch-dd").forEach(dd => {
+      if (!dd.querySelector(".ch-dd-btn")) chArmarDd(dd); else chDdPintar(dd);
+    });
+  }
+
+  document.getElementById("ch-reset").addEventListener("click", () => {
+    chF = chFiltrosVacios();
+    chPintarFiltros();
+    chProgramar();
+  });
+
+  // ── Filas y columnas ──
+
+  function chPintarBotones() {
+    document.querySelectorAll("#ch-nivel button").forEach(b => b.classList.toggle("on", Number(b.dataset.nivel) === chNivel));
+    document.querySelectorAll("#ch-grano button").forEach(b => b.classList.toggle("on", b.dataset.grano === chGrano));
+  }
+
+  document.getElementById("ch-nivel").addEventListener("click", e => {
+    const b = e.target.closest("[data-nivel]");
+    if (!b) return;
+    chNivel = Number(b.dataset.nivel);
+    chPintarBotones();
+    chGuardar();
+    chAbrirHasta(chNivel);
+    chPagina = 0;
+    chRender();
+  });
+  document.getElementById("ch-grano").addEventListener("click", e => {
+    const b = e.target.closest("[data-grano]");
+    if (!b || b.dataset.grano === chGrano) return;
+    chGrano = b.dataset.grano;
+    chPintarBotones();
+    chProgramar();
+  });
+
+  // ── Datos ──
+
+  async function chCargar() {
+    const estado = document.getElementById("ch-estado");
+    if (chPedido) chPedido.abort();
+    chPedido = new AbortController();
+    const pedido = chPedido;
+    estado.textContent = "Consultando PostgreSQL…";
+    try {
+      const res = await fetch(`${API}/api/pg/consumo-historico/datos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grano: chGrano, filtros: chPayloadFiltros() }),
+        signal: pedido.signal,
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { filas } = await res.json();
+      if (pedido !== chPedido) return;
+      chArbol = chArmarArbol(filas);
+      chAbrirHasta(chNivel);
+      chPagina = 0;
+      chRender();
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      chArbol = null;
+      estado.textContent = "";
+      document.getElementById("ch-pag").innerHTML = "";
+      document.getElementById("ch-tabla-wrap").innerHTML =
+        `<div class="empty" style="padding:50px 20px"><div class="big">⚠</div>${nsEsc(e.message)}</div>`;
+    }
+  }
+
+  // Árbol rubro > insumo > producto, con el consumo de cada período y el total
+  function chArmarArbol(filas) {
+    const raiz = { hijos: new Map(), v: new Map(), t: 0 };
+    const periodos = new Set();
+    const sumar = (n, p, x) => { n.v.set(p, (n.v.get(p) || 0) + x); n.t += x; };
+    const hijo = (padre, clave, nuevo) => {
+      let n = padre.hijos.get(clave);
+      if (!n) { n = { ...nuevo, hijos: new Map(), v: new Map(), t: 0 }; padre.hijos.set(clave, n); }
+      return n;
+    };
+    for (const [rubro, cod, dins, sku, dprod, p, consumo] of filas) {
+      const x = Number(consumo) || 0;
+      periodos.add(p);
+      const n1 = hijo(raiz, rubro ?? CH_NADA, { id: "1\u0001" + (rubro ?? CH_NADA), nivel: 1, rubro });
+      const n2 = hijo(n1, cod ?? CH_NADA, { id: n1.id + "\u0001" + (cod ?? CH_NADA), nivel: 2, cod, desc: dins });
+      const n3 = hijo(n2, sku ?? CH_NADA, { id: n2.id + "\u0001" + (sku ?? CH_NADA), nivel: 3, sku, desc: dprod });
+      [raiz, n1, n2, n3].forEach(n => sumar(n, p, x));
+    }
+    return { raiz, periodos: [...periodos].sort() };
+  }
+
+  const chCmp = (a, b) => (a == null) - (b == null) ||
+    String(a ?? "").localeCompare(String(b ?? ""), "es", { numeric: true, sensitivity: "base" });
+  const chHijos = n => [...n.hijos.values()].sort((a, b) =>
+    chCmp(a.nivel === 1 ? a.rubro : a.nivel === 2 ? a.cod : a.sku, b.nivel === 1 ? b.rubro : b.nivel === 2 ? b.cod : b.sku));
+
+  function chAbrirHasta(nivel) {
+    chAbiertos = new Set();
+    if (!chArbol || nivel < 2) return;
+    chArbol.raiz.hijos.forEach(n1 => {
+      chAbiertos.add(n1.id);
+      if (nivel >= 3) n1.hijos.forEach(n2 => chAbiertos.add(n2.id));
+    });
+  }
+
+  function chFilasVisibles() {
+    const out = [];
+    const recorrer = n => chHijos(n).forEach(h => {
+      out.push(h);
+      if (h.nivel < 3 && chAbiertos.has(h.id)) recorrer(h);
+    });
+    recorrer(chArbol.raiz);
+    return out;
+  }
+
+  // ── Render de la matriz ──
+
+  function chColumnas() {
+    const per = chArbol.periodos;
+    let grupo = null, etiqueta = p => p;
+    if (chGrano === "mes") {
+      grupo = p => p.slice(0, 4);
+      etiqueta = p => MES_NOMBRES[parseInt(p.slice(5, 7))] || p;
+    } else if (chGrano === "dia") {
+      grupo = p => p.slice(0, 7);
+      etiqueta = p => p.slice(8, 10);
+    }
+    return { per, grupo, etiqueta };
+  }
+
+  const chAncho = k => chAnchos[k] ?? (k.startsWith("d:") ? CH_DIMS.find(d => "d:" + d.k === k).ancho
+                                     : k === "tot" ? CH_ANCHO_TOT : CH_ANCHO_PER[chGrano]);
+
+  function chRender() {
+    const wrap = document.getElementById("ch-tabla-wrap");
+    const estado = document.getElementById("ch-estado");
+    if (!chArbol) return;
+    const raiz = chArbol.raiz;
+    if (!raiz.hijos.size) {
+      wrap.innerHTML = `<div class="empty" style="padding:50px 20px"><div class="big">📭</div>Sin consumos para estos filtros</div>`;
+      document.getElementById("ch-pag").innerHTML = "";
+      estado.textContent = "";
+      return;
+    }
+    const { per, grupo, etiqueta } = chColumnas();
+    const todas = chFilasVisibles();
+    const inicio = Math.min(chPagina * CH_PAGE, Math.max(0, todas.length - 1));
+    chVisibles = todas.slice(inicio, inicio + CH_PAGE);
+    estado.textContent = `${raiz.hijos.size.toLocaleString("es-AR")} rubros · ${per.length.toLocaleString("es-AR")} columnas · consumo total ${fmtNum(raiz.t)}`;
+
+    // Intensidad del color: contra el mayor valor de período de cada nivel
+    const maxNivel = { 1: 0, 2: 0, 3: 0 };
+    todas.forEach(n => n.v.forEach(x => { if (x > maxNivel[n.nivel]) maxNivel[n.nivel] = x; }));
+    const celda = (n, p) => {
+      const x = n.v.get(p);
+      if (!x) return `<td class="num"></td>`;
+      const t = maxNivel[n.nivel] ? Math.max(0, x) / maxNivel[n.nivel] : 0;
+      return `<td class="num" style="background:rgba(249,115,22,${(0.05 + 0.5 * t).toFixed(3)})">${fmtNum(x)}</td>`;
+    };
+
+    const vacio = `<span class="ch-vacio-txt">(En blanco)</span>`;
+    const txt = v => v == null ? vacio : nsEsc(v);
+    const tog = (n, i) => `<span class="ch-tog" data-i="${i}" title="${chAbiertos.has(n.id) ? "Cerrar" : "Abrir"}">${chAbiertos.has(n.id) ? "−" : "+"}</span>`;
+    const dims = (n, i) => {
+      const c = ["", "", "", "", ""];
+      if (n.nivel === 1) c[0] = tog(n, i) + txt(n.rubro);
+      if (n.nivel === 2) { c[1] = tog(n, i) + txt(n.cod); c[2] = txt(n.desc); }
+      if (n.nivel === 3) { c[3] = txt(n.sku); c[4] = txt(n.desc); }
+      return c.map((v, j) => `<td class="dim d${j}" title="${nsEsc(String(v).replace(/<[^>]+>/g, ""))}">${v}</td>`).join("");
+    };
+
+    // Encabezado: una o dos filas según cómo se agrupen las columnas
+    const rz = k => `<span class="ch-rz" data-col="${nsEsc(k)}"></span>`;
+    const dosFilas = !!grupo;
+    const thDims = CH_DIMS.map((d, j) =>
+      `<th class="dim d${j}" ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">${d.t}</span>${rz("d:" + d.k)}</th>`).join("");
+    let fila1 = thDims, fila2 = "";
+    if (!dosFilas) {
+      fila1 += per.map(p => `<th><span class="ch-th-txt">${nsEsc(etiqueta(p))}</span>${rz("p:" + p)}</th>`).join("");
+    } else {
+      const grupos = [];
+      per.forEach(p => {
+        const g = grupo(p);
+        if (grupos.length && grupos[grupos.length - 1].g === g) grupos[grupos.length - 1].n++;
+        else grupos.push({ g, n: 1 });
+      });
+      fila1 += grupos.map(({ g, n }) => {
+        const titulo = chGrano === "dia" ? `${MES_NOMBRES[parseInt(g.slice(5, 7))]} ${g.slice(0, 4)}` : g;
+        return `<th colspan="${n}"><span class="ch-th-txt">${titulo}</span></th>`;
+      }).join("");
+      fila2 = per.map(p => `<th><span class="ch-th-txt">${nsEsc(etiqueta(p))}</span>${rz("p:" + p)}</th>`).join("");
+    }
+    fila1 += `<th ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">Total</span>${rz("tot")}</th>`;
+
+    const claves = [...CH_DIMS.map(d => "d:" + d.k), ...per.map(p => "p:" + p), "tot"];
+    const anchoTotal = claves.reduce((a, k) => a + chAncho(k), 0);
+
+    wrap.innerHTML = `<table class="ch-tabla" id="ch-tabla" style="width:${anchoTotal}px">
+      <colgroup>${claves.map(k => `<col data-col="${nsEsc(k)}" style="width:${chAncho(k)}px">`).join("")}</colgroup>
+      <thead><tr class="f1">${fila1}</tr>${dosFilas ? `<tr class="f2">${fila2}</tr>` : ""}</thead>
+      <tbody>${chVisibles.map((n, i) => `<tr class="n${n.nivel}">${dims(n, i)}${per.map(p => celda(n, p)).join("")}<td class="num tot">${fmtNum(n.t)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td class="dim d0">Total</td><td class="dim d1"></td><td class="dim d2"></td><td class="dim d3"></td><td class="dim d4"></td>
+        ${per.map(p => `<td class="num">${raiz.v.get(p) ? fmtNum(raiz.v.get(p)) : ""}</td>`).join("")}
+        <td class="num">${fmtNum(raiz.t)}</td></tr></tfoot>
+    </table>`;
+    chFijar();
+    if (todas.length > CH_PAGE) renderPagination("ch-pag", todas.length, inicio, CH_PAGE, "chIrPagina");
+    else document.getElementById("ch-pag").innerHTML = "";
+  }
+
+  function chIrPagina(offset) {
+    chPagina = Math.max(0, Math.floor(offset / CH_PAGE));
+    chRender();
+    document.getElementById("ch-tabla-wrap").scrollTop = 0;
+  }
+
+  // Columnas de descripción fijas a la izquierda y segunda fila del encabezado
+  // fija arriba: las posiciones dependen de los anchos, así que se escriben en
+  // una hoja de estilos propia (más rápido que tocar cada celda al arrastrar).
+  // Solo quedan fijas las primeras columnas que entran en la mitad del panel:
+  // si se fijaran las cinco, al desplazar casi no quedaría lugar para los valores.
+  function chFijar() {
+    let css = "", izq = 0;
+    const tope = (document.getElementById("ch-tabla-wrap").clientWidth || 1000) * 0.5;
+    let fija = true;
+    CH_DIMS.forEach((d, j) => {
+      const w = chAncho("d:" + d.k);
+      if (fija && izq + w <= tope) css += `.ch-tabla .d${j}{left:${izq}px}`;
+      else { fija = false; css += `.ch-tabla td.d${j},.ch-tabla thead th.d${j}{position:static}.ch-tabla thead th.d${j}{position:sticky;left:auto}`; }
+      izq += w;
+    });
+    const f1 = document.querySelector("#ch-tabla thead tr.f1");
+    css += `.ch-tabla thead tr.f1 th{top:0}`;
+    if (f1) css += `.ch-tabla thead tr.f2 th{top:${f1.getBoundingClientRect().height}px}`;
+    let hoja = document.getElementById("ch-fijar-css");
+    if (!hoja) { hoja = document.createElement("style"); hoja.id = "ch-fijar-css"; document.head.appendChild(hoja); }
+    hoja.textContent = css;
+  }
+
+  // Abrir / cerrar filas y cambiar el ancho de las columnas
+  document.getElementById("ch-tabla-wrap").addEventListener("click", e => {
+    const t = e.target.closest(".ch-tog");
+    if (!t) return;
+    const n = chVisibles[Number(t.dataset.i)];
+    if (!n) return;
+    if (chAbiertos.has(n.id)) {
+      chAbiertos.delete(n.id);
+      // al cerrar un rubro se cierran también sus insumos
+      n.hijos.forEach(h => chAbiertos.delete(h.id));
+    } else chAbiertos.add(n.id);
+    chRender();
+  });
+
+  document.getElementById("ch-tabla-wrap").addEventListener("mousedown", e => {
+    const rz = e.target.closest(".ch-rz");
+    if (!rz) return;
+    e.preventDefault();
+    const k = rz.dataset.col;
+    const tabla = document.getElementById("ch-tabla");
+    const col = [...tabla.querySelectorAll("col")].find(c => c.dataset.col === k);
+    const x0 = e.clientX, w0 = chAncho(k), total0 = tabla.offsetWidth;
+    rz.classList.add("activo");
+    const mover = ev => {
+      const w = Math.max(40, Math.round(w0 + ev.clientX - x0));
+      chAnchos[k] = w;
+      col.style.width = w + "px";
+      tabla.style.width = (total0 - w0 + w) + "px";
+      chFijar();
+    };
+    const soltar = () => {
+      rz.classList.remove("activo");
+      document.removeEventListener("mousemove", mover);
+      document.removeEventListener("mouseup", soltar);
+      chGuardar();
+    };
+    document.addEventListener("mousemove", mover);
+    document.addEventListener("mouseup", soltar);
+  });
+
+  async function initConsumoHistorico() {
+    if (chLoaded) return;
+    chLoaded = true;
+    chRestaurar();
+    chPintarBotones();
+    try {
+      const res = await fetch(`${API}/api/pg/consumo-historico/filtros`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      chOpciones = await res.json();
+      const d = document.getElementById("ch-desde"), h = document.getElementById("ch-hasta");
+      if (chOpciones.desde) d.min = h.min = String(chOpciones.desde).slice(0, 10);
+      if (chOpciones.hasta) d.max = h.max = String(chOpciones.hasta).slice(0, 10);
+    } catch (e) {
+      document.getElementById("ch-estado").textContent = "⚠ Filtros: " + e.message;
+    }
+    chPintarFiltros();
+    chCargar();
+  }
 
 
   // ── BOM (lista de piezas multiplanta) ──

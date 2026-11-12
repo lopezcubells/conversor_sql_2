@@ -52,8 +52,9 @@ negocio**, solo la consulta y la presenta.
   `indicador_cobertura`, `necesidad_final`
 - **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
   `view_stock_x_rubro`
-- **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos; sin uso
-  por ahora: la pestaña Consumo Histórico se vació para rehacerla),
+- **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos, base de
+  Consumo Histórico), `bd_productos` (familia y mercado por `cod_corto` del
+  producto = `cod_corto_ppal` de los consumos),
   `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
   `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`),
   `bd_bom_m_multiplanta` (lista de piezas; una fila por planta + producto +
@@ -180,7 +181,8 @@ estático y no sirven para probar.
   y filtrar/ordenar/paginar en el navegador, para que los filtros respondan al
   instante. Los parámetros de las funciones SQL sí van al servidor.
 - **Parámetros por pestaña**: se guardan en `localStorage` con una clave propia
-  (`cobertura-params`, `nivel-servicio-params`, `necesidad-final-params`) y se
+  (`cobertura-params`, `nivel-servicio-params`, `necesidad-final-params`,
+  `consumo-historico-params`) y se
   restauran al entrar.
 - **`position: sticky` en tablas**: se ancla al ancestro scrolleable más cercano.
   Como `.table-wrap` tiene `overflow-x: auto` (y por spec eso hace que el eje Y
