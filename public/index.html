@@ -912,6 +912,22 @@
     .ch-th-txt { display: block; overflow: hidden; text-overflow: ellipsis; }
     .ch-pag { margin-top: 10px; }
     @media (max-width: 700px) { .ch-grupo.ancho { grid-column: auto; } }
+    /* Panel de filtros en lila (el mismo del encabezado de la tabla) con
+       textos claros. Los campos siguen blancos para que se lean bien, y el
+       menú desplegable vuelve al texto oscuro porque su fondo es blanco. */
+    #tab-consumo-historico .ch-filtros { background: #3b1d6e; border-color: #3b1d6e; color: #fff; }
+    .ch-filtros .ch-filtros-cab h3 { color: #fff; }
+    .ch-filtros .ch-grupo > label { color: #d9ccf7; }
+    .ch-filtros .ch-nota-filtro { color: #c4b5ec; }
+    .ch-filtros .ch-texto, .ch-filtros .ch-fechas input { border-color: transparent; }
+    .ch-filtros .ch-texto:focus, .ch-filtros .ch-fechas input:focus { border-color: var(--accent2); }
+    .ch-filtros .ch-chip { background: transparent; border-color: rgba(255,255,255,.45); color: #fff; }
+    .ch-filtros .ch-chip:hover { border-color: #fff; }
+    .ch-filtros .ch-chip.on { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+    .ch-filtros .ch-dd-btn { border-color: transparent; }
+    .ch-filtros .ch-dd-btn.filtrado { background: #ffedd5; border-color: var(--accent2); }
+    .ch-filtros .ch-dd-panel { color: var(--text); }
+    .ch-filtros .ch-dd-panel .ch-texto { border-color: var(--border); }
 
     /* ── Tema claro: solo pestaña Recepciones ── */
     #tab-recepciones {
