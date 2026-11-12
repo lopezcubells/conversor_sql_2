@@ -889,6 +889,11 @@
     .ch-tabla td.dim { z-index: 2; background: #fff; }
     .ch-tabla td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     .ch-tabla td.tot { font-weight: 700; background: #faf8ff; }
+    .ch-tabla td.con-valor { background: #1aee48; color: #000; }
+    /* Encabezados de las columnas de descripción: hasta dos renglones */
+    .ch-tabla thead th.dim { vertical-align: bottom; }
+    .ch-tabla thead th.dim .ch-th-txt { white-space: normal; line-height: 1.2;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .ch-tabla tr.n1 td { font-weight: 700; }
     .ch-tabla tr.n1 td.dim { background: #ede7fb; }
     .ch-tabla tr.n2 td.dim { background: #f7f4fe; }
@@ -7083,11 +7088,11 @@
   const CH_PAGE        = 200;   // filas visibles por página
   const CH_LISTAS      = ["unidad", "mercado", "familia", "rubro", "sub_rubro"];
   const CH_DIMS = [
-    { k: "rubro", t: "Rubro insumo",         ancho: 170 },
-    { k: "cod",   t: "Código insumo",        ancho: 105 },
-    { k: "dins",  t: "Descripción insumo",   ancho: 250 },
+    { k: "rubro", t: "Rubro<br>insumo",         ancho: 170 },
+    { k: "cod",   t: "Código<br>insumo",        ancho: 105 },
+    { k: "dins",  t: "Descripción<br>insumo",   ancho: 250 },
     { k: "sku",   t: "SKU",                  ancho: 90  },
-    { k: "dprod", t: "Descripción producto", ancho: 270 },
+    { k: "dprod", t: "Descripción<br>producto", ancho: 270 },
   ];
   const CH_ANCHO_PER = { anio: 110, mes: 92, dia: 78 };
   const CH_ANCHO_TOT = 120;
@@ -7419,14 +7424,12 @@
     chVisibles = todas.slice(inicio, inicio + CH_PAGE);
     estado.textContent = `${raiz.hijos.size.toLocaleString("es-AR")} rubros · ${per.length.toLocaleString("es-AR")} columnas · consumo total ${fmtNum(raiz.t)}`;
 
-    // Intensidad del color: contra el mayor valor de período de cada nivel
-    const maxNivel = { 1: 0, 2: 0, 3: 0 };
-    todas.forEach(n => n.v.forEach(x => { if (x > maxNivel[n.nivel]) maxNivel[n.nivel] = x; }));
+    // Sin escala de color: toda celda con valor va en verde con texto negro.
+    // Una fila abierta no muestra su subtotal: los valores están en sus hijos.
+    const abierta = n => n.nivel < 3 && chAbiertos.has(n.id);
     const celda = (n, p) => {
-      const x = n.v.get(p);
-      if (!x) return `<td class="num"></td>`;
-      const t = maxNivel[n.nivel] ? Math.max(0, x) / maxNivel[n.nivel] : 0;
-      return `<td class="num" style="background:rgba(249,115,22,${(0.05 + 0.5 * t).toFixed(3)})">${fmtNum(x)}</td>`;
+      const x = abierta(n) ? 0 : n.v.get(p);
+      return x ? `<td class="num con-valor">${fmtNum(x)}</td>` : `<td class="num"></td>`;
     };
 
     const vacio = `<span class="ch-vacio-txt">(En blanco)</span>`;
@@ -7469,7 +7472,7 @@
     wrap.innerHTML = `<table class="ch-tabla" id="ch-tabla" style="width:${anchoTotal}px">
       <colgroup>${claves.map(k => `<col data-col="${nsEsc(k)}" style="width:${chAncho(k)}px">`).join("")}</colgroup>
       <thead><tr class="f1">${fila1}</tr>${dosFilas ? `<tr class="f2">${fila2}</tr>` : ""}</thead>
-      <tbody>${chVisibles.map((n, i) => `<tr class="n${n.nivel}">${dims(n, i)}${per.map(p => celda(n, p)).join("")}<td class="num tot">${fmtNum(n.t)}</td></tr>`).join("")}</tbody>
+      <tbody>${chVisibles.map((n, i) => `<tr class="n${n.nivel}">${dims(n, i)}${per.map(p => celda(n, p)).join("")}<td class="num tot">${abierta(n) ? "" : fmtNum(n.t)}</td></tr>`).join("")}</tbody>
       <tfoot><tr>${chDimsVis.map((j, i) => `<td class="dim d${j}">${i === 0 ? "Total" : ""}</td>`).join("")}
         ${per.map(p => `<td class="num">${raiz.v.get(p) ? fmtNum(raiz.v.get(p)) : ""}</td>`).join("")}
         <td class="num">${fmtNum(raiz.t)}</td></tr></tfoot>
