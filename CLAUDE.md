@@ -52,7 +52,8 @@ negocio**, solo la consulta y la presenta.
   `indicador_cobertura`, `necesidad_final`
 - **Vistas**: `view_recepciones_2026`, `view_avance_inmovilizados`, `rotacion_2026`,
   `view_stock_x_rubro`
-- **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos),
+- **Tablas de datos**: `consumos_im_if_consolidado` (consumos históricos; sin uso
+  por ahora: la pestaña Consumo Histórico se vació para rehacerla),
   `bd_articulos_x_rubro` (descripción y rubro por `cod_corto`),
   `bd_maestro_insumos` (subrubro y maestro de insumos por `cod_corto`),
   `bd_bom_m_multiplanta` (lista de piezas; una fila por planta + producto +

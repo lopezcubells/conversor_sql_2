@@ -16,7 +16,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 | **Recepciones** | Detalle de recepciones del año, con totales y gráficos por mes y por proveedor. |
 | **Nivel de servicio** | Indicador de NS por planta, faltantes por causa y reporte exportable a PDF. |
 | **Necesidad Final** | Necesidad de compra por insumo, con criticidad ABC en semáforo. |
-| **Consumo Histórico** | Tablero de consumos por insumo y producto, con evolución anual/mensual/diaria. |
+| **Consumo Histórico** | En reconstrucción. |
 | **BOM** | Lista de piezas por producto, comparada entre plantas, y vista inversa por insumo. |
 | **Catálogo** | Imágenes de insumos alojadas en Cloudflare R2, con listado y visor. |
 
