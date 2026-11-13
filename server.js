@@ -1105,6 +1105,27 @@ const CH_GRANOS = { anio: "YYYY", mes: "YYYY-MM", dia: "YYYY-MM-DD" };
 // Tope de filas agrupadas: más que esto no se puede dibujar en el navegador
 const CH_MAX_FILAS = 400000;
 
+// Las consultas de esta pestaña ordenan y agrupan cientos de miles de filas.
+// Con la memoria por defecto de PostgreSQL (work_mem = 4 MB) esos ordenamientos
+// se pasaban a disco (medido con EXPLAIN ANALYZE). SET LOCAL sube el límite
+// solo dentro de esta transacción: no cambia la configuración de la base ni
+// afecta otras consultas.
+async function chConsulta(consulta, params) {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL work_mem = '32MB'");
+    const r = typeof consulta === "string" ? await client.query(consulta, params) : await client.query(consulta);
+    await client.query("COMMIT");
+    return r;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // Arma las condiciones a partir de los filtros, siempre con parámetros. Cada
 // condición lleva su clave, así los filtros en cascada pueden armar la lista
 // de opciones de un filtro con todas las demás condiciones menos la suya.
@@ -1163,7 +1184,7 @@ app.post("/api/pg/consumo-historico/filtros", async (req, res) => {
       const resto = partes.filter(x => x.clave !== clave).map(x => x.sql);
       return resto.length ? resto.join(" AND ") : "TRUE";
     };
-    const r = await pgPool.query(`${CH_BASE}
+    const r = await chConsulta(`${CH_BASE}
       SELECT array_agg(DISTINCT EXTRACT(YEAR FROM fecha_orden)::int) AS anios,
              MIN(fecha_orden)::date AS desde,
              MAX(fecha_orden)::date AS hasta,
@@ -1190,7 +1211,7 @@ app.post("/api/pg/consumo-historico/datos", async (req, res) => {
     const body  = req.body || {};
     const fmt   = CH_GRANOS[body.grano] || CH_GRANOS.anio;
     const { where, params } = chWhere(body.filtros);
-    const r = await pgPool.query({
+    const r = await chConsulta({
       text: `${CH_BASE}
         SELECT rubro, cod, desc_ins, sku, desc_prod,
                to_char(fecha_orden, '${fmt}') AS periodo,

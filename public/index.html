@@ -2998,7 +2998,8 @@
       notas: [
         "Las tablas de referencia se deduplican por código (DISTINCT ON) antes de unirlas, para no multiplicar consumos.",
         "Los filtros se aplican en la base; el árbol rubro > insumo > producto y los subtotales se arman en el navegador.",
-        "Filtros en cascada: las opciones de cada desplegable salen con todos los demás filtros aplicados menos el propio (en una sola consulta, con FILTER por lista).",
+        "Filtros en cascada: las opciones de cada desplegable salen con todos los demás filtros aplicados menos el propio (en una sola consulta, con FILTER por lista). Se recalculan al abrir un desplegable, solo si cambió algún filtro desde la última vez.",
+        "Las consultas de la pestaña corren con work_mem = 32MB (SET LOCAL, solo en su transacción) para que los ordenamientos no vayan a disco.",
         "Todas las columnas se ordenan con clic en el encabezado: períodos y total por valor (en cada nivel del árbol), descripciones por nombre.",
         "Los movimientos sin fecha_orden no entran. Los valores vacíos se muestran y filtran como \"(En blanco)\".",
       ],
@@ -7154,6 +7155,11 @@
   let chDimsVis  = [0];           // índices de CH_DIMS que se muestran
   let chPedido   = null;          // AbortController del pedido en curso
   let chPedidoOp = null;          // ídem para las opciones de los filtros
+  // Las opciones de los desplegables (en cascada) cuestan una consulta pesada.
+  // No se piden en cada cambio de filtro: se marcan "viejas" y se recalculan
+  // recién al abrir un desplegable. chVersion cuenta los cambios de filtro.
+  let chVersion  = 0;
+  let chVersionOp = -1;           // versión de filtros con la que se armaron las opciones
   let chTimer    = null;
   // Orden de la matriz: columna (d:… descripción, p:… período, tot) y sentido
   let chOrden    = { col: null, dir: "asc" };
@@ -7202,7 +7208,8 @@
   function chProgramar() {
     chGuardar();
     clearTimeout(chTimer);
-    chTimer = setTimeout(() => { chCargar(); chCargarOpciones(); }, 350);
+    chVersion++;
+    chTimer = setTimeout(chCargar, 350);
   }
 
   function chArmarChips() {
@@ -7252,12 +7259,18 @@
         <div class="ch-dd-lista"></div>
       </div>`;
     chDdPintar(dd);
-    dd.querySelector(".ch-dd-btn").addEventListener("click", () => {
+    dd.querySelector(".ch-dd-btn").addEventListener("click", async () => {
       const panel = dd.querySelector(".ch-dd-panel");
       const abrir = panel.hidden;
       document.querySelectorAll("#ch-filtros .ch-dd-panel").forEach(p => { p.hidden = true; });
       panel.hidden = !abrir;
-      if (abrir) dd.querySelector(".ch-dd-buscar").focus();
+      if (!abrir) return;
+      dd.querySelector(".ch-dd-buscar").focus();
+      // Si cambió algún filtro desde la última vez, las opciones se recalculan ahora
+      if (chVersionOp !== chVersion) {
+        dd.querySelector(".ch-dd-lista").innerHTML = `<div class="ch-nota-filtro" style="padding:6px 4px">Actualizando opciones…</div>`;
+        await chCargarOpciones();
+      }
     });
     dd.querySelector(".ch-dd-buscar").addEventListener("input", () => chDdPintar(dd));
     dd.querySelector(".ch-dd-lista").addEventListener("change", e => {
@@ -7371,6 +7384,7 @@
 
   // Opciones de los filtros, en cascada con los demás filtros elegidos
   async function chCargarOpciones() {
+    const version = chVersion;
     if (chPedidoOp) chPedidoOp.abort();
     chPedidoOp = new AbortController();
     const pedido = chPedidoOp;
@@ -7384,6 +7398,7 @@
       if (!res.ok) throw new Error((await res.json()).error);
       const op = await res.json();
       if (pedido !== chPedidoOp) return;
+      chVersionOp = version;
       chOpciones = op;
       const d = document.getElementById("ch-desde"), h = document.getElementById("ch-hasta");
       if (op.desde) d.min = h.min = String(op.desde).slice(0, 10);
