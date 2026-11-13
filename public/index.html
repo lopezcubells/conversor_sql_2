@@ -917,6 +917,10 @@
     .ch-rz:hover, .ch-rz.activo { background: rgba(249,115,22,.7); }
     .ch-tabla thead th { overflow: visible; }
     .ch-th-txt { display: block; overflow: hidden; text-overflow: ellipsis; }
+    .ch-tabla thead th[data-orden] { cursor: pointer; user-select: none; }
+    .ch-tabla thead th[data-orden]:hover { background: #4c2a8a; }
+    .ch-tabla thead th.ordenada { background: #5b34a3; }
+    .ch-flecha { color: #fdba74; font-size: 10px; margin-left: 3px; }
     .ch-pag { margin-top: 10px; }
 
     /* Panel de filtros en lila (el mismo del encabezado de la tabla) con
@@ -2172,6 +2176,7 @@
       <div class="ch-bloque">
         <div class="ch-bloque-tit">Filtros generales</div>
         <div class="ch-grupo"><label>Unidad de negocio</label><div class="ch-dd" data-lista="unidad"></div></div>
+        <div class="ch-grupo"><label>Tipo documento</label><div class="ch-dd" data-lista="tipo_doc"></div></div>
       </div>
     </aside>
 
@@ -2969,6 +2974,7 @@
         ["Fecha orden (desde / hasta)", "consumos_im_if_consolidado.fecha_orden"],
         ["Año · Mes", "EXTRACT(YEAR / MONTH FROM fecha_orden)"],
         ["Unidad de negocio", "consumos_im_if_consolidado.unidad_negocio"],
+        ["Tipo documento", "consumos_im_if_consolidado.tipo_doc (por defecto y al reiniciar: solo IM)"],
         ["Mercado", "bd_productos.mercado"],
         ["Familia producto", "bd_productos.familia"],
         ["Rubro insumo", "bd_articulos_x_rubro.rubro"],
@@ -2992,6 +2998,8 @@
       notas: [
         "Las tablas de referencia se deduplican por código (DISTINCT ON) antes de unirlas, para no multiplicar consumos.",
         "Los filtros se aplican en la base; el árbol rubro > insumo > producto y los subtotales se arman en el navegador.",
+        "Filtros en cascada: las opciones de cada desplegable salen con todos los demás filtros aplicados menos el propio (en una sola consulta, con FILTER por lista).",
+        "Todas las columnas se ordenan con clic en el encabezado: períodos y total por valor (en cada nivel del árbol), descripciones por nombre.",
         "Los movimientos sin fecha_orden no entran. Los valores vacíos se muestran y filtran como \"(En blanco)\".",
       ],
     },
@@ -7121,7 +7129,7 @@
 
   const CH_STORAGE_KEY = "consumo-historico-params";
   const CH_PAGE        = 200;   // filas visibles por página
-  const CH_LISTAS      = ["unidad", "mercado", "familia", "rubro", "sub_rubro"];
+  const CH_LISTAS      = ["unidad", "tipo_doc", "mercado", "familia", "rubro", "sub_rubro"];
   const CH_DIMS = [
     { k: "rubro", t: "Rubro<br>insumo",         ancho: 170 },
     { k: "cod",   t: "Código<br>insumo",        ancho: 105 },
@@ -7145,22 +7153,33 @@
   let chVisibles = [];            // filas de la página actual (para los botones +/−)
   let chDimsVis  = [0];           // índices de CH_DIMS que se muestran
   let chPedido   = null;          // AbortController del pedido en curso
+  let chPedidoOp = null;          // ídem para las opciones de los filtros
   let chTimer    = null;
+  // Orden de la matriz: columna (d:… descripción, p:… período, tot) y sentido
+  let chOrden    = { col: null, dir: "asc" };
 
+  // sel: por cada lista, null = todos, o el array de valores elegidos.
+  // Tipo documento arranca solo con IM (también al reiniciar).
   function chFiltrosVacios() {
-    return { desde: "", hasta: "", anios: [], meses: [], excl: {}, textos: {} };
+    return { desde: "", hasta: "", anios: [], meses: [], sel: { tipo_doc: ["IM"] }, textos: {} };
   }
 
   function chGuardar() {
     try {
-      localStorage.setItem(CH_STORAGE_KEY, JSON.stringify({ f: chF, grano: chGrano, nivel: chNivel, anchos: chAnchos }));
+      localStorage.setItem(CH_STORAGE_KEY, JSON.stringify({ f: chF, grano: chGrano, nivel: chNivel, anchos: chAnchos, orden: chOrden }));
     } catch {}
   }
   function chRestaurar() {
     try {
       const s = JSON.parse(localStorage.getItem(CH_STORAGE_KEY) || "null");
       if (!s) return;
-      chF = Object.assign(chFiltrosVacios(), s.f || {});
+      // Lo guardado con la versión anterior (excl) se descarta: arranca con los
+      // valores por defecto
+      const f = Object.assign({}, s.f || {});
+      delete f.excl;
+      chF = Object.assign(chFiltrosVacios(), f);
+      if (!chF.sel || typeof chF.sel !== "object") chF.sel = chFiltrosVacios().sel;
+      if (s.orden && typeof s.orden === "object") chOrden = { col: s.orden.col || null, dir: s.orden.dir === "desc" ? "desc" : "asc" };
       if (["anio", "mes", "dia"].includes(s.grano)) chGrano = s.grano;
       if ([1, 2, 3].includes(s.nivel)) chNivel = s.nivel;
       chAnchos = s.anchos || {};
@@ -7173,21 +7192,17 @@
   const chOrdenar  = (a, b) => (a === chOpciones.vacio) - (b === chOpciones.vacio) ||
                                String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
 
-  // Lo que viaja al servidor. Una lista solo se manda si tiene algo destildado.
+  // Lo que viaja al servidor. Una lista solo se manda si no está en "todos".
   function chPayloadFiltros() {
     const listas = {};
-    CH_LISTAS.forEach(k => {
-      const excl = new Set(chF.excl[k] || []);
-      if (!excl.size) return;
-      listas[k] = (chOpciones.listas[k] || []).filter(v => !excl.has(v));
-    });
+    CH_LISTAS.forEach(k => { if (Array.isArray(chF.sel[k])) listas[k] = chF.sel[k]; });
     return { desde: chF.desde, hasta: chF.hasta, anios: chF.anios, meses: chF.meses, listas, textos: chF.textos };
   }
 
   function chProgramar() {
     chGuardar();
     clearTimeout(chTimer);
-    chTimer = setTimeout(chCargar, 350);
+    chTimer = setTimeout(() => { chCargar(); chCargarOpciones(); }, 350);
   }
 
   function chArmarChips() {
@@ -7248,9 +7263,12 @@
     dd.querySelector(".ch-dd-lista").addEventListener("change", e => {
       const cb = e.target;
       if (!cb.dataset.v && cb.dataset.v !== "") return;
-      const excl = new Set(chF.excl[k] || []);
-      if (cb.checked) excl.delete(cb.dataset.v); else excl.add(cb.dataset.v);
-      chF.excl[k] = [...excl];
+      const opciones = chOpciones.listas[k] || [];
+      let sel = Array.isArray(chF.sel[k]) ? [...chF.sel[k]] : [...opciones];
+      if (cb.checked) { if (!sel.includes(cb.dataset.v)) sel.push(cb.dataset.v); }
+      else sel = sel.filter(v => v !== cb.dataset.v);
+      // Con todo lo que se ve marcado (y nada más), vuelve a "todos"
+      chF.sel[k] = opciones.length && opciones.every(v => sel.includes(v)) && sel.every(v => opciones.includes(v)) ? null : sel;
       chDdTexto(dd);
       chProgramar();
     });
@@ -7258,9 +7276,15 @@
     dd.querySelector(".ch-dd-acc").addEventListener("click", e => {
       const b = e.target.closest("[data-acc]");
       if (!b) return;
-      const excl = new Set(chF.excl[k] || []);
-      chDdValoresVisibles(dd).forEach(v => { if (b.dataset.acc === "todos") excl.delete(v); else excl.add(v); });
-      chF.excl[k] = [...excl];
+      const visibles = chDdValoresVisibles(dd);
+      const buscando = !!dd.querySelector(".ch-dd-buscar").value.trim();
+      if (b.dataset.acc === "todos") {
+        chF.sel[k] = !buscando ? null
+          : [...new Set([...(chF.sel[k] || []), ...visibles])];
+      } else {
+        const base = Array.isArray(chF.sel[k]) ? chF.sel[k] : (chOpciones.listas[k] || []);
+        chF.sel[k] = base.filter(v => !visibles.includes(v));
+      }
       chDdPintar(dd);
       chProgramar();
     });
@@ -7273,23 +7297,26 @@
   }
 
   function chDdPintar(dd) {
-    const excl = new Set(chF.excl[dd.dataset.lista] || []);
+    const sel  = chF.sel[dd.dataset.lista];
+    const marcado = v => !Array.isArray(sel) || sel.includes(v);
     const vals = chDdValoresVisibles(dd).sort(chOrdenar);
     dd.querySelector(".ch-dd-lista").innerHTML = vals.length
       ? vals.map(v => `<label class="ch-dd-op${v === chOpciones.vacio ? " vacio" : ""}">
-          <input type="checkbox" data-v="${nsEsc(v)}" ${excl.has(v) ? "" : "checked"}><span>${nsEsc(chEtiqueta(v))}</span></label>`).join("")
+          <input type="checkbox" data-v="${nsEsc(v)}" ${marcado(v) ? "checked" : ""}><span>${nsEsc(chEtiqueta(v))}</span></label>`).join("")
       : `<div class="ch-nota-filtro" style="padding:4px">Sin opciones</div>`;
     chDdTexto(dd);
   }
 
   function chDdTexto(dd) {
     const todos = chOpciones.listas[dd.dataset.lista] || [];
-    const excl  = new Set(chF.excl[dd.dataset.lista] || []);
-    const elegidos = todos.filter(v => !excl.has(v));
+    const sel   = chF.sel[dd.dataset.lista];
+    const filtrado = Array.isArray(sel);
+    // Lo elegido puede incluir valores que hoy no están entre las opciones (por
+    // otro filtro): se cuentan igual, porque se siguen aplicando
     dd.querySelector(".ch-dd-txt").textContent =
-      !excl.size ? "Todos" : !elegidos.length ? "Ninguno"
-      : elegidos.length === 1 ? chEtiqueta(elegidos[0]) : `${elegidos.length} de ${todos.length}`;
-    dd.querySelector(".ch-dd-btn").classList.toggle("filtrado", excl.size > 0);
+      !filtrado ? "Todos" : !sel.length ? "Ninguno"
+      : sel.length === 1 ? chEtiqueta(sel[0]) : `${sel.length} elegidos`;
+    dd.querySelector(".ch-dd-btn").classList.toggle("filtrado", filtrado);
   }
 
   // Escucha global: cierra los menús al hacer clic afuera. Si la pestaña está
@@ -7337,9 +7364,39 @@
     const b = e.target.closest("[data-grano]");
     if (!b || b.dataset.grano === chGrano) return;
     chGrano = b.dataset.grano;
+    if (chOrden.col && chOrden.col.startsWith("p:")) chOrden = { col: null, dir: "asc" };
     chPintarBotones();
     chProgramar();
   });
+
+  // Opciones de los filtros, en cascada con los demás filtros elegidos
+  async function chCargarOpciones() {
+    if (chPedidoOp) chPedidoOp.abort();
+    chPedidoOp = new AbortController();
+    const pedido = chPedidoOp;
+    try {
+      const res = await fetch(`${API}/api/pg/consumo-historico/filtros`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filtros: chPayloadFiltros() }),
+        signal: pedido.signal,
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const op = await res.json();
+      if (pedido !== chPedidoOp) return;
+      chOpciones = op;
+      const d = document.getElementById("ch-desde"), h = document.getElementById("ch-hasta");
+      if (op.desde) d.min = h.min = String(op.desde).slice(0, 10);
+      if (op.hasta) d.max = h.max = String(op.hasta).slice(0, 10);
+      document.querySelectorAll("#ch-filtros .ch-dd").forEach(dd => {
+        if (dd.querySelector(".ch-dd-btn")) chDdPintar(dd); else chArmarDd(dd);
+      });
+      if (!document.querySelector("#ch-anios .ch-chip")) chArmarChips();
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      document.getElementById("ch-estado").textContent = "⚠ Filtros: " + e.message;
+    }
+  }
 
   // ── Datos ──
 
@@ -7396,8 +7453,20 @@
 
   const chCmp = (a, b) => (a == null) - (b == null) ||
     String(a ?? "").localeCompare(String(b ?? ""), "es", { numeric: true, sensitivity: "base" });
-  const chHijos = n => [...n.hijos.values()].sort((a, b) =>
-    chCmp(a.nivel === 1 ? a.rubro : a.nivel === 2 ? a.cod : a.sku, b.nivel === 1 ? b.rubro : b.nivel === 2 ? b.cod : b.sku));
+  // Hijos ordenados. Sin orden elegido (o por una columna de descripción):
+  // por nombre/código. Por un período o el total: por ese valor, en cada nivel
+  // (los rubros entre sí, los insumos dentro de cada rubro, etc.).
+  const chClave = n => n.nivel === 1 ? n.rubro : n.nivel === 2 ? n.cod : n.sku;
+  const chHijos = n => {
+    const arr = [...n.hijos.values()];
+    const { col, dir } = chOrden;
+    const s = dir === "desc" ? -1 : 1;
+    if (col && !col.startsWith("d:")) {
+      const val = h => col === "tot" ? h.t : (h.v.get(col.slice(2)) || 0);
+      return arr.sort((a, b) => s * (val(a) - val(b)) || chCmp(chClave(a), chClave(b)));
+    }
+    return arr.sort((a, b) => s * chCmp(chClave(a), chClave(b)));
+  };
 
   function chAbrirHasta(nivel) {
     chAbiertos = new Set();
@@ -7481,11 +7550,18 @@
     // Encabezado: una o dos filas según cómo se agrupen las columnas
     const rz = k => `<span class="ch-rz" data-col="${nsEsc(k)}"></span>`;
     const dosFilas = !!grupo;
-    const thDims = chDimsVis.map(j => { const d = CH_DIMS[j];
-      return `<th class="dim d${j}" ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">${d.t}</span>${rz("d:" + d.k)}</th>`; }).join("");
+    // Encabezado ordenable: marca y flecha si es la columna del orden actual
+    const ord = k => {
+      const activa = chOrden.col === k;
+      return { attr: `data-orden="${nsEsc(k)}"${activa ? ' class="ordenada"' : ""}`,
+               flecha: activa ? `<span class="ch-flecha">${chOrden.dir === "asc" ? "▲" : "▼"}</span>` : "" };
+    };
+    const thDims = chDimsVis.map(j => { const d = CH_DIMS[j], o = ord("d:" + d.k);
+      return `<th class="dim d${j}${chOrden.col === "d:" + d.k ? " ordenada" : ""}" data-orden="d:${d.k}" ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">${d.t}${o.flecha}</span>${rz("d:" + d.k)}</th>`; }).join("");
+    const thPer = p => { const o = ord("p:" + p); return `<th ${o.attr}><span class="ch-th-txt">${nsEsc(etiqueta(p))}${o.flecha}</span>${rz("p:" + p)}</th>`; };
     let fila1 = thDims, fila2 = "";
     if (!dosFilas) {
-      fila1 += per.map(p => `<th><span class="ch-th-txt">${nsEsc(etiqueta(p))}</span>${rz("p:" + p)}</th>`).join("");
+      fila1 += per.map(thPer).join("");
     } else {
       const grupos = [];
       per.forEach(p => {
@@ -7497,9 +7573,10 @@
         const titulo = chGrano === "dia" ? `${MES_NOMBRES[parseInt(g.slice(5, 7))]} ${g.slice(0, 4)}` : g;
         return `<th colspan="${n}"><span class="ch-th-txt">${titulo}</span></th>`;
       }).join("");
-      fila2 = per.map(p => `<th><span class="ch-th-txt">${nsEsc(etiqueta(p))}</span>${rz("p:" + p)}</th>`).join("");
+      fila2 = per.map(thPer).join("");
     }
-    fila1 += `<th ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">Total</span>${rz("tot")}</th>`;
+    const oTot = ord("tot");
+    fila1 += `<th ${oTot.attr} ${dosFilas ? 'rowspan="2"' : ""}><span class="ch-th-txt">Total${oTot.flecha}</span>${rz("tot")}</th>`;
 
     const claves = [...chDimsVis.map(j => "d:" + CH_DIMS[j].k), ...per.map(p => "p:" + p), "tot"];
     const anchoTotal = claves.reduce((a, k) => a + chAncho(k), 0);
@@ -7560,6 +7637,20 @@
     chRender();
   });
 
+  // Clic en un encabezado: ordena por esa columna. Los números arrancan de
+  // mayor a menor; las descripciones, de la A a la Z. Otro clic invierte.
+  document.getElementById("ch-tabla-wrap").addEventListener("click", e => {
+    if (e.target.closest(".ch-rz")) return;
+    const th = e.target.closest("th[data-orden]");
+    if (!th) return;
+    const col = th.dataset.orden;
+    if (chOrden.col === col) chOrden.dir = chOrden.dir === "asc" ? "desc" : "asc";
+    else chOrden = { col, dir: col.startsWith("d:") ? "asc" : "desc" };
+    chGuardar();
+    chPagina = 0;
+    chRender();
+  });
+
   document.getElementById("ch-tabla-wrap").addEventListener("mousedown", e => {
     const rz = e.target.closest(".ch-rz");
     if (!rz) return;
@@ -7591,16 +7682,7 @@
     chLoaded = true;
     chRestaurar();
     chPintarBotones();
-    try {
-      const res = await fetch(`${API}/api/pg/consumo-historico/filtros`);
-      if (!res.ok) throw new Error((await res.json()).error);
-      chOpciones = await res.json();
-      const d = document.getElementById("ch-desde"), h = document.getElementById("ch-hasta");
-      if (chOpciones.desde) d.min = h.min = String(chOpciones.desde).slice(0, 10);
-      if (chOpciones.hasta) d.max = h.max = String(chOpciones.hasta).slice(0, 10);
-    } catch (e) {
-      document.getElementById("ch-estado").textContent = "⚠ Filtros: " + e.message;
-    }
+    await chCargarOpciones();
     chPintarFiltros();
     chCargar();
   }

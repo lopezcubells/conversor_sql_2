@@ -1083,6 +1083,7 @@ const CH_BASE = `
            NULLIF(btrim(c.cod_corto::text), '')      AS cod,
            NULLIF(btrim(c.cod_corto_ppal::text), '') AS sku,
            NULLIF(btrim(c.unidad_negocio::text), '') AS unidad,
+           NULLIF(btrim(c.tipo_doc::text), '')       AS tipo_doc,
            ai.descripcion AS desc_ins,
            ai.rubro       AS rubro,
            m.sub_rubro    AS sub_rubro,
@@ -1104,29 +1105,33 @@ const CH_GRANOS = { anio: "YYYY", mes: "YYYY-MM", dia: "YYYY-MM-DD" };
 // Tope de filas agrupadas: más que esto no se puede dibujar en el navegador
 const CH_MAX_FILAS = 400000;
 
-// Arma el WHERE a partir de los filtros, siempre con parámetros
-function chWhere(f) {
+// Arma las condiciones a partir de los filtros, siempre con parámetros. Cada
+// condición lleva su clave, así los filtros en cascada pueden armar la lista
+// de opciones de un filtro con todas las demás condiciones menos la suya.
+const CH_LISTAS = ["unidad", "tipo_doc", "mercado", "familia", "rubro", "sub_rubro"];
+
+function chPartes(f) {
   f = f || {};
-  const where = [], params = [];
+  const partes = [], params = [];
   const p = v => { params.push(v); return "$" + params.length; };
   const fecha = /^\d{4}-\d{2}-\d{2}$/;
-  if (fecha.test(f.desde || "")) where.push(`fecha_orden >= ${p(f.desde)}::date`);
-  if (fecha.test(f.hasta || "")) where.push(`fecha_orden < ${p(f.hasta)}::date + 1`);
+  if (fecha.test(f.desde || "")) partes.push({ clave: "desde", sql: `fecha_orden >= ${p(f.desde)}::date` });
+  if (fecha.test(f.hasta || "")) partes.push({ clave: "hasta", sql: `fecha_orden < ${p(f.hasta)}::date + 1` });
   const enteros = a => Array.isArray(a) ? a.map(Number).filter(Number.isInteger) : [];
   const anios = enteros(f.anios), meses = enteros(f.meses);
-  if (anios.length) where.push(`EXTRACT(YEAR FROM fecha_orden)::int = ANY(${p(anios)}::int[])`);
-  if (meses.length) where.push(`EXTRACT(MONTH FROM fecha_orden)::int = ANY(${p(meses)}::int[])`);
+  if (anios.length) partes.push({ clave: "anios", sql: `EXTRACT(YEAR FROM fecha_orden)::int = ANY(${p(anios)}::int[])` });
+  if (meses.length) partes.push({ clave: "meses", sql: `EXTRACT(MONTH FROM fecha_orden)::int = ANY(${p(meses)}::int[])` });
 
   // Listas: si no vienen, no se filtra. Si vienen vacías, no pasa nada.
-  const listas = { unidad: "unidad", mercado: "mercado", familia: "familia", rubro: "rubro", sub_rubro: "sub_rubro" };
-  for (const [clave, col] of Object.entries(listas)) {
-    const v = f.listas && f.listas[clave];
+  // El nombre de la columna sale de CH_LISTAS, nunca de lo que mandó el navegador.
+  for (const col of CH_LISTAS) {
+    const v = f.listas && f.listas[col];
     if (!Array.isArray(v)) continue;
     const reales = v.filter(x => typeof x === "string" && x !== CH_VACIO);
     const conds = [];
     if (reales.length) conds.push(`${col} = ANY(${p(reales)}::text[])`);
     if (v.includes(CH_VACIO)) conds.push(`${col} IS NULL`);
-    where.push(conds.length ? `(${conds.join(" OR ")})` : "FALSE");
+    partes.push({ clave: col, sql: conds.length ? `(${conds.join(" OR ")})` : "FALSE" });
   }
 
   // Textos: "contiene", sin distinguir mayúsculas. Los comodines que escriba
@@ -1135,34 +1140,43 @@ function chWhere(f) {
   for (const [clave, col] of Object.entries(textos)) {
     const v = f.textos && typeof f.textos[clave] === "string" ? f.textos[clave].trim() : "";
     if (!v) continue;
-    where.push(`${col} ILIKE ${p("%" + v.replace(/[\\%_]/g, m => "\\" + m) + "%")}`);
+    partes.push({ clave, sql: `${col} ILIKE ${p("%" + v.replace(/[\\%_]/g, m => "\\" + m) + "%")}` });
   }
-  return { where: where.length ? "AND " + where.join(" AND ") : "", params };
+  return { partes, params };
 }
 
-// Valores disponibles para los filtros, en una sola pasada sobre la base
-app.get("/api/pg/consumo-historico/filtros", async (req, res) => {
+function chWhere(f) {
+  const { partes, params } = chPartes(f);
+  return { where: partes.length ? "AND " + partes.map(x => x.sql).join(" AND ") : "", params };
+}
+
+// Valores disponibles para los filtros. En cascada: la lista de cada filtro
+// se arma con todos los demás filtros aplicados menos el propio (así elegir un
+// rubro achica los sub-rubros, pero el rubro sigue mostrando sus opciones).
+// Todo en una sola pasada sobre la base, con un FILTER por lista. Los años y
+// el rango de fechas son siempre los de toda la tabla.
+app.post("/api/pg/consumo-historico/filtros", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
   try {
+    const { partes, params } = chPartes((req.body || {}).filtros);
+    const sinEl = clave => {
+      const resto = partes.filter(x => x.clave !== clave).map(x => x.sql);
+      return resto.length ? resto.join(" AND ") : "TRUE";
+    };
     const r = await pgPool.query(`${CH_BASE}
       SELECT array_agg(DISTINCT EXTRACT(YEAR FROM fecha_orden)::int) AS anios,
-             array_agg(DISTINCT unidad)    AS unidad,
-             array_agg(DISTINCT mercado)   AS mercado,
-             array_agg(DISTINCT familia)   AS familia,
-             array_agg(DISTINCT rubro)     AS rubro,
-             array_agg(DISTINCT sub_rubro) AS sub_rubro,
-             MIN(fecha_orden)::date        AS desde,
-             MAX(fecha_orden)::date        AS hasta
+             MIN(fecha_orden)::date AS desde,
+             MAX(fecha_orden)::date AS hasta,
+             ${CH_LISTAS.map(c => `array_agg(DISTINCT ${c}) FILTER (WHERE ${sinEl(c)}) AS ${c}`).join(",\n             ")}
       FROM base
-      WHERE fecha_orden IS NOT NULL`);
+      WHERE fecha_orden IS NOT NULL`, params);
     const f = r.rows[0] || {};
     const lista = a => (a || []).map(v => v === null ? CH_VACIO : v);
+    const listas = {};
+    CH_LISTAS.forEach(c => { listas[c] = lista(f[c]); });
     res.json({
       anios: (f.anios || []).filter(v => v !== null).sort((a, b) => a - b),
-      desde: f.desde, hasta: f.hasta,
-      listas: { unidad: lista(f.unidad), mercado: lista(f.mercado), familia: lista(f.familia),
-                rubro: lista(f.rubro), sub_rubro: lista(f.sub_rubro) },
-      vacio: CH_VACIO,
+      desde: f.desde, hasta: f.hasta, listas, vacio: CH_VACIO,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
