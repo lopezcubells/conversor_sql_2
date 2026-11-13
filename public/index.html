@@ -2194,6 +2194,7 @@
           <div class="ch-seg" id="ch-grano">
             <button type="button" data-grano="anio">Año</button>
             <button type="button" data-grano="mes">Mes</button>
+            <button type="button" data-grano="semana" title="Semana ISO (lunes a domingo)">Semana</button>
             <button type="button" data-grano="dia">Día</button>
           </div>
         </div>
@@ -2991,7 +2992,7 @@
           ["Descripción insumo", "bd_articulos_x_rubro.descripcion (por cod_corto)"],
           ["SKU", "consumos_im_if_consolidado.cod_corto_ppal"],
           ["Descripción producto", "bd_articulos_x_rubro.descripcion (por cod_corto_ppal)"],
-          ["Columnas (año / mes / día)", "to_char(fecha_orden)"],
+          ["Columnas (año / mes / semana / día)", "to_char(fecha_orden): YYYY · YYYY-MM · IYYY-IW (semana ISO) · YYYY-MM-DD"],
           ["Valores, subtotales y totales", "SUM(consumo)"],
         ]},
       ],
@@ -7138,7 +7139,7 @@
     { k: "sku",   t: "SKU",                  ancho: 90  },
     { k: "dprod", t: "Descripción<br>producto", ancho: 270 },
   ];
-  const CH_ANCHO_PER = { anio: 110, mes: 92, dia: 78 };
+  const CH_ANCHO_PER = { anio: 110, mes: 92, semana: 82, dia: 78 };
   const CH_ANCHO_TOT = 120;
   const CH_NADA = "\u0000";   // clave interna para valores vacíos
 
@@ -7186,7 +7187,7 @@
       chF = Object.assign(chFiltrosVacios(), f);
       if (!chF.sel || typeof chF.sel !== "object") chF.sel = chFiltrosVacios().sel;
       if (s.orden && typeof s.orden === "object") chOrden = { col: s.orden.col || null, dir: s.orden.dir === "desc" ? "desc" : "asc" };
-      if (["anio", "mes", "dia"].includes(s.grano)) chGrano = s.grano;
+      if (["anio", "mes", "semana", "dia"].includes(s.grano)) chGrano = s.grano;
       if ([1, 2, 3].includes(s.nivel)) chNivel = s.nivel;
       chAnchos = s.anchos || {};
     } catch {}
@@ -7510,6 +7511,10 @@
     if (chGrano === "mes") {
       grupo = p => p.slice(0, 4);
       etiqueta = p => MES_NOMBRES[parseInt(p.slice(5, 7))] || p;
+    } else if (chGrano === "semana") {
+      // "2026-07" → agrupado por año ISO, columna "S07"
+      grupo = p => p.slice(0, 4);
+      etiqueta = p => "S" + p.slice(5, 7);
     } else if (chGrano === "dia") {
       grupo = p => p.slice(0, 7);
       etiqueta = p => p.slice(8, 10);
@@ -7585,7 +7590,8 @@
         else grupos.push({ g, n: 1 });
       });
       fila1 += grupos.map(({ g, n }) => {
-        const titulo = chGrano === "dia" ? `${MES_NOMBRES[parseInt(g.slice(5, 7))]} ${g.slice(0, 4)}` : g;
+        const titulo = chGrano === "dia" ? `${MES_NOMBRES[parseInt(g.slice(5, 7))]} ${g.slice(0, 4)}`
+                     : chGrano === "semana" ? `${g} (ISO)` : g;
         return `<th colspan="${n}"><span class="ch-th-txt">${titulo}</span></th>`;
       }).join("");
       fila2 = per.map(thPer).join("");

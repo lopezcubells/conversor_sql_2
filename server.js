@@ -1101,7 +1101,10 @@ const CH_BASE = `
 const CH_VACIO = "__vacio__";
 // Cómo se agrupan las columnas de la matriz. Entra al SQL como texto de
 // to_char, así que sale de esta tabla y nunca de lo que mandó el navegador.
-const CH_GRANOS = { anio: "YYYY", mes: "YYYY-MM", dia: "YYYY-MM-DD" };
+// Semana: ISO 8601 (lunes a domingo; la semana 1 es la que tiene el primer
+// jueves del año). IYYY es el año ISO, que en los primeros o últimos días de
+// enero/diciembre puede no coincidir con el año calendario.
+const CH_GRANOS = { anio: "YYYY", mes: "YYYY-MM", semana: "IYYY-IW", dia: "YYYY-MM-DD" };
 // Tope de filas agrupadas: más que esto no se puede dibujar en el navegador
 const CH_MAX_FILAS = 400000;
 
