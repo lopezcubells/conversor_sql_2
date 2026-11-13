@@ -113,6 +113,26 @@ variables ya definidas: por eso en Railway, donde no hay `.env`, no cambia nada.
 Cualquier cambio de configuración tiene que seguir funcionando en los dos lados:
 nada de rutas absolutas ni supuestos de HTTPS (la cookie usa `secure: "auto"`).
 
+## Consumo Histórico local (`consumo-local/`)
+
+Versión aparte con **solo** la pestaña Consumo Histórico, conectada a un
+PostgreSQL local (`consumo-local/.env`, plantilla `.env.example`; arranca con
+`consumo-local/iniciar.bat` en `http://localhost:3001`, sin login y escuchando
+solo en 127.0.0.1). No duplica código:
+
+- El SQL y las rutas viven en **`consumo-historico.js`**, módulo que registran
+  tanto `server.js` como `consumo-local/servidor.js`. Los cambios de consultas
+  de esta pestaña van ahí, no en `server.js`.
+- La página se arma en cada pedido leyendo `public/index.html` y cortando por
+  **marcadores**: el comentario CSS `/* ── Consumo Histórico: tema claro`, el
+  `<div class="pane" id="tab-consumo-historico">` hasta `<!-- ═══ BOM ═══ -->`,
+  y el JS desde `// ── Consumo histórico ──` hasta `// ── BOM (lista de piezas
+  multiplanta) ──`. Además copia los ayudantes `MES_NOMBRES`, `fmtNum`,
+  `nsEsc`, `recNormRubro` y `renderPagination`. **No renombrar esos marcadores
+  ni esos ayudantes**, y si la pestaña empieza a usar otro ayudante compartido,
+  sumarlo a la lista de `armarPagina()`. Probarlo con `node consumo-local/servidor.js`
+  (sin base responde 503, pero la página tiene que cargar sin errores).
+
 ## Mapeo y Dependencias — mantenerlo SIEMPRE al día
 
 El botón ⓘ junto a "Cerrar sesión" abre un panel que muestra, para la pestaña
@@ -153,8 +173,10 @@ miniaturas, y al revés el aviso explica qué falta.
 
 ## Cómo verificar cambios (importante)
 
-**No hay Node instalado en el entorno de desarrollo**, así que la app no se puede
-levantar acá. Pero sí hay Python, y eso alcanza para probar el frontend de verdad:
+Node ya está instalado en esta PC: `node --check archivo.js` valida la sintaxis
+del servidor, y la app puede arrancar sin base (`DATABASE_URL=` vacía) para
+comprobar que levanta. Para probar el frontend con datos, sigue sirviendo el
+método con Python y respuestas simuladas:
 
 1. Copiar `public/index.html` a un archivo temporal en la raíz del proyecto,
    inyectando un `<script>` que pise `window.fetch` para simular las respuestas

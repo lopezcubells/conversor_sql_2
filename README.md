@@ -82,6 +82,18 @@ npm install
 npm start          # lee el .env de la carpeta
 ```
 
+### Consumo Histórico solo, contra una base local
+
+La carpeta `consumo-local/` levanta **solo la pestaña Consumo Histórico**,
+conectada a un PostgreSQL de la PC (por ejemplo, una copia de la base):
+
+1. Copiar `consumo-local/.env.example` como `consumo-local/.env` y completar
+   `DATABASE_URL` (por ejemplo `postgresql://postgres:CLAVE@localhost:5432/BASE`).
+2. Doble clic en `consumo-local/iniciar.bat`. Abre `http://localhost:3001`.
+
+No tiene login y solo se puede abrir desde la misma PC. Usa el mismo SQL y la
+misma pantalla que la app, así que los cambios en la pestaña aparecen solos.
+
 ## Variables de entorno
 
 En Railway se cargan desde el panel. En local, desde el archivo `.env` (ver
