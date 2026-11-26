@@ -949,8 +949,6 @@
     .rp-pie { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
     .rp-sel { flex: none; width: auto; min-width: 180px; max-width: 320px; padding: 3px 8px; font-size: 12px; }
     .rp-sel[hidden] { display: none; }
-    /* En pantalla completa, el reporte ocupa toda la pantalla */
-    .rp-marco:fullscreen { height: 100vh; border: 0; border-radius: 0; }
     .rp-info { color: var(--muted); }
     .rp-admin { margin-left: auto; }
     .rp-admin[hidden] { display: none; }
@@ -2308,7 +2306,7 @@
 
   <div class="rp-pie">
     <select class="search-input rp-sel" id="rp-sel" title="Reporte"></select>
-    <button type="button" class="btn btn-outline rp-mini" id="rp-completa" style="display:none" title="Ver el reporte en pantalla completa (Esc para salir)">⛶ Pantalla completa</button>
+    <a class="btn btn-outline rp-mini" id="rp-completa" target="_blank" rel="noopener" style="display:none;text-decoration:none" title="Abre el reporte solo, en una pestaña nueva del navegador">↗ Pestaña completa</a>
     <span class="rp-info" id="rp-info"></span>
 
     <!-- Solo administradores: plegado para no ocupar lugar -->
@@ -7263,25 +7261,13 @@
       (r.publicado_por ? ` por ${r.publicado_por}` : "") + ` · ${tam}`;
     // La fecha en la URL evita ver una versión vieja guardada por el navegador
     const url = `${API}/api/reportes/${r.id}/html?v=${encodeURIComponent(r.publicado_en)}`;
+    completa.href = url;
     completa.style.display = "";
     marco.innerHTML = `<iframe title="${nsEsc(r.nombre)}" src="${url}"
       sandbox="allow-scripts allow-popups allow-modals allow-downloads allow-forms"></iframe>`;
   }
 
   document.getElementById("rp-sel").addEventListener("change", rpMostrar);
-
-  // Pantalla completa del recuadro del reporte (Esc para salir). Si el navegador
-  // no lo permite, se abre el reporte solo en otra pestaña.
-  document.getElementById("rp-completa").addEventListener("click", () => {
-    const marco = document.getElementById("rp-marco");
-    if (marco.requestFullscreen) {
-      marco.requestFullscreen().catch(() => rpAbrirAparte());
-    } else rpAbrirAparte();
-  });
-  function rpAbrirAparte() {
-    const f = document.querySelector("#rp-marco iframe");
-    if (f) window.open(f.getAttribute("src"), "_blank", "noopener");
-  }
 
   // Al elegir un archivo, si no hay nombre se propone el del archivo
   document.getElementById("rp-archivo").addEventListener("change", e => {
