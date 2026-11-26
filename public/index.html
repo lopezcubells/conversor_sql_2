@@ -940,6 +940,18 @@
     .ch-filtros .ch-dd-panel { color: var(--text); }
     .ch-filtros .ch-dd-panel .ch-texto { border-color: var(--border); }
 
+    /* ── Reportes publicados ── */
+    .rp-barra { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+    .rp-campo { display: flex; flex-direction: column; gap: 4px; }
+    .rp-campo > label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .rp-info { font-size: 12px; color: var(--muted); margin-left: auto; }
+    .rp-admin { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+    .rp-admin[hidden] { display: none; }
+    .rp-admin-tit { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+    .rp-marco { height: calc(100vh - 250px); min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius);
+                overflow: hidden; background: #fff; }
+    .rp-marco iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+
     /* ── Tema claro: solo pestaña Recepciones ── */
     #tab-recepciones {
       --bg:      #ffffff;
@@ -1236,6 +1248,7 @@
     <div class="tab" data-tab="consumo-historico">Consumo Histórico</div>
     <div class="tab" data-tab="bom">BOM</div>
     <div class="tab" data-tab="catalogo">Catálogo</div>
+    <div class="tab" data-tab="reportes">Reportes publicados</div>
   </div>
 
   <div class="hdr-sesion">
@@ -2276,6 +2289,46 @@
 
 </div>
 
+<!-- ═══ REPORTES PUBLICADOS ═══ -->
+<div class="pane" id="tab-reportes">
+  <div class="card">
+    <div class="rp-barra">
+      <div class="rp-campo">
+        <label for="rp-sel">Reporte</label>
+        <select class="search-input" id="rp-sel" style="min-width:260px"></select>
+      </div>
+      <a class="btn btn-outline" id="rp-abrir" target="_blank" rel="noopener" style="display:none">↗ Abrir en otra pestaña</a>
+      <span class="rp-info" id="rp-info"></span>
+    </div>
+
+    <!-- Solo administradores -->
+    <div class="rp-admin" id="rp-admin" hidden>
+      <div class="rp-admin-tit">Publicar un reporte</div>
+      <div class="rp-barra">
+        <div class="rp-campo">
+          <label for="rp-nombre">Nombre</label>
+          <input class="search-input" id="rp-nombre" list="rp-nombres" placeholder="Ej.: Stock semanal" maxlength="120" style="min-width:240px">
+          <datalist id="rp-nombres"></datalist>
+        </div>
+        <div class="rp-campo">
+          <label for="rp-archivo">Archivo HTML</label>
+          <input type="file" id="rp-archivo" accept=".html,.htm,text/html">
+        </div>
+        <button class="btn btn-primary" id="rp-publicar">⬆ Publicar</button>
+        <button class="btn btn-outline" id="rp-eliminar" style="margin-left:auto">🗑 Eliminar el reporte elegido</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">
+        Si el nombre ya existe, se reemplaza por el archivo nuevo. El HTML tiene que ser autocontenido
+        (los datos adentro del archivo); se muestra aislado del resto de la app.
+      </div>
+    </div>
+  </div>
+
+  <div class="rp-marco" id="rp-marco">
+    <div class="empty" style="padding:60px 20px">Cargando…</div>
+  </div>
+</div>
+
 <!-- ═══ CATÁLOGO ═══ -->
 <div class="pane" id="tab-catalogo">
 
@@ -3038,6 +3091,26 @@
       ],
     },
 
+    reportes: {
+      titulo: "Reportes publicados",
+      fuentes: [
+        ["tabla", "app_reportes", "Reportes HTML subidos por un administrador (propia de la app)"],
+      ],
+      bloques: [
+        { titulo: "Selector y reporte", origen: "app_reportes", campos: [
+          ["Reporte (selector)", "nombre"],
+          ["Publicado el / por", "publicado_en · publicado_por"],
+          ["Tamaño", "bytes"],
+          ["Contenido (iframe aislado)", "html"],
+        ]},
+      ],
+      notas: [
+        "No lee datos de negocio: cada reporte es una foto con sus datos adentro del propio HTML.",
+        "Publicar y eliminar son solo para administradores. Publicar con un nombre que ya existe lo reemplaza.",
+        "El HTML se muestra aislado (iframe sandbox y cabecera CSP sandbox): sus scripts no acceden a la sesión ni a la app.",
+      ],
+    },
+
     catalogo: {
       titulo: "Catálogo",
       fuentes: [
@@ -3147,6 +3220,7 @@
       if (tab.dataset.tab === "consumo-historico") initConsumoHistorico();
       if (tab.dataset.tab === "bom") initBom();
       if (tab.dataset.tab === "catalogo") initCatalogo();
+      if (tab.dataset.tab === "reportes") initReportes();
     });
   });
 
@@ -7121,6 +7195,129 @@
     nsLoaded = true;
   }
 
+
+  // ── Reportes publicados ──
+  // Reportes HTML autocontenidos (una "foto" con sus datos adentro) que sube un
+  // administrador. Se muestran en un iframe con sandbox: sus scripts funcionan
+  // (filtros, gráficos) pero no pueden tocar la sesión ni el resto de la app.
+  // El servidor además los sirve con la cabecera CSP sandbox.
+
+  const RP_STORAGE_KEY = "reportes-params";
+  const RP_MAX_BYTES   = 15 * 1024 * 1024;
+  let rpLoaded   = false;
+  let rpReportes = [];
+
+  async function initReportes() {
+    if (rpLoaded) return;
+    rpLoaded = true;
+    // Publicar y eliminar son solo para administradores (el servidor también lo exige)
+    try {
+      const me = await (await fetch(`${API}/api/me`)).json();
+      document.getElementById("rp-admin").hidden = !me.es_admin;
+    } catch {}
+    let guardado = null;
+    try { guardado = JSON.parse(localStorage.getItem(RP_STORAGE_KEY) || "null"); } catch {}
+    await rpCargarLista(guardado && guardado.id);
+  }
+
+  async function rpCargarLista(elegir) {
+    const sel = document.getElementById("rp-sel");
+    try {
+      const res = await fetch(`${API}/api/reportes`);
+      if (!res.ok) throw new Error((await res.json()).error);
+      rpReportes = (await res.json()).reportes;
+    } catch (e) {
+      rpReportes = [];
+      document.getElementById("rp-marco").innerHTML = `<div class="empty" style="padding:60px 20px"><div class="big">⚠</div>${nsEsc(e.message)}</div>`;
+      return;
+    }
+    sel.innerHTML = rpReportes.length
+      ? rpReportes.map(r => `<option value="${r.id}">${nsEsc(r.nombre)}</option>`).join("")
+      : `<option value="">(no hay reportes publicados)</option>`;
+    document.getElementById("rp-nombres").innerHTML = rpReportes.map(r => `<option value="${nsEsc(r.nombre)}">`).join("");
+    const id = rpReportes.some(r => r.id === Number(elegir)) ? Number(elegir) : (rpReportes[0] && rpReportes[0].id);
+    if (id) sel.value = String(id);
+    rpMostrar();
+  }
+
+  function rpMostrar() {
+    const marco = document.getElementById("rp-marco");
+    const info  = document.getElementById("rp-info");
+    const abrir = document.getElementById("rp-abrir");
+    const r = rpReportes.find(x => x.id === Number(document.getElementById("rp-sel").value));
+    if (!r) {
+      marco.innerHTML = `<div class="empty" style="padding:60px 20px"><div class="big">📄</div>Todavía no hay reportes publicados.</div>`;
+      info.textContent = "";
+      abrir.style.display = "none";
+      return;
+    }
+    try { localStorage.setItem(RP_STORAGE_KEY, JSON.stringify({ id: r.id })); } catch {}
+    const fecha = new Date(r.publicado_en);
+    const tam = r.bytes >= 1024 * 1024
+      ? (r.bytes / 1024 / 1024).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " MB"
+      : Math.max(1, Math.round(r.bytes / 1024)).toLocaleString("es-AR") + " KB";
+    info.textContent = `Publicado el ${fecha.toLocaleDateString("es-AR")} a las ${fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}` +
+      (r.publicado_por ? ` por ${r.publicado_por}` : "") + ` · ${tam}`;
+    // La fecha en la URL evita ver una versión vieja guardada por el navegador
+    const url = `${API}/api/reportes/${r.id}/html?v=${encodeURIComponent(r.publicado_en)}`;
+    abrir.href = url;
+    abrir.style.display = "";
+    marco.innerHTML = `<iframe title="${nsEsc(r.nombre)}" src="${url}"
+      sandbox="allow-scripts allow-popups allow-modals allow-downloads allow-forms"></iframe>`;
+  }
+
+  document.getElementById("rp-sel").addEventListener("change", rpMostrar);
+
+  // Al elegir un archivo, si no hay nombre se propone el del archivo
+  document.getElementById("rp-archivo").addEventListener("change", e => {
+    const f = e.target.files[0];
+    const nombre = document.getElementById("rp-nombre");
+    if (f && !nombre.value.trim()) nombre.value = f.name.replace(/\.html?$/i, "");
+  });
+
+  document.getElementById("rp-publicar").addEventListener("click", async () => {
+    const btn = document.getElementById("rp-publicar");
+    const nombre = document.getElementById("rp-nombre").value.trim();
+    const f = document.getElementById("rp-archivo").files[0];
+    if (!nombre) return toast("Poné un nombre para el reporte", "err");
+    if (!f) return toast("Elegí el archivo HTML", "err");
+    if (f.size > RP_MAX_BYTES) return toast("El archivo supera los 15 MB", "err");
+    const existe = rpReportes.some(r => r.nombre === nombre);
+    if (existe && !confirm(`Ya hay un reporte "${nombre}". ¿Reemplazarlo por el archivo nuevo?`)) return;
+    btn.disabled = true;
+    try {
+      const html = await f.text();
+      const res = await fetch(`${API}/api/reportes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, html }),
+      });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out.error);
+      document.getElementById("rp-archivo").value = "";
+      document.getElementById("rp-nombre").value = "";
+      await rpCargarLista(out.id);
+      toast(out.reemplazado ? "✅ Reporte reemplazado" : "✅ Reporte publicado", "ok");
+    } catch (e) {
+      toast("⚠ " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("rp-eliminar").addEventListener("click", async () => {
+    const r = rpReportes.find(x => x.id === Number(document.getElementById("rp-sel").value));
+    if (!r) return;
+    if (!confirm(`¿Eliminar el reporte "${r.nombre}"? No se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`${API}/api/reportes/${r.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await rpCargarLista();
+      toast("Reporte eliminado", "ok");
+    } catch (e) {
+      toast("⚠ " + e.message, "err");
+    }
+  });
 
   // ── Consumo histórico ──
   // Versión renovada del tablero de Power BI: panel de filtros a la izquierda y

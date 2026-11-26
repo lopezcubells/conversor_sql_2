@@ -63,6 +63,7 @@ const PESTANAS = [
   { clave: "consumo-historico", nombre: "Consumo Histórico" },
   { clave: "bom",               nombre: "BOM" },
   { clave: "catalogo",          nombre: "Catálogo" },
+  { clave: "reportes",          nombre: "Reportes publicados" },
 ];
 const PESTANAS_VALIDAS = new Set(PESTANAS.map(p => p.clave));
 
@@ -87,6 +88,7 @@ const RUTA_PESTANA = [
   // de /api/r2, porque gana la primera que coincide.
   ["/api/r2/imagen-codigo",     ["catalogo", "inmovilizados"]],
   ["/api/r2",                   "catalogo"],
+  ["/api/reportes",             "reportes"],
 ];
 
 // pestanas en NULL significa "todas": es lo que queda al crear un usuario sin
@@ -164,6 +166,25 @@ async function initRecGrupos() {
   } catch (e) { console.error("Error init tablas auxiliares de recepciones:", e.message); }
 }
 initRecGrupos();
+
+// Reportes publicados: HTML autocontenidos ("fotos" con sus datos adentro) que un
+// administrador sube desde la pestaña. Uno por nombre: publicar con un nombre que
+// ya existe lo reemplaza.
+async function initReportes() {
+  if (!pgPool) return;
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS app_reportes (
+        id            SERIAL PRIMARY KEY,
+        nombre        TEXT UNIQUE NOT NULL,
+        html          TEXT NOT NULL,
+        bytes         INTEGER NOT NULL,
+        publicado_en  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        publicado_por TEXT
+      )`);
+  } catch (e) { console.error("Error init app_reportes:", e.message); }
+}
+initReportes();
 
 app.post("/api/login", async (req, res) => {
   if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
@@ -1048,6 +1069,72 @@ app.get("/api/pg/inmovilizados/pareto", async (req, res) => {
 // El SQL y las rutas viven en consumo-historico.js, compartido con el servidor
 // local de solo esta pestaña (consumo-local/).
 require("./consumo-historico").registrar(app, () => pgPool);
+
+// ── Reportes publicados ──
+
+const RP_MAX_BYTES = 15 * 1024 * 1024;   // 15 MB por reporte
+
+// Listado, sin el HTML (puede ser pesado)
+app.get("/api/reportes", async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const r = await pgPool.query(
+      "SELECT id, nombre, bytes, publicado_en, publicado_por FROM app_reportes ORDER BY nombre");
+    res.json({ reportes: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// El HTML del reporte, para el iframe. Lo sube un usuario y trae sus propios
+// scripts, así que se sirve AISLADO: la cabecera CSP "sandbox" lo trata como de
+// otro origen (sin acceso a la sesión, las cookies ni la app), aunque alguien
+// abra esta URL directamente. Se le permiten scripts, ventanas y descargas
+// para que sus filtros, gráficos y exportaciones funcionen.
+app.get("/api/reportes/:id/html", async (req, res) => {
+  if (!pgPool) return res.status(503).send("PostgreSQL no disponible.");
+  try {
+    const r = await pgPool.query("SELECT html FROM app_reportes WHERE id = $1", [Number(req.params.id) || 0]);
+    if (!r.rows.length) return res.status(404).send("Reporte no encontrado.");
+    res.set({
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Security-Policy": "sandbox allow-scripts allow-popups allow-modals allow-downloads allow-forms",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    res.send(r.rows[0].html);
+  } catch (e) { res.status(500).send(e.message); }
+});
+
+// Publicar (crear o reemplazar por nombre): solo administradores
+app.post("/api/reportes", requireAdmin, async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  const nombre = typeof req.body?.nombre === "string" ? req.body.nombre.trim() : "";
+  const html   = typeof req.body?.html === "string" ? req.body.html : "";
+  if (!nombre || nombre.length > 120) return res.status(400).json({ error: "Poné un nombre (hasta 120 caracteres)." });
+  if (!html.trim()) return res.status(400).json({ error: "El archivo está vacío." });
+  const bytes = Buffer.byteLength(html, "utf8");
+  if (bytes > RP_MAX_BYTES) return res.status(413).json({ error: "El archivo supera los 15 MB." });
+  try {
+    const r = await pgPool.query(
+      `INSERT INTO app_reportes (nombre, html, bytes, publicado_en, publicado_por)
+       VALUES ($1, $2, $3, now(), $4)
+       ON CONFLICT (nombre) DO UPDATE
+         SET html = EXCLUDED.html, bytes = EXCLUDED.bytes,
+             publicado_en = now(), publicado_por = EXCLUDED.publicado_por
+       RETURNING id, (xmax <> 0) AS reemplazado`,
+      [nombre, html, bytes, req.session.user.usuario]
+    );
+    res.json({ id: r.rows[0].id, reemplazado: r.rows[0].reemplazado });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/reportes/:id", requireAdmin, async (req, res) => {
+  if (!pgPool) return res.status(503).json({ error: "PostgreSQL no disponible." });
+  try {
+    const r = await pgPool.query("DELETE FROM app_reportes WHERE id = $1", [Number(req.params.id) || 0]);
+    if (!r.rowCount) return res.status(404).json({ error: "Reporte no encontrado." });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── BOM (lista de piezas multiplanta) ──
 

@@ -19,6 +19,7 @@ y nivel de servicio a partir de vistas y funciones de PostgreSQL.
 | **Consumo Histórico** | Matriz de consumos por rubro, insumo y producto, por año, mes o día, con filtros y filas que se abren y cierran. |
 | **BOM** | Lista de piezas por producto, comparada entre plantas, y vista inversa por insumo. |
 | **Catálogo** | Imágenes de insumos alojadas en Cloudflare R2, con listado y visor. |
+| **Reportes publicados** | Reportes HTML autocontenidos ("fotos" con sus datos) que sube un administrador. |
 
 Cada pestaña tiene su propio bloque de parámetros; lo que se ingresa queda
 guardado en el navegador para la próxima visita.

@@ -35,6 +35,7 @@ sus identificadores** (ids de HTML, funciones y variables de JS).
 | Consumo Histórico | `ch*` | `initConsumoHistorico()` |
 | BOM | `bom*` | `initBom()` |
 | Catálogo | `cat*` | `initCatalogo()` |
+| Reportes publicados | `rp*` | `initReportes()` |
 
 **Respetar el prefijo al agregar código.** Es lo único que evita colisiones de
 nombres en un archivo de este tamaño. El router de pestañas está en el listener
@@ -66,7 +67,14 @@ negocio**, solo la consulta y la presenta.
   `rec_grupos_rubro` y `rec_grupos_articulo` (grupo de cada rubro y de
   artículos puntuales para "Costo de recepciones"; la de artículo tiene
   prioridad. Las edita el usuario desde la pestaña, se crean solas al arrancar
-  y son compartidas por todos los usuarios)
+  y son compartidas por todos los usuarios), `app_reportes` (HTML
+  autocontenidos de "Reportes publicados": uno por nombre, los sube un admin)
+
+**Reportes publicados**: el HTML lo sube un usuario y trae sus propios scripts,
+así que se sirve **aislado** (`iframe sandbox` sin `allow-same-origin` y cabecera
+`Content-Security-Policy: sandbox` en `/api/reportes/:id/html`). No agregarle
+`allow-same-origin`: le daría acceso a la sesión y a la API con los permisos de
+quien lo mira.
 
 Las dos tablas de referencia pueden traer más de una fila por `cod_corto`. Al
 unirlas hay que deduplicarlas antes (`DISTINCT ON`): un `LEFT JOIN` directo
