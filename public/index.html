@@ -940,7 +940,7 @@
     .ch-filtros .ch-dd-panel { color: var(--text); }
     .ch-filtros .ch-dd-panel .ch-texto { border-color: var(--border); }
 
-    /* ── Reportes publicados ── */
+    /* ── Cambios de programa (antes "Reportes publicados"; clave interna: reportes) ── */
     #tab-reportes { padding-top: 12px; padding-bottom: 8px; }
     .rp-marco { height: calc(100vh - 150px); min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius);
                 overflow: hidden; background: #fff; }
@@ -1256,7 +1256,7 @@
     <div class="tab" data-tab="consumo-historico">Consumo Histórico</div>
     <div class="tab" data-tab="bom">BOM</div>
     <div class="tab" data-tab="catalogo">Catálogo</div>
-    <div class="tab" data-tab="reportes">Reportes publicados</div>
+    <div class="tab" data-tab="reportes">Cambios de programa</div>
   </div>
 
   <div class="hdr-sesion">
@@ -3086,7 +3086,7 @@
     },
 
     reportes: {
-      titulo: "Reportes publicados",
+      titulo: "Cambios de programa",
       fuentes: [
         ["tabla", "app_reportes", "Reportes HTML subidos por un administrador (propia de la app)"],
       ],
@@ -7190,7 +7190,7 @@
   }
 
 
-  // ── Reportes publicados ──
+  // ── Cambios de programa (antes "Reportes publicados"; clave interna: reportes) ──
   // Reportes HTML autocontenidos (una "foto" con sus datos adentro) que sube un
   // administrador. Se muestran en un iframe con sandbox: sus scripts funcionan
   // (filtros, gráficos) pero no pueden tocar la sesión ni el resto de la app.

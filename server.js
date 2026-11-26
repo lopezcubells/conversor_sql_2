@@ -63,7 +63,7 @@ const PESTANAS = [
   { clave: "consumo-historico", nombre: "Consumo Histórico" },
   { clave: "bom",               nombre: "BOM" },
   { clave: "catalogo",          nombre: "Catálogo" },
-  { clave: "reportes",          nombre: "Reportes publicados" },
+  { clave: "reportes",          nombre: "Cambios de programa" },
 ];
 const PESTANAS_VALIDAS = new Set(PESTANAS.map(p => p.clave));
 
