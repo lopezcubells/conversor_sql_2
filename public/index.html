@@ -941,12 +941,15 @@
     .ch-filtros .ch-dd-panel .ch-texto { border-color: var(--border); }
 
     /* ── Cambios de programa (antes "Reportes publicados"; clave interna: reportes) ── */
-    #tab-reportes { padding-top: 12px; padding-bottom: 8px; }
-    .rp-marco { height: calc(100vh - 150px); min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius);
+    /* El reporte va "libre": sin márgenes ni recuadro, todo el ancho y todo el
+       alto que queda debajo del encabezado. El alto exacto lo fija rpAjustarAlto(). */
+    #tab-reportes { padding: 0; }
+    .rp-marco { height: calc(100vh - 110px); min-height: 360px; border: 0; border-radius: 0;
                 overflow: hidden; background: #fff; }
     .rp-marco iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
     /* Controles: una sola línea chica debajo del reporte */
-    .rp-pie { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+    .rp-pie { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 12px; font-size: 12px;
+              border-top: 1px solid var(--border); }
     .rp-sel { flex: none; width: auto; min-width: 180px; max-width: 320px; padding: 3px 8px; font-size: 12px; }
     .rp-sel[hidden] { display: none; }
     .rp-info { color: var(--muted); }
@@ -7203,7 +7206,7 @@
   let rpEsAdmin  = false;
 
   async function initReportes() {
-    if (rpLoaded) return;
+    if (rpLoaded) { rpAjustarAlto(); return; }   // la ventana pudo cambiar de tamaño mientras estaba oculta
     rpLoaded = true;
     // Publicar y eliminar son solo para administradores (el servidor también lo exige)
     try {
@@ -7216,6 +7219,7 @@
     let guardado = null;
     try { guardado = JSON.parse(localStorage.getItem(RP_STORAGE_KEY) || "null"); } catch {}
     await rpCargarLista(guardado && guardado.id);
+    rpAjustarAlto();
   }
 
   async function rpCargarLista(elegir) {
@@ -7265,9 +7269,24 @@
     completa.style.display = "";
     marco.innerHTML = `<iframe title="${nsEsc(r.nombre)}" src="${url}"
       sandbox="allow-scripts allow-popups allow-modals allow-downloads allow-forms"></iframe>`;
+    rpAjustarAlto();
   }
 
   document.getElementById("rp-sel").addEventListener("change", rpMostrar);
+
+  // El reporte ocupa justo el alto que queda entre el encabezado de la app y la
+  // línea de controles de abajo (el encabezado puede tener otra altura según el
+  // ancho de la ventana, por eso se mide).
+  function rpAjustarAlto() {
+    const marco = document.getElementById("rp-marco");
+    const pie = document.querySelector("#tab-reportes .rp-pie");
+    if (!marco || !pie || !marco.offsetParent) return;   // pestaña oculta o restringida
+    const arriba = marco.getBoundingClientRect().top + window.scrollY;
+    marco.style.height = Math.max(360, window.innerHeight - arriba - pie.offsetHeight) + "px";
+  }
+  // Escucha global: si la pestaña no existe (restringida) o está oculta, no hace nada
+  window.addEventListener("resize", rpAjustarAlto);
+  document.getElementById("rp-admin").addEventListener("toggle", rpAjustarAlto);
 
   // Al elegir un archivo, si no hay nombre se propone el del archivo
   document.getElementById("rp-archivo").addEventListener("change", e => {
