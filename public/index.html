@@ -941,16 +941,25 @@
     .ch-filtros .ch-dd-panel .ch-texto { border-color: var(--border); }
 
     /* ── Reportes publicados ── */
-    .rp-barra { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
-    .rp-campo { display: flex; flex-direction: column; gap: 4px; }
-    .rp-campo > label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
-    .rp-info { font-size: 12px; color: var(--muted); margin-left: auto; }
-    .rp-admin { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
-    .rp-admin[hidden] { display: none; }
-    .rp-admin-tit { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-    .rp-marco { height: calc(100vh - 250px); min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius);
+    #tab-reportes { padding-top: 12px; padding-bottom: 8px; }
+    .rp-marco { height: calc(100vh - 150px); min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius);
                 overflow: hidden; background: #fff; }
     .rp-marco iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+    /* Controles: una sola línea chica debajo del reporte */
+    .rp-pie { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+    .rp-sel { flex: none; width: auto; min-width: 180px; max-width: 320px; padding: 3px 8px; font-size: 12px; }
+    .rp-link { color: var(--muted); text-decoration: none; white-space: nowrap; }
+    .rp-link:hover { color: var(--accent); }
+    .rp-info { color: var(--muted); }
+    .rp-admin { margin-left: auto; }
+    .rp-admin[hidden] { display: none; }
+    .rp-admin summary { cursor: pointer; color: var(--muted); list-style: none; user-select: none; }
+    .rp-admin summary::-webkit-details-marker { display: none; }
+    .rp-admin summary:hover, .rp-admin[open] summary { color: var(--accent); }
+    .rp-admin-cuerpo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .rp-admin-cuerpo .search-input { width: 180px; flex: none; padding: 3px 8px; font-size: 12px; }
+    .rp-admin-cuerpo input[type=file] { font-size: 11px; max-width: 230px; }
+    .rp-mini { padding: 3px 10px; font-size: 12px; }
 
     /* ── Tema claro: solo pestaña Recepciones ── */
     #tab-recepciones {
@@ -2291,41 +2300,27 @@
 
 <!-- ═══ REPORTES PUBLICADOS ═══ -->
 <div class="pane" id="tab-reportes">
-  <div class="card">
-    <div class="rp-barra">
-      <div class="rp-campo">
-        <label for="rp-sel">Reporte</label>
-        <select class="search-input" id="rp-sel" style="min-width:260px"></select>
-      </div>
-      <a class="btn btn-outline" id="rp-abrir" target="_blank" rel="noopener" style="display:none">↗ Abrir en otra pestaña</a>
-      <span class="rp-info" id="rp-info"></span>
-    </div>
-
-    <!-- Solo administradores -->
-    <div class="rp-admin" id="rp-admin" hidden>
-      <div class="rp-admin-tit">Publicar un reporte</div>
-      <div class="rp-barra">
-        <div class="rp-campo">
-          <label for="rp-nombre">Nombre</label>
-          <input class="search-input" id="rp-nombre" list="rp-nombres" placeholder="Ej.: Stock semanal" maxlength="120" style="min-width:240px">
-          <datalist id="rp-nombres"></datalist>
-        </div>
-        <div class="rp-campo">
-          <label for="rp-archivo">Archivo HTML</label>
-          <input type="file" id="rp-archivo" accept=".html,.htm,text/html">
-        </div>
-        <button class="btn btn-primary" id="rp-publicar">⬆ Publicar</button>
-        <button class="btn btn-outline" id="rp-eliminar" style="margin-left:auto">🗑 Eliminar el reporte elegido</button>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px">
-        Si el nombre ya existe, se reemplaza por el archivo nuevo. El HTML tiene que ser autocontenido
-        (los datos adentro del archivo); se muestra aislado del resto de la app.
-      </div>
-    </div>
-  </div>
-
+  <!-- El reporte primero, con casi toda la altura; los controles abajo, en una línea -->
   <div class="rp-marco" id="rp-marco">
     <div class="empty" style="padding:60px 20px">Cargando…</div>
+  </div>
+
+  <div class="rp-pie">
+    <select class="search-input rp-sel" id="rp-sel" title="Reporte"></select>
+    <a class="rp-link" id="rp-abrir" target="_blank" rel="noopener" style="display:none">↗ Otra pestaña</a>
+    <span class="rp-info" id="rp-info"></span>
+
+    <!-- Solo administradores: plegado para no ocupar lugar -->
+    <details class="rp-admin" id="rp-admin" hidden>
+      <summary>⚙ Publicar</summary>
+      <div class="rp-admin-cuerpo">
+        <input class="search-input" id="rp-nombre" list="rp-nombres" placeholder="Nombre" maxlength="120" title="Si el nombre ya existe, se reemplaza">
+        <datalist id="rp-nombres"></datalist>
+        <input type="file" id="rp-archivo" accept=".html,.htm,text/html" title="HTML autocontenido (con los datos adentro)">
+        <button class="btn btn-primary rp-mini" id="rp-publicar">⬆ Publicar</button>
+        <button class="btn btn-outline rp-mini" id="rp-eliminar" title="Elimina el reporte elegido">🗑 Eliminar</button>
+      </div>
+    </details>
   </div>
 </div>
 
